@@ -30,3 +30,10 @@ tauros-mgba-sys = { path = "crates/mgba-sys" }
 # own crates stay unoptimised for debugging.
 [profile.dev.package."*"]
 opt-level = 2
+
+# The emulator loop must hold 59.7 fps in debug builds too (EMU-004).
+[profile.dev.package.tauros-emu]
+opt-level = 2
+
+[profile.dev.package.tauros-app]
+opt-level = 2

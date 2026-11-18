@@ -274,12 +274,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: Headless test boots into a named map and verifies location and flags from RAM.
   Verification: 2026-11-18 UTC: `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test boot` passed (7.9 s) on a copy of the base build of pinned expansion 3796c72. `GameLayout::measure` compiled the offset probe against the project's headers in the hardened container: SaveBlock1 location 4, pos 0, flags 0x1270 (0x12C bytes); Main callback1 0, callback2 4, state 0x438; WarpData vanilla. `BootPlan` resolved maps from the generated map_groups.h, flags from the connector snapshot and addresses from the .sym. It rejected an unknown map, a position outside Petalburg and an unknown flag before running. Headless mGBA booted into MAP_PETALBURG_CITY (15,10) with FLAG_BADGE01_GET in 284 frames; RAM read back group 0, num 0, x 15, y 10 and the flag set. A reboot of the same core into MAP_ROUTE101 (10,10) without flags read back (0,16,10,10) with the badge flag clear. An earlier exploratory run of the same mechanism produced a screenshot showing the player in Petalburg in front of the gym. Unit tests cover .sym and map_groups.h parsing and layout validation. Mutation: skipping the flag writes made the boot fail with 'flag FLAG_BADGE01_GET was cleared'. `cargo test --workspace` and `cargo clippy --workspace --tests` are clean. Limits: the boot always goes through a fresh new game (empty player name, default gender, no party); whether the position is walkable is not checked; FRLG builds are untested; a warp-id target is not offered; boots are not bit-reproducible across processes (see master, EMU-002 observation).
 
-- [ ] **Not started** **EMU-004** Minimal Tauri window showing the emulator.
+- [ ] **In progress** **EMU-004** Minimal Tauri window showing the emulator.
   Depends on: `EMU-001`, `FND-001`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Tauri app shell rendering the framebuffer with keyboard input and audio; no editor features. Refs: plan §"Decisions made" (Core row), plan §"Layered roadmap toward the beta" (Phase 2).
   Completion: The app runs a ROM interactively with audio on the owner's Linux machine (manual check by the Owner recorded).
+  Note: (owner: Claude Code, shell built and smoke-tested at 59.7 fps; waiting for the Owner's manual check of video, input and audio)
 
 - [ ] **Not started** **EMU-005** Phase 2 integration test and README update.
   Depends on: `EMU-003`, `EMU-004`.

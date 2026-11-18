@@ -139,6 +139,14 @@ Container build tests (pinned expansion, base build and image from the setup scr
 TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test phase1_integration --test toolchain_build
 ```
 
+Run the app (Tauri 2; needs the WebKitGTK 4.1 development packages on Linux).
+It plays a GBA ROM in a window: arrows, X = A, Z = B, Enter = Start,
+Backspace = Select, A/S = L/R. Sound starts after the first click or key press.
+
+```bash
+cargo run -p tauros-app -- path/to/rom.gba
+```
+
 ## License
 
 Tauros is released under the [MIT License](LICENSE), for the community. Binary

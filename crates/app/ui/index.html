@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tauros</title>
+  <style>
+    :root { --bg: #18141a; --fg: #ece6ee; --muted: #9a90a0; --accent: #f0aa28; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif;
+           display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px; }
+    header { display: flex; gap: 12px; align-items: center; width: 720px; max-width: 100%; }
+    header strong { color: var(--accent); }
+    #status { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    button { background: #2c2530; color: var(--fg); border: 1px solid #44394a; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+    canvas { width: 720px; max-width: 100%; aspect-ratio: 3 / 2; image-rendering: pixelated; background: #000; border-radius: 4px; }
+    #help { color: var(--muted); font-size: 12px; }
+    kbd { background: #2c2530; border-radius: 3px; padding: 0 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Tauros</strong>
+    <span id="status">Open a ROM to start.</span>
+    <input id="file" type="file" accept=".gba" hidden>
+    <button id="open">Open ROM…</button>
+  </header>
+  <canvas id="screen" width="240" height="160"></canvas>
+  <div id="help">
+    <kbd>←↑→↓</kbd> D-pad · <kbd>X</kbd> A · <kbd>Z</kbd> B · <kbd>Enter</kbd> Start ·
+    <kbd>Backspace</kbd> Select · <kbd>A</kbd> L · <kbd>S</kbd> R · click or press a key to enable sound
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

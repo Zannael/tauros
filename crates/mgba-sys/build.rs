@@ -47,7 +47,8 @@ fn main() {
     }
     for off in [
         "BUILD_QT", "BUILD_SDL", "BUILD_GL", "BUILD_GLES2", "BUILD_GLES3", "BUILD_LIBRETRO",
-        "BUILD_PERF", "BUILD_TEST", "BUILD_SUITE", "BUILD_CINEMA", "BUILD_HEADLESS",
+        // GCC LTO objects in the archive are unreadable to rustc's linker (release builds).
+        "BUILD_LTO", "BUILD_PERF", "BUILD_TEST", "BUILD_SUITE", "BUILD_CINEMA", "BUILD_HEADLESS",
         "BUILD_EXAMPLE", "BUILD_PYTHON", "BUILD_DOCGEN", "BUILD_MAINTAINER_TOOLS", "USE_FFMPEG",
         "USE_PNG", "USE_LIBZIP", "USE_SQLITE3", "USE_ELF", "USE_LUA", "USE_JSON_C",
         "USE_FREETYPE", "USE_DISCORD_RPC", "USE_EDITLINE", "USE_LZMA", "USE_MINIZIP", "USE_EPOXY",
