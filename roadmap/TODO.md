@@ -53,12 +53,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: The checker accepts this TODO and rejects every invalid case listed in the request; tests pass; task-graph.json is current; every plan section maps to tasks in Specification coverage.
   Verification: 2026-11-18 UTC: `python3 -m unittest discover -s tests -v` ran 34 tests, all OK, including repository checks that every Scope cites existing plan headings, every plan H2 section is in Specification coverage and every task is covered; 15 deliberate validator mutations (In progress note, Verification-only-on-Done, unknown references, retired dependency, replacements, open prerequisites, required fields, graph file mode, checkbox, owner, stale graph, duplicate dependencies, duplicate fields, code fences, cycle members) each made the suite fail; `--write-graph` then plain validation passed; repeated writes were byte-identical; `--ready` and `--layers` output inspected. Limits: no git repository, Makefile or CI exists, so no hook or CI integration was performed.
 
-- [ ] **Not started** **GOV-002** Guard the public repository against private data and publish it.
+- [x] **Done** **GOV-002** Guard the public repository against private data and publish it.
   Depends on: `GOV-001`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Add .gitignore, scripts/check_private.py (staged-file scan for ROMs, saves, credentials, home paths, oversized files, untracked local literal patterns, noreply author email), tests and a versioned pre-commit hook; initialise git and publish as public GitHub repository tauros. Refs: plan §"Rules for the agents writing the code" (No Nintendo assets), plan §"Risks and community notes" (Legal), plan §"Decisions made" (User row: code ready to be published).
   Completion: Privacy and roadmap tests pass; the hook rejects a forbidden file in a real staging test; `check_private.py --all` passes on every tracked file; the GitHub repository is public and its main branch matches the local commit.
+  Verification: 2026-11-18 UTC: 42 unit tests pass (34 roadmap, 8 privacy); the pre-commit hook rejected a staged fake.gba and a staged file containing a local private-patterns literal, both unstaged afterwards; `check_private.py --all` passed on all 11 tracked files of commit 401135a, authored with the GitHub noreply email; `gh repo create tauros --public` succeeded, `gh repo view` reports isPrivate false and `git ls-remote origin main` matched local HEAD 401135a. Limits: hooks are local and need `git config core.hooksPath .githooks` per clone; the scanner is pattern-based and cannot recognise arbitrary personal data; no CI enforces it server-side.
 
 ## Open decisions and research
 
