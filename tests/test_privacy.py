@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -16,7 +17,7 @@ class Scan(unittest.TestCase):
         self.assertEqual(privacy.scan("src/lib.rs", b"fn main() {}\n", []), [])
 
     def test_game_data_and_credential_files_rejected(self):
-        for name in ("rom/emerald.gba", "a.sav", "state.ss1", ".env", "config/.env.local", "id_ed25519", "k.pem"):
+        for name in (".gitmodules", "rom/emerald.gba", "a.sav", "state.ss1", ".env", "config/.env.local", "id_ed25519", "k.pem"):
             with self.subTest(name=name):
                 self.assertTrue(privacy.scan(name, b"x", []))
 
@@ -49,6 +50,24 @@ class Repository(unittest.TestCase):
         for name in filter(None, names):
             with self.subTest(name=name):
                 self.assertEqual(privacy.scan(name, (ROOT / name).read_bytes(), []), [])
+
+    def test_nested_repository_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            run = lambda *a, cwd=root: subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True)
+            run("init", "-q")
+            run("config", "user.email", "1+someone@users.noreply.github.com")
+            inner = root / "vendor"
+            inner.mkdir()
+            run("init", "-q", cwd=inner)
+            run("-c", "user.name=t", "-c", "user.email=1+t@users.noreply.github.com",
+                "commit", "-q", "--allow-empty", "-m", "x", cwd=inner)
+            run("add", "vendor")
+            self.assertEqual(privacy.gitlinks(root), ["vendor"])
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/check_private.py")], cwd=root,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("nested repository", result.stderr)
 
     def test_untracked_pattern_file_is_read_from_git_dir(self):
         with tempfile.TemporaryDirectory() as temp:

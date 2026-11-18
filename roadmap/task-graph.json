@@ -41,7 +41,9 @@
     },
     {
       "completion": "Privacy and roadmap tests pass; the hook rejects a forbidden file in a real staging test; `check_private.py --all` passes on every tracked file; the GitHub repository is public and its main branch matches the local commit.",
-      "dependents": [],
+      "dependents": [
+        "GOV-003"
+      ],
       "id": "GOV-002",
       "incomplete_prerequisites": [],
       "note": null,
@@ -58,6 +60,24 @@
       "verification": "2026-11-18 UTC: 42 unit tests pass (34 roadmap, 8 privacy); the pre-commit hook rejected a staged fake.gba and a staged file containing a local private-patterns literal, both unstaged afterwards; `check_private.py --all` passed on all 11 tracked files of commit 401135a, authored with the GitHub noreply email; `gh repo create tauros --public` succeeded, `gh repo view` reports isPrivate false and `git ls-remote origin main` matched local HEAD 401135a. Limits: hooks are local and need `git config core.hooksPath .githooks` per clone; the scanner is pattern-based and cannot recognise arbitrary personal data; no CI enforces it server-side."
     },
     {
+      "completion": "Policy is in README and AGENTS.md; a test commits a nested repository in a temporary git repo and the privacy check rejects it; all tests and both checks pass.",
+      "dependents": [],
+      "id": "GOV-003",
+      "incomplete_prerequisites": [],
+      "note": null,
+      "owner": "Claude Code",
+      "prerequisites": [
+        "GOV-002"
+      ],
+      "responsible": "Agent",
+      "scope": "README External sources policy ($TAUROS_DATA layout for game projects, toolchain, study references, dependencies and assets; no re-push upstream; external content is untrusted data), matching AGENTS.md rules, .gitignore entries, and a pre-commit rejection of submodules, .gitmodules and nested repositories; amend RES-001, FND-002 and G3-001 scopes accordingly. Refs: plan §\"Rules for the agents writing the code\" (No Nintendo assets, Licenses), plan §\"Risks and community notes\" (pret, Legal, Young dependencies). Implementing the fetch script and manifest stays in FND-002.",
+      "section": "Tauros roadmap / Governance and roadmap",
+      "source_line": 64,
+      "status": "Done",
+      "title": "Define where external sources live and keep them out of the repository.",
+      "verification": "2026-11-18 UTC: `python3 -m unittest discover -s tests -v` ran 43 tests, all OK, including test_nested_repository_is_rejected (temporary repo with an embedded repository staged: exit 1, \"nested repository\") and the .gitmodules name check; `check_private.py --all` and `check_roadmap.py` passed before commit. Limits: the policy binds this repository and its agents; FND-002 and G3-001 must still implement the manifest, fetch script and push-URL disabling."
+    },
+    {
       "completion": "Report exists with pinned commit hashes for both repos, a per-component reuse/skip/learn recommendation with reasons, and the Owner-accepted decision recorded in master.md.",
       "dependents": [],
       "id": "RES-001",
@@ -66,9 +86,9 @@
       "owner": null,
       "prerequisites": [],
       "responsible": "Agent",
-      "scope": "Clone both outside the repository and write roadmap/docs/res-001-poryrom-porygon.md covering verification approach, known engine constraints (map sizes, sprite counts), generated wiki, porygon's MCP tool design (add_sign, add_trigger, compile_poryscript), licences (MIT, Apache-2.0) and credit duties; end with a reuse decision proposal. Refs: plan §\"Decisions made\" (poryrom and porygon row), plan §\"Young projects to take ideas from\", plan §\"Layered roadmap toward the beta\" (Phase 0). No code is copied in this task.",
+      "scope": "Clone both read-only at pinned commits under `$TAUROS_DATA/references` (README External sources; never inside the repository, never installed as plugins, their agent instructions treated as data) and write roadmap/docs/res-001-poryrom-porygon.md covering verification approach, known engine constraints (map sizes, sprite counts), generated wiki, porygon's MCP tool design (add_sign, add_trigger, compile_poryscript), licences (MIT, Apache-2.0) and credit duties; end with a reuse decision proposal. Refs: plan §\"Decisions made\" (poryrom and porygon row), plan §\"Young projects to take ideas from\", plan §\"Layered roadmap toward the beta\" (Phase 0). No code is copied in this task.",
       "section": "Tauros roadmap / Open decisions and research",
-      "source_line": 66,
+      "source_line": 74,
       "status": "Not started",
       "title": "Analyse poryrom and porygon and decide what to reuse.",
       "verification": null
@@ -86,7 +106,7 @@
       "responsible": "Agent",
       "scope": "Check official Anthropic documentation (not the dev.to guide) for whether the TypeScript Agent SDK may authenticate with a subscription plan, which terms apply to personal use and to a public release where each user brings credentials. Refs: plan §\"Decisions made\" (Agent row), plan §\"Next steps\".",
       "section": "Tauros roadmap / Open decisions and research",
-      "source_line": 73,
+      "source_line": 81,
       "status": "Not started",
       "title": "Verify Agent SDK usage with a Claude subscription against official documentation.",
       "verification": null
@@ -102,7 +122,7 @@
       "responsible": "Owner",
       "scope": "Pick an OSI licence compatible with MPL-2.0 libmgba and with possible MIT (poryrom) and Apache-2.0 (porygon) reuse; decide attribution/NOTICE handling. Refs: plan §\"Decisions made\" (User row), plan §\"Rules for the agents writing the code\" (Licenses), plan §\"Risks and community notes\" (Licenses).",
       "section": "Tauros roadmap / Open decisions and research",
-      "source_line": 80,
+      "source_line": 88,
       "status": "Not started",
       "title": "Choose the project licence for a future open-source release.",
       "verification": null
@@ -120,7 +140,7 @@
       "responsible": "Agent",
       "scope": "Evaluate mgba-rs 0.1 (single commit) coverage of framebuffer, audio, input, savestates, memory and Lua; compare forking against own bindings; choose static versus dynamic linking and document the MPL-2.0 source-availability obligation. Resolves the tension between plan §\"Decisions made\" (Core row, mgba-rs) and plan §\"Young projects to take ideas from\" (no young projects as dependencies) via an own interface. Refs: plan §\"Risks and community notes\" (Licenses, Young dependencies).",
       "section": "Tauros roadmap / Open decisions and research",
-      "source_line": 87,
+      "source_line": 95,
       "status": "Not started",
       "title": "Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.",
       "verification": null
@@ -136,7 +156,7 @@
       "responsible": "Owner",
       "scope": "Decide on the provenance label suggested in plan §\"Risks and community notes\" (Positioning), considering PokéCommunity's AI ban and pret's AI-code policy; define what is recorded (scripts, wiring, text, art) and where. Decision only; implementation, if any, becomes a new task.",
       "section": "Tauros roadmap / Open decisions and research",
-      "source_line": 94,
+      "source_line": 102,
       "status": "Not started",
       "title": "Decide whether and how to label AI-generated versus hand-made content.",
       "verification": null
@@ -159,13 +179,13 @@
       "responsible": "Agent",
       "scope": "Cargo workspace with crates model, connector-gen3, emu, mcp, agent-bridge, app (the Tauri app crate may be a placeholder until EMU-004); dependency direction follows the layer diagram (connectors depend on model; mcp on model and connector/emulator traits). Add .gitignore excluding decomp clones, ROMs, savestates and build output; add README skeleton. Refs: plan §\"Layered roadmap toward the beta\" (Phase 0), plan §\"Layered architecture\", plan §\"Rules for the agents writing the code\" (No Nintendo assets). Licence file is added once DEC-001 is decided, not here.",
       "section": "Tauros roadmap / Phase 0 — Foundations",
-      "source_line": 103,
+      "source_line": 111,
       "status": "Not started",
       "title": "Create the Rust crate workspace with one crate per layer.",
       "verification": null
     },
     {
-      "completion": "On a clean run the script reports tool versions, a second run changes nothing, and `make` in the cloned expansion produces a ROM; the pinned versions are recorded in master.md.",
+      "completion": "On a clean run the script reports tool versions, a second run changes nothing, and `make` in the cloned expansion produces a ROM; nothing is created inside the repository working tree (`git status` clean); the pinned versions are recorded in the manifest and master.md.",
       "dependents": [
         "G3-002",
         "G3-003",
@@ -179,9 +199,9 @@
       "owner": null,
       "prerequisites": [],
       "responsible": "Agent",
-      "scope": "Idempotent script that installs or verifies devkitARM, Poryscript and Porytiles at pinned versions and clones pokeemerald-expansion (pinned 1.16.x tag) or pret/pokeemerald onto the user's machine outside the repository. Linux (the owner's machine) only. Refs: plan §\"Layered roadmap toward the beta\" (Phase 0), plan §\"Decisions made\" (User row: no installer or multi-OS), plan §\"Mature tools to integrate as they are\", plan §\"Rules for the agents writing the code\" (No Nintendo assets).",
+      "scope": "Idempotent script that installs or verifies devkitARM, Poryscript and Porytiles at pinned versions and clones pokeemerald-expansion (pinned 1.16.x tag) or pret/pokeemerald under `$TAUROS_DATA` per README External sources. Sources, pinned revisions and licences are read from a versioned manifest in the repository; fetched content never is. Linux (the owner's machine) only. Refs: plan §\"Layered roadmap toward the beta\" (Phase 0), plan §\"Decisions made\" (User row: no installer or multi-OS), plan §\"Mature tools to integrate as they are\", plan §\"Rules for the agents writing the code\" (No Nintendo assets).",
       "section": "Tauros roadmap / Phase 0 — Foundations",
-      "source_line": 110,
+      "source_line": 118,
       "status": "Not started",
       "title": "Toolchain setup script for devkitARM, Poryscript, Porytiles and the decomp base.",
       "verification": null
@@ -208,13 +228,13 @@
       "responsible": "Agent",
       "scope": "Rust types for Trainer, Party, Map, Event, Scene, Species and Flag shared by every game, plus the connector trait (load, save, build, change-set) in crate model. Design must accommodate Gen 1-2 (.asm macros) and DS (JSON per trainer, NARC, 3D maps kept outside the shared map type) without implementing them. Refs: plan §\"Layered architecture\" (layer 3, layer 4), plan §\"Beyond Gen 3: Gen 1-2 and DS\".",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 119,
+      "source_line": 127,
       "status": "Not started",
       "title": "Define the common semantic model and the decomp connector contract.",
       "verification": null
     },
     {
-      "completion": "Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, and no remote operation is invoked.",
+      "completion": "Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, no remote operation is invoked, and a push attempt from a taken-over project fails.",
       "dependents": [
         "G3-002",
         "G3-003",
@@ -232,9 +252,9 @@
         "FND-001"
       ],
       "responsible": "Agent",
-      "scope": "Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream. Refs: plan §\"Rules for the agents writing the code\" (Never destructive), plan §\"Layered roadmap toward the beta\" (Phase 1, automatic git commit), plan §\"Risks and community notes\" (pret).",
+      "scope": "Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream, and disables push URLs of the game project's remotes when it takes a project over. Refs: plan §\"Rules for the agents writing the code\" (Never destructive), plan §\"Layered roadmap toward the beta\" (Phase 1, automatic git commit), plan §\"Risks and community notes\" (pret).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 126,
+      "source_line": 134,
       "status": "Not started",
       "title": "Snapshot-before-write guard for game projects.",
       "verification": null
@@ -262,7 +282,7 @@
       "responsible": "Agent",
       "scope": "Parse and emit the expansion's trainer and party data into the model, preserving unrelated bytes and formatting. Refs: plan §\"Layered roadmap toward the beta\" (Phase 1), plan §\"Rules for the agents writing the code\" (Targeted tests, Compatible formats).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 133,
+      "source_line": 141,
       "status": "Not started",
       "title": "Lossless read/write of trainers and parties in pokeemerald-expansion.",
       "verification": null
@@ -292,7 +312,7 @@
       "responsible": "Agent",
       "scope": "Reimplement reading and writing of Porymap's map JSON, layouts, metatiles and events (warps, NPCs, triggers, signs); do not embed Porymap. Refs: plan §\"Mature tools to integrate as they are\" (Porymap note), plan §\"Layered roadmap toward the beta\" (Phase 1), plan §\"Rules for the agents writing the code\" (Compatible formats).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 140,
+      "source_line": 148,
       "status": "Not started",
       "title": "Lossless read/write of maps, layouts and events in Porymap format.",
       "verification": null
@@ -321,7 +341,7 @@
       "responsible": "Agent",
       "scope": "Represent scenes as Poryscript sources compiled by the Poryscript CLI; read and allocate flags without colliding with existing ones. Refs: plan §\"Layered roadmap toward the beta\" (Phase 1), plan §\"Mature tools to integrate as they are\" (Poryscript).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 147,
+      "source_line": 155,
       "status": "Not started",
       "title": "Scripts via Poryscript and flag management.",
       "verification": null
@@ -347,7 +367,7 @@
       "responsible": "Agent",
       "scope": "Invoke `make` incrementally with structured error capture, and run the expansion's headless C test runner with parsed results. Refs: plan §\"Layered roadmap toward the beta\" (Phase 1, incremental build), plan §\"Mature tools to integrate as they are\" (Expansion test runner).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 154,
+      "source_line": 162,
       "status": "Not started",
       "title": "Incremental build and expansion test-runner wrapper.",
       "verification": null
@@ -373,7 +393,7 @@
       "responsible": "Agent",
       "scope": "One integration test: open the pinned project, change a trainer from Rust, build, and confirm the ROM works; run the connector contract suite from MOD-001. Update README with what works and what is missing. Refs: plan §\"Layered roadmap toward the beta\" (Phase 1 done-when), plan §\"Rules for the agents writing the code\" (Targeted tests, End of phase).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
-      "source_line": 161,
+      "source_line": 169,
       "status": "Not started",
       "title": "Phase 1 integration test and README update.",
       "verification": null
@@ -399,7 +419,7 @@
       "responsible": "Agent",
       "scope": "Own emulator trait (so melonDS can implement it later) and an mGBA implementation per DEC-002: load ROM, run frames, framebuffer, input, audio. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2), plan §\"Layered architecture\" (layer 5), plan §\"Risks and community notes\" (Young dependencies).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
-      "source_line": 170,
+      "source_line": 178,
       "status": "Not started",
       "title": "Emulator connector interface and libmgba core.",
       "verification": null
@@ -421,7 +441,7 @@
       "responsible": "Agent",
       "scope": "Save/load state and read memory regions through the emulator trait. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2), plan §\"Young projects to take ideas from\" (PokeMCP lesson: test via RAM and savestates).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
-      "source_line": 177,
+      "source_line": 185,
       "status": "Not started",
       "title": "Savestates and RAM reading.",
       "verification": null
@@ -449,7 +469,7 @@
       "responsible": "Agent",
       "scope": "Gen 3 specific mechanism to start the ROM at a chosen map/position with chosen flags set, using connector map and flag data. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
-      "source_line": 184,
+      "source_line": 192,
       "status": "Not started",
       "title": "Boot straight into a chosen map or scene via warps and flags.",
       "verification": null
@@ -479,7 +499,7 @@
       "responsible": "Agent",
       "scope": "Tauri app shell rendering the framebuffer with keyboard input and audio; no editor features. Refs: plan §\"Decisions made\" (Core row), plan §\"Layered roadmap toward the beta\" (Phase 2).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
-      "source_line": 191,
+      "source_line": 199,
       "status": "Not started",
       "title": "Minimal Tauri window showing the emulator.",
       "verification": null
@@ -501,7 +521,7 @@
       "responsible": "Agent",
       "scope": "The Tauri window shows the ROM and starts from a chosen point; one integration test for the boot-to-point path; README update. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2 done-when), plan §\"Rules for the agents writing the code\" (End of phase).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
-      "source_line": 198,
+      "source_line": 206,
       "status": "Not started",
       "title": "Phase 2 integration test and README update.",
       "verification": null
@@ -525,7 +545,7 @@
       "responsible": "Agent",
       "scope": "MCP server in Rust using rmcp, in the same process as model and connectors, exposed so external Claude Code and Codex can connect. Refs: plan §\"Decisions made\" (MCP server row, Agent row).",
       "section": "Tauros roadmap / Phase 3 — MCP server",
-      "source_line": 207,
+      "source_line": 215,
       "status": "Not started",
       "title": "rmcp server skeleton reachable by external clients.",
       "verification": null
@@ -556,7 +576,7 @@
       "responsible": "Agent",
       "scope": "create_trainer, place_npc, add_scene, build and run_test operating only on the common model and connector trait, with validation; no free-form file edits. Informed by RES-001 when available. Refs: plan §\"Layered architecture\" (layer 2), plan §\"Layered roadmap toward the beta\" (Phase 3).",
       "section": "Tauros roadmap / Phase 3 — MCP server",
-      "source_line": 214,
+      "source_line": 222,
       "status": "Not started",
       "title": "Domain tools over the semantic model.",
       "verification": null
@@ -580,7 +600,7 @@
       "responsible": "Agent",
       "scope": "Tools to boot to a point, press input, take screenshots, save/load state and assert game state from RAM (e.g. battle outcome, flags, money). mgba-live-mcp and mcp-mgba are design references only. Refs: plan §\"Layered roadmap toward the beta\" (Phase 3), plan §\"Young projects to take ideas from\".",
       "section": "Tauros roadmap / Phase 3 — MCP server",
-      "source_line": 221,
+      "source_line": 229,
       "status": "Not started",
       "title": "Emulator tools and RAM-based checks.",
       "verification": null
@@ -604,7 +624,7 @@
       "responsible": "Agent",
       "scope": "Claude Code on the PC, connected to the MCP, builds the director's scene end to end: trainer with 3 Pokémon, lost battle without whiteout, RAM verification, preview. Refs: plan §\"Layered roadmap toward the beta\" (Phase 3 done-when), plan §\"Rules for the agents writing the code\" (End of phase).",
       "section": "Tauros roadmap / Phase 3 — MCP server",
-      "source_line": 228,
+      "source_line": 236,
       "status": "Not started",
       "title": "Phase 3 end-to-end director's scene and README update.",
       "verification": null
@@ -626,7 +646,7 @@
       "responsible": "Agent",
       "scope": "agent-bridge crate interface (send message, stream events, cancel) independent of vendor so an Agent SDK adapter now and Codex/API adapters later fit. Refs: plan §\"Decisions made\" (Swappable agent row).",
       "section": "Tauros roadmap / Phase 4 — Agent bridge and voice",
-      "source_line": 237,
+      "source_line": 245,
       "status": "Not started",
       "title": "Swappable agent bridge interface.",
       "verification": null
@@ -652,7 +672,7 @@
       "responsible": "Agent",
       "scope": "Small TypeScript sidecar using the Agent SDK with the auth model verified in RES-002, connected to the in-process MCP, launched and supervised by the app. Refs: plan §\"Decisions made\" (Agent row), plan §\"Layered roadmap toward the beta\" (Phase 4).",
       "section": "Tauros roadmap / Phase 4 — Agent bridge and voice",
-      "source_line": 244,
+      "source_line": 252,
       "status": "Not started",
       "title": "TypeScript Agent SDK sidecar connected to the internal MCP.",
       "verification": null
@@ -677,7 +697,7 @@
       "responsible": "Agent",
       "scope": "Chat UI in the Tauri app with streamed responses and visible tool calls. Refs: plan §\"Layered roadmap toward the beta\" (Phase 4), plan §\"Layered architecture\" (layer 1).",
       "section": "Tauros roadmap / Phase 4 — Agent bridge and voice",
-      "source_line": 251,
+      "source_line": 259,
       "status": "Not started",
       "title": "Streaming chat panel in the app.",
       "verification": null
@@ -699,7 +719,7 @@
       "responsible": "Agent",
       "scope": "Local speech-to-text (whisper.cpp suggested; final engine chosen and recorded in master.md here) feeding text to the agent; no cloud transcription. Refs: plan §\"Decisions made\" (Voice row), plan §\"Layered roadmap toward the beta\" (Phase 4).",
       "section": "Tauros roadmap / Phase 4 — Agent bridge and voice",
-      "source_line": 258,
+      "source_line": 266,
       "status": "Not started",
       "title": "Microphone input with local transcription.",
       "verification": null
@@ -723,7 +743,7 @@
       "responsible": "Agent",
       "scope": "View and edit maps, metatiles and events through the model; saves remain Porymap-compatible. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Compatible formats).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 267,
+      "source_line": 275,
       "status": "Not started",
       "title": "Map editor and viewer.",
       "verification": null
@@ -749,7 +769,7 @@
       "responsible": "Agent",
       "scope": "Forms for trainers, parties and Poryscript scenes through the model. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 274,
+      "source_line": 282,
       "status": "Not started",
       "title": "Trainer and scene editor.",
       "verification": null
@@ -775,7 +795,7 @@
       "responsible": "Agent",
       "scope": "Build-and-preview from the editor in the same window, boot to the selected map or scene. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Layered architecture\" (layer 1).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 281,
+      "source_line": 289,
       "status": "Not started",
       "title": "Emulator panel integrated with the editor.",
       "verification": null
@@ -799,7 +819,7 @@
       "responsible": "Agent",
       "scope": "History view over the snapshot commits with undo/restore of agent and manual changes. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Never destructive).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 288,
+      "source_line": 296,
       "status": "Not started",
       "title": "Change history with undo.",
       "verification": null
@@ -831,7 +851,7 @@
       "responsible": "Agent",
       "scope": "One end-to-end check covering map, trainer/scene editing, chat, voice, preview and undo; README documents beta capabilities and gaps. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5 beta), plan §\"Rules for the agents writing the code\" (End of phase).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 295,
+      "source_line": 303,
       "status": "Not started",
       "title": "Beta integration test and README update.",
       "verification": null
@@ -857,7 +877,7 @@
       "responsible": "Agent",
       "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 304,
+      "source_line": 312,
       "status": "Not started",
       "title": "Asset pipeline with palette and VRAM validator.",
       "verification": null
@@ -879,7 +899,7 @@
       "responsible": "Agent",
       "scope": "Palette-aware pixel editing of sprites and tiles with validator feedback and build-and-preview. Refs: plan §\"Graphics assets and visual enhancements\" (step 4), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 311,
+      "source_line": 319,
       "status": "Not started",
       "title": "Pixel panel in the app.",
       "verification": null
@@ -901,7 +921,7 @@
       "responsible": "Agent",
       "scope": "Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §\"Young projects to take ideas from\" (Aseprite MCPs), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 318,
+      "source_line": 326,
       "status": "Not started",
       "title": "Aseprite MCP integration for agent sketches.",
       "verification": null
@@ -921,7 +941,7 @@
       "responsible": "Agent",
       "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 325,
+      "source_line": 333,
       "status": "Not started",
       "title": "Catalog of graphical upgrades.",
       "verification": null
@@ -943,7 +963,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 334,
+      "source_line": 342,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -965,7 +985,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 341,
+      "source_line": 349,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -987,14 +1007,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 348,
+      "source_line": 356,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "0419293440fbcf6f3d6482e1a3e9c3f7da373416974f1ca527655477518d479d",
+  "todo_sha256": "f9f02c21333b27a6d415413cbfcddc72355e6accd288ef3e892e82f648b89375",
   "topological_layers": [
     [
       "RES-001",

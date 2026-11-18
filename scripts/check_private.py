@@ -5,6 +5,7 @@ Checks the files staged for commit (default) or every tracked file (--all) for:
   - game data and binaries that must stay on the user's machine (ROMs, saves, savestates);
   - credentials (private keys, API tokens, .env files) and oversized files;
   - absolute home-directory paths;
+  - git submodules and nested repositories (external sources live outside the repo);
   - literal strings listed, one per line, in the untracked file .git/info/private-patterns
     (for personal names, emails or hostnames that must never appear in the public repo).
 It also requires the commit author email to be a GitHub noreply address.
@@ -23,7 +24,7 @@ FORBIDDEN_SUFFIXES = {
     ".gba", ".gb", ".gbc", ".nds", ".3ds", ".srl", ".rom", ".bin", ".elf", ".sav", ".srm",
     ".sgm", ".dsv", ".ips", ".ups", ".bps", ".xdelta", ".pem", ".key", ".p12", ".pfx",
 }
-FORBIDDEN_NAMES = re.compile(r"(^|/)(\.env(\..*)?|id_(rsa|ed25519|ecdsa)|credentials\.json|.*\.ss[0-9])$")
+FORBIDDEN_NAMES = re.compile(r"(^|/)(\.gitmodules|\.env(\..*)?|id_(rsa|ed25519|ecdsa)|credentials\.json|.*\.ss[0-9])$")
 SECRETS = {
     "private key": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     "Anthropic API key": re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}"),
@@ -46,6 +47,12 @@ def local_patterns(root: Path) -> list[str]:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+def gitlinks(root: Path) -> list[str]:
+    """Index entries with mode 160000: submodules or embedded repositories."""
+    entries = git("ls-files", "-s", "-z", root=root).decode().split("\0")
+    return [entry.split("\t", 1)[1] for entry in entries if entry.startswith("160000 ")]
 
 
 def scan(name: str, data: bytes, patterns: list[str]) -> list[str]:
@@ -77,8 +84,10 @@ def main(argv: list[str] | None = None) -> int:
             names = git("ls-files", "-z", root=root).decode().split("\0")
         else:
             names = git("diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z", root=root).decode().split("\0")
-        problems = []
-        for name in filter(None, names):
+        nested = gitlinks(root)
+        problems = [f"{name}: nested repository or submodule; external sources live under $TAUROS_DATA"
+                    for name in nested]
+        for name in filter(lambda n: n and n not in nested, names):
             problems += scan(name, git("show", f":{name}", root=root), patterns)
         email = git("config", "user.email", root=root).decode().strip()
     except (OSError, subprocess.CalledProcessError) as exc:

@@ -30,3 +30,7 @@ __pycache__/
 .idea/
 .vscode/
 .DS_Store
+
+# External sources are never stored in the repository (see README)
+/external/
+/vendor/

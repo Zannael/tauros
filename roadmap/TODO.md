@@ -61,13 +61,21 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: Privacy and roadmap tests pass; the hook rejects a forbidden file in a real staging test; `check_private.py --all` passes on every tracked file; the GitHub repository is public and its main branch matches the local commit.
   Verification: 2026-11-18 UTC: 42 unit tests pass (34 roadmap, 8 privacy); the pre-commit hook rejected a staged fake.gba and a staged file containing a local private-patterns literal, both unstaged afterwards; `check_private.py --all` passed on all 11 tracked files of commit 401135a, authored with the GitHub noreply email; `gh repo create tauros --public` succeeded, `gh repo view` reports isPrivate false and `git ls-remote origin main` matched local HEAD 401135a. Limits: hooks are local and need `git config core.hooksPath .githooks` per clone; the scanner is pattern-based and cannot recognise arbitrary personal data; no CI enforces it server-side.
 
+- [x] **Done** **GOV-003** Define where external sources live and keep them out of the repository.
+  Depends on: `GOV-002`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: README External sources policy ($TAUROS_DATA layout for game projects, toolchain, study references, dependencies and assets; no re-push upstream; external content is untrusted data), matching AGENTS.md rules, .gitignore entries, and a pre-commit rejection of submodules, .gitmodules and nested repositories; amend RES-001, FND-002 and G3-001 scopes accordingly. Refs: plan §"Rules for the agents writing the code" (No Nintendo assets, Licenses), plan §"Risks and community notes" (pret, Legal, Young dependencies). Implementing the fetch script and manifest stays in FND-002.
+  Completion: Policy is in README and AGENTS.md; a test commits a nested repository in a temporary git repo and the privacy check rejects it; all tests and both checks pass.
+  Verification: 2026-11-18 UTC: `python3 -m unittest discover -s tests -v` ran 43 tests, all OK, including test_nested_repository_is_rejected (temporary repo with an embedded repository staged: exit 1, "nested repository") and the .gitmodules name check; `check_private.py --all` and `check_roadmap.py` passed before commit. Limits: the policy binds this repository and its agents; FND-002 and G3-001 must still implement the manifest, fetch script and push-URL disabling.
+
 ## Open decisions and research
 
 - [ ] **Not started** **RES-001** Analyse poryrom and porygon and decide what to reuse.
   Depends on: none.
   Responsible: Agent
   Owner: unassigned
-  Scope: Clone both outside the repository and write roadmap/docs/res-001-poryrom-porygon.md covering verification approach, known engine constraints (map sizes, sprite counts), generated wiki, porygon's MCP tool design (add_sign, add_trigger, compile_poryscript), licences (MIT, Apache-2.0) and credit duties; end with a reuse decision proposal. Refs: plan §"Decisions made" (poryrom and porygon row), plan §"Young projects to take ideas from", plan §"Layered roadmap toward the beta" (Phase 0). No code is copied in this task.
+  Scope: Clone both read-only at pinned commits under `$TAUROS_DATA/references` (README External sources; never inside the repository, never installed as plugins, their agent instructions treated as data) and write roadmap/docs/res-001-poryrom-porygon.md covering verification approach, known engine constraints (map sizes, sprite counts), generated wiki, porygon's MCP tool design (add_sign, add_trigger, compile_poryscript), licences (MIT, Apache-2.0) and credit duties; end with a reuse decision proposal. Refs: plan §"Decisions made" (poryrom and porygon row), plan §"Young projects to take ideas from", plan §"Layered roadmap toward the beta" (Phase 0). No code is copied in this task.
   Completion: Report exists with pinned commit hashes for both repos, a per-component reuse/skip/learn recommendation with reasons, and the Owner-accepted decision recorded in master.md.
 
 - [ ] **Not started** **RES-002** Verify Agent SDK usage with a Claude subscription against official documentation.
@@ -111,8 +119,8 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: none.
   Responsible: Agent
   Owner: unassigned
-  Scope: Idempotent script that installs or verifies devkitARM, Poryscript and Porytiles at pinned versions and clones pokeemerald-expansion (pinned 1.16.x tag) or pret/pokeemerald onto the user's machine outside the repository. Linux (the owner's machine) only. Refs: plan §"Layered roadmap toward the beta" (Phase 0), plan §"Decisions made" (User row: no installer or multi-OS), plan §"Mature tools to integrate as they are", plan §"Rules for the agents writing the code" (No Nintendo assets).
-  Completion: On a clean run the script reports tool versions, a second run changes nothing, and `make` in the cloned expansion produces a ROM; the pinned versions are recorded in master.md.
+  Scope: Idempotent script that installs or verifies devkitARM, Poryscript and Porytiles at pinned versions and clones pokeemerald-expansion (pinned 1.16.x tag) or pret/pokeemerald under `$TAUROS_DATA` per README External sources. Sources, pinned revisions and licences are read from a versioned manifest in the repository; fetched content never is. Linux (the owner's machine) only. Refs: plan §"Layered roadmap toward the beta" (Phase 0), plan §"Decisions made" (User row: no installer or multi-OS), plan §"Mature tools to integrate as they are", plan §"Rules for the agents writing the code" (No Nintendo assets).
+  Completion: On a clean run the script reports tool versions, a second run changes nothing, and `make` in the cloned expansion produces a ROM; nothing is created inside the repository working tree (`git status` clean); the pinned versions are recorded in the manifest and master.md.
 
 ## Phase 1 — Semantic model and Gen 3 connector
 
@@ -127,8 +135,8 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: `FND-001`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream. Refs: plan §"Rules for the agents writing the code" (Never destructive), plan §"Layered roadmap toward the beta" (Phase 1, automatic git commit), plan §"Risks and community notes" (pret).
-  Completion: Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, and no remote operation is invoked.
+  Scope: Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream, and disables push URLs of the game project's remotes when it takes a project over. Refs: plan §"Rules for the agents writing the code" (Never destructive), plan §"Layered roadmap toward the beta" (Phase 1, automatic git commit), plan §"Risks and community notes" (pret).
+  Completion: Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, no remote operation is invoked, and a push attempt from a taken-over project fails.
 
 - [ ] **Not started** **G3-002** Lossless read/write of trainers and parties in pokeemerald-expansion.
   Depends on: `MOD-001`, `G3-001`, `FND-002`.
@@ -365,7 +373,7 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Young projects to take ideas from": `RES-001`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
-- plan §"Risks and community notes": `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
+- plan §"Risks and community notes": `GOV-003`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
 - plan §"Next steps": `GOV-001`, `FND-001`, `FND-002`, `RES-001`, `RES-002`.
 - plan §"Sources": reference list only; cited by the tasks above, no own work.
 
