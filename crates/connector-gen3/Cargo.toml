@@ -10,4 +10,5 @@ license.workspace = true
 
 [dependencies]
 tauros-model.workspace = true
+tauros-emu.workspace = true
 sha2 = "0.10"

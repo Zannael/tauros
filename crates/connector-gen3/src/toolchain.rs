@@ -126,7 +126,9 @@ impl Toolchain {
         args
     }
 
-    fn run(&self, workdir: Option<&Path>, script: &str) -> Result<(bool, String, Duration), String> {
+    /// Runs `script` in the hardened container with `workdir` mounted: success,
+    /// combined output and duration.
+    pub fn run(&self, workdir: Option<&Path>, script: &str) -> Result<(bool, String, Duration), String> {
         let args = self.hardened_args(workdir, script);
         let start = Instant::now();
         let output = Command::new(&args[0])
