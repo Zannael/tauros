@@ -176,6 +176,28 @@ Implementation: MOD-001 (type and change-set field), G3-001 (commit trailer
   - it saved and reloaded a savestate.
 - `ar t libmgba.a` lists `blip_buf.c.o`, `ini.c.o` and `png-io.c.o`.
 
+**Verified** 2026-11-18 UTC (EMU-001): `tauros-emu` exposes the `Emulator` trait
+and `Mgba`, its libmgba 0.10.5 GBA implementation (all FFI in `crates/emu/src/mgba.rs`;
+`tauros-mgba-sys` gained bindings for `GBAIsROM`, `blip_*` and `GBAKey`).
+- Facts measured with `cargo test -p tauros-emu`: mGBA boots a ROM that has no
+  Nintendo logo through its HLE BIOS. Its 32-bit colour is `0x00BBGGRR`, and BGR555
+  full red/blue come out as 255. The GBA core produced 37936 stereo frames at
+  32768 Hz over 70 frames, 1.2% under the nominal 59.7275 Hz rate. Two cores fed
+  the same ROM and input produce identical frames after 400 frames.
+- `GBAIsROM` rejects a ROM without the `0xEA` entry-branch byte at offset 3, but
+  accepts one whose 0xB2 byte is not `0x96`.
+- With the user-built Emerald base ROM, the audio peak over the first 400 frames
+  is 9249. Pressing Start changes 38382 of the 38400 pixels after 200 frames,
+  compared with an idle twin.
+
+Decisions (agent-owned, EMU-001): the trait is synchronous and frame-stepped. The
+caller owns pacing, threads and audio output, so the app and agent tools can drive
+it alike. Audio is drained per call as interleaved `i16` at 32768 Hz, with a
+2048-frame buffer inside the core. mGBA's stderr logging is replaced by a silent
+logger. `Mgba` is `Send`, not `Sync`. The test cartridge is original assembly
+(`crates/emu/tests/probe/probe.s`) embedded as bytes, so the always-on tests need
+no ROM.
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in

@@ -9,4 +9,5 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tauros-mgba-sys.workspace = true
 

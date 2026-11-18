@@ -250,12 +250,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
 
 ## Phase 2 — Emulator
 
-- [ ] **Not started** **EMU-001** Emulator connector interface and libmgba core.
+- [x] **Done** **EMU-001** Emulator connector interface and libmgba core.
   Depends on: `DEC-002`, `FND-001`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Own emulator trait (so melonDS can implement it later) and an mGBA implementation per DEC-002: load ROM, run frames, framebuffer, input, audio. Refs: plan §"Layered roadmap toward the beta" (Phase 2), plan §"Layered architecture" (layer 5), plan §"Risks and community notes" (Young dependencies).
   Completion: Headless test boots a homebrew or user-built ROM, advances frames, captures a framebuffer and applies input; no Nintendo asset is committed.
+  Verification: 2026-11-18 UTC: `cargo test -p tauros-emu` passed. The unit test checks that the button bits match `GBAKey`. Four headless tests in crates/emu/tests/mgba_core.rs: (1) the original probe cartridge (tests/probe/probe.s assembled with devkitARM from the pinned image, 312 bytes, no Nintendo logo, embedded as bytes) boots and runs 60 frames. The 240x160 RGBA frame is uniform blue; holding A turns it uniform red within 5 frames and releasing restores blue within 5. Its square tone gives a non-silent audio peak, and the audio length is within 5% of the frame count at 32768 Hz (measured 37936 against about 38404). (2) Without a ROM, `NoRom` is returned; non-ROM bytes and a broken signature are rejected, after which the core stays usable. (3) Reset and reload restart the frame counter. (4) The user-built pokeemerald-expansion base ROM boots: twin cores stay identical for 400 frames, with audio peak 9249; pressing Start changes 38382 of 38400 pixels relative to the idle twin. Mutation: making the button bits always 0 failed tests (1) and (4). `cargo test --workspace` and `cargo clippy -p tauros-emu --tests` are clean. No ROM or Nintendo asset is committed. Limits: GBA core only; test (4) skips when the base ROM is missing; audio is checked by length and amplitude, not by listening; no real-time pacing or window (EMU-004); savestates and RAM reads are EMU-002.
 
 - [ ] **Not started** **EMU-002** Savestates and RAM reading.
   Depends on: `EMU-001`.

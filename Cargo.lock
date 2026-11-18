@@ -351,6 +351,9 @@ dependencies = [
 [[package]]
 name = "tauros-emu"
 version = "0.1.0"
+dependencies = [
+ "tauros-mgba-sys",
+]
 
 [[package]]
 name = "tauros-mcp"

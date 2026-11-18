@@ -31,13 +31,22 @@ What works, on a pokeemerald-expansion 1.16.4 project:
   from the base ROM only in that trainer's level byte
   (`crates/connector-gen3/tests/phase1_integration.rs`).
 
+Started in Phase 2:
+
+- **Headless emulator** (`crates/emu`): an `Emulator` trait (load ROM, run frames,
+  RGBA framebuffer, buttons, stereo audio) and its libmgba 0.10.5 implementation.
+  Tested with an original probe cartridge (`crates/emu/tests/probe/probe.s`) and
+  with the user-built pokeemerald-expansion ROM.
+
 What is missing:
 
 - Creating new trainers (G3-009) and new maps or resizing layouts (G3-010).
 - Validating engine limits before a write (G3-008); the limits are measured in the
   master, not yet enforced.
-- Running the ROM: the integrated mGBA emulator (EMU-*) is not wired yet, so changes
-  are checked in the built ROM's bytes, not in play.
+- Playing the ROM inside Tauros: the headless mGBA core exists (see below), but
+  there is no window yet (EMU-004), no savestates or RAM reads (EMU-002) and no
+  booting into a chosen map (EMU-003). Phase 1 edits are checked in the built ROM's
+  bytes, not in play.
 - The MCP server (MCP-*), the agent bridge (AGT-*), graphics (GFX-*), the Tauri app
   (APP-*) and connectors for other generations (GB-*, NDS-*).
 
