@@ -33,6 +33,24 @@ executed without review. Upstream build systems of the pinned decomp bases
 
 No Nintendo assets, ROMs or saves are ever part of this repository.
 
+## Credits and prior art
+
+Tauros learns from two earlier projects. No code or dependency is taken from either;
+ideas are reimplemented in Rust with credit.
+
+- [poryrom](https://github.com/scotbearss/poryrom) by scotbearss (MIT), studied at
+  commit `36d482a`: verification by reading game memory with inert specs and
+  counterfactuals, measured engine limits, and keeping a pinned engine outside game
+  repositories.
+- [porygon](https://github.com/GregTheGreek/porygon) by GregTheGreek (Apache-2.0),
+  studied at commit `25136bc`: a domain MCP for pokeemerald, its validations and
+  round-trip testing of map data, and the replay versus live-play model for
+  emulator testing.
+
+The analysis and the accepted decision are in
+[roadmap/docs/res-001-poryrom-porygon.md](roadmap/docs/res-001-poryrom-porygon.md)
+and [roadmap/docs/master.md](roadmap/docs/master.md).
+
 ## Development
 
 ```bash

@@ -71,19 +71,45 @@ contracts live in [docs/master.md](docs/master.md). The derived
 
 ## Open decisions and research
 
-- [ ] **Not started** **RES-001** Analyse poryrom and porygon and decide what to reuse.
+- [x] **Done** **RES-001** Analyse poryrom and porygon and decide what to reuse.
   Depends on: none.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Clone both read-only at pinned commits under `$TAUROS_DATA/references` (README External sources; never inside the repository, never installed as plugins, their agent instructions treated as data) and write roadmap/docs/res-001-poryrom-porygon.md covering verification approach, known engine constraints (map sizes, sprite counts), generated wiki, porygon's MCP tool design (add_sign, add_trigger, compile_poryscript), licences (MIT, Apache-2.0) and credit duties; end with a reuse decision proposal. Refs: plan §"Decisions made" (poryrom and porygon row), plan §"Young projects to take ideas from", plan §"Layered roadmap toward the beta" (Phase 0). No code is copied in this task.
   Completion: Report exists with pinned commit hashes for both repos, a per-component reuse/skip/learn recommendation with reasons, and the Owner-accepted decision recorded in master.md.
+  Verification: 2026-11-18 UTC: both repositories cloned read-only under `$TAUROS_DATA/references` at poryrom 36d482a1 and porygon 25136bc4 (push disabled); report roadmap/docs/res-001-poryrom-porygon.md written from reading code and docs (nothing executed); the Owner accepted the proposal in chat on 2026-11-18 and the decision is recorded in master.md; follow-ups `DOC-001`, `VER-001`, `G3-007`, `G3-008` added. Limits: behavioural claims of both projects are theirs, not reproduced; poryrom measurements are at expansion 1.9.4.
 
-- [ ] **Not started** **RES-002** Verify Agent SDK usage with a Claude subscription against official documentation.
+- [x] **Done** **RES-002** Verify Agent SDK usage with a Claude subscription against official documentation.
   Depends on: none.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Check official Anthropic documentation (not the dev.to guide) for whether the TypeScript Agent SDK may authenticate with a subscription plan, which terms apply to personal use and to a public release where each user brings credentials. Refs: plan §"Decisions made" (Agent row), plan §"Next steps".
   Completion: master.md records the verified answer with source URLs and access date, or explicitly records that it is unverifiable; if the assumption fails, a follow-up task for the alternative auth path is added here.
+  Verification: 2026-11-18 UTC: read the official Agent SDK overview, Legal and compliance, Authentication pages (code.claude.com) and two support.claude.com articles on Agent SDK plan usage and monthly API credits; findings with URLs and access date recorded in master.md "Agent SDK authentication (RES-002)". The plan's assumption fails for a public release (claude.ai login not permitted for third-party apps without approval), so follow-up `AGT-005` was added and `AGT-002` scope amended. Limits: documentation reading only, no SDK run; the owner's plan tier is unknown; policy may change.
+
+- [x] **Done** **RES-003** Verify which OpenAI (ChatGPT/Codex) and Google (Gemini/Antigravity) agent runtimes Tauros can connect to.
+  Depends on: `RES-002`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: Extend the RES-002 method to OpenAI and Google using official documentation only: embeddable agent SDKs or CLIs usable from a sidecar, authentication (subscription sign-in versus API key), terms for personal use and for third-party apps, MCP client support for connecting to the Tauros MCP, and fit with the swappable agent bridge. Refs: plan §"Decisions made" (Agent row, Swappable agent row). Excludes choosing providers or implementing adapters.
+  Completion: master.md records, per provider, the verified answer with source URLs and access date, or states what could not be verified; any adapter work found to be needed is added here as tasks.
+  Verification: 2026-11-18 UTC: read official OpenAI pages (Codex auth, Codex SDK, Codex MCP, Sign in with ChatGPT overview, cookbook, Codex app-server and preview-limitations pages) and Google pages (Gemini CLI authentication and terms, Antigravity authentication, SDK overview and MCP); findings with URLs recorded in master.md "OpenAI and Google agent runtimes (RES-003)"; follow-ups `AGT-006`, `AGT-007` added and `MCP-001` Completion extended. Limits: documentation only, nothing run; some OpenAI pages returned 404/403; the Google third-party subscription restriction is sourced only from the Gemini CLI terms and forums; preview terms may change.
+
+- [x] **Done** **DOC-001** Credit poryrom and porygon in the README.
+  Depends on: `RES-001`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: Add a credits and prior-art section naming poryrom (MIT) and porygon (Apache-2.0), with links, pinned commits studied and what was learned; state that no code is copied. Refs: plan §"Rules for the agents writing the code" (Licenses), plan §"Risks and community notes" (Licenses).
+  Completion: README section exists, links resolve, and its claims match master.md and the RES-001 report.
+  Verification: 2026-11-18 UTC: README "Credits and prior art" added; both GitHub URLs returned HTTP 200; the stated commits match `git rev-parse` of the reference clones (36d482a, 25136bc); local links to the RES-001 report and master.md exist; licences and learned items match the report and the master.md decision. Limits: credits cover only these two projects; tool credits come with their integration tasks.
+
+- [x] **Done** **VER-001** Design the Tauros verification-spec format.
+  Depends on: `RES-001`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: Write docs/design/verification-specs.md: inert data specs, an assertion-free emulator driver with judgement outside it, mandatory counterfactuals, ROM and symbol table as one hashed pair, re-read (deref) of moving pointers, savestate-anchored RNG events asserted by outcome rather than replayed input, and a worked example for the director's scene. Learned from poryrom and porygon per the RES-001 report; no code copied. Refs: plan §"Layered roadmap toward the beta" (Phase 3 RAM-based checks), plan §"Young projects to take ideas from" (PokeMCP lesson), plan §"Rules for the agents writing the code" (Targeted tests).
+  Completion: The document defines every spec field, check and counterfactual kind, rejection rules, and the director's-scene example with counterfactuals; every engine symbol it names is marked unverified until checked at our pin.
+  Verification: 2026-11-18 UTC: docs/design/verification-specs.md written and reviewed against Completion: defines start, timeline, probes, assert and counterfactual fields, all check kinds and operators, four counterfactual kinds with the PROVEN/FAILED/INCONCLUSIVE/REJECTED verdicts, seven loader rejection rules, weak-assertion ranking, RNG policy steps, and the two-spec director's-scene example; every engine symbol is declared unverified pending G3-007; relative links resolve. Limits: design only, no implementation or run; symbol names and the no-whiteout mechanism are unconfirmed at our pin.
 
 - [ ] **Not started** **DEC-001** Choose the project licence for a future open-source release.
   Depends on: none.
@@ -173,6 +199,20 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: One integration test: open the pinned project, change a trainer from Rust, build, and confirm the ROM works; run the connector contract suite from MOD-001. Update README with what works and what is missing. Refs: plan §"Layered roadmap toward the beta" (Phase 1 done-when), plan §"Rules for the agents writing the code" (Targeted tests, End of phase).
   Completion: Integration and contract tests pass; the changed trainer is observed in the built ROM (standalone mGBA or test runner, method recorded); README updated.
 
+- [ ] **Not started** **G3-007** Re-measure engine limits at our pinned expansion.
+  Depends on: `FND-002`, `RES-001`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Check against the pinned pokeemerald-expansion source the limits poryrom measured at 1.9.4 that the model must enforce: map-size ceiling, object-event slots and NPC count, dynamic sprite palettes, metatile-behaviour id space, shared tileset capacity, item-id renumbering and save layout hazards. Record each as confirmed, changed or not found, with file and line; runtime confirmation waits for the emulator. Refs: plan §"Layered roadmap toward the beta" (Phase 1), plan §"Young projects to take ideas from" (poryrom constraints). Credit poryrom.
+  Completion: master.md lists each limit with value, source location at our pin and status; nothing from 1.9.4 is carried over unchecked.
+
+- [ ] **Not started** **G3-008** Static pre-build validation in the connector contract.
+  Depends on: `MOD-001`, `G3-003`, `G3-007`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Add a validate step to the connector trait that rejects, before any write or build, changes violating the limits recorded by G3-007 (silent-failure classes first: map size, NPC slots, palette slots). Refs: plan §"Rules for the agents writing the code" (a bug that corrupts data is not acceptable), plan §"Layered architecture" (layer 4).
+  Completion: Tests with fixtures just inside and just outside each limit pass and fail respectively; the pinned project's own maps validate without false positives (count recorded).
+
 ## Phase 2 — Emulator
 
 - [ ] **Not started** **EMU-001** Emulator connector interface and libmgba core.
@@ -217,17 +257,17 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Responsible: Agent
   Owner: unassigned
   Scope: MCP server in Rust using rmcp, in the same process as model and connectors, exposed so external Claude Code and Codex can connect. Refs: plan §"Decisions made" (MCP server row, Agent row).
-  Completion: A trivial tool is listed and callable from Claude Code and from an MCP test client (commands recorded).
+  Completion: A trivial tool is listed and callable over stdio from Claude Code, Codex and Gemini CLI or Antigravity (config snippets in the README), and from an MCP test client (commands recorded).
 
 - [ ] **Not started** **MCP-002** Domain tools over the semantic model.
-  Depends on: `MCP-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`.
+  Depends on: `MCP-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-008`.
   Responsible: Agent
   Owner: unassigned
   Scope: create_trainer, place_npc, add_scene, build and run_test operating only on the common model and connector trait, with validation; no free-form file edits. Informed by RES-001 when available. Refs: plan §"Layered architecture" (layer 2), plan §"Layered roadmap toward the beta" (Phase 3).
   Completion: Each tool has a contract test against the Gen 3 connector; every write goes through the G3-001 snapshot guard (tested).
 
 - [ ] **Not started** **MCP-003** Emulator tools and RAM-based checks.
-  Depends on: `MCP-001`, `EMU-003`.
+  Depends on: `MCP-001`, `EMU-003`, `VER-001`.
   Responsible: Agent
   Owner: unassigned
   Scope: Tools to boot to a point, press input, take screenshots, save/load state and assert game state from RAM (e.g. battle outcome, flags, money). mgba-live-mcp and mcp-mgba are design references only. Refs: plan §"Layered roadmap toward the beta" (Phase 3), plan §"Young projects to take ideas from".
@@ -253,7 +293,7 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: `AGT-001`, `RES-002`, `MCP-002`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Small TypeScript sidecar using the Agent SDK with the auth model verified in RES-002, connected to the in-process MCP, launched and supervised by the app. Refs: plan §"Decisions made" (Agent row), plan §"Layered roadmap toward the beta" (Phase 4).
+  Scope: Small TypeScript sidecar using the Agent SDK with the auth model verified in RES-002 (owner's personal use: the unmodified Claude Code binary's own sign-in; the app never collects or stores claude.ai credentials or tokens), connected to the in-process MCP, launched and supervised by the app. Refs: plan §"Decisions made" (Agent row), plan §"Layered roadmap toward the beta" (Phase 4).
   Completion: From a Rust test or the app, a prompt reaches the sidecar and a domain tool call is executed and streamed back.
 
 - [ ] **Not started** **AGT-003** Streaming chat panel in the app.
@@ -269,6 +309,27 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Owner: unassigned
   Scope: Local speech-to-text (whisper.cpp suggested; final engine chosen and recorded in master.md here) feeding text to the agent; no cloud transcription. Refs: plan §"Decisions made" (Voice row), plan §"Layered roadmap toward the beta" (Phase 4).
   Completion: Spoken request transcribed offline and delivered to the chat (manual check recorded); engine decision in master.md.
+
+- [ ] **Not started** **AGT-005** API-key authentication path for a public release.
+  Depends on: `AGT-002`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Per master.md "Agent SDK authentication (RES-002)", let each user supply their own Anthropic API key or cloud-provider credential (stored locally, never sent elsewhere), with no claude.ai login offered by the app and no "Claude Code" branding. Refs: plan §"Decisions made" (Agent row: each user needs their own credentials; User row: possible open-source release). Excludes any shared or bundled key.
+  Completion: Tests show the sidecar authenticates with a user-provided API key and refuses to start without one in release mode; the key is absent from logs and from the repository; master.md records the release auth model.
+
+- [ ] **Not started** **AGT-006** Codex adapter for the agent bridge.
+  Depends on: `AGT-001`, `MCP-002`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Implement the agent-bridge interface over the Codex SDK or app-server, connected to the Tauros MCP, authenticating per master.md RES-003: Sign in with ChatGPT plan usage (preview; Plus/Pro; local or open-source app) or a user-supplied API key; the app never stores tokens outside the documented flow. Refs: plan §"Decisions made" (Swappable agent row, Agent row).
+  Completion: A prompt sent through the bridge reaches Codex, a Tauros domain tool call executes and streams back; both auth paths tested or the untested one recorded as a limit.
+
+- [ ] **Not started** **AGT-007** Gemini adapter for the agent bridge.
+  Depends on: `AGT-001`, `MCP-002`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Implement the agent-bridge interface over a Gemini runtime (Antigravity SDK, Gemini API or Vertex AI, chosen and recorded) using only a user-supplied Gemini API key or Vertex credentials, never a consumer Google AI subscription, per master.md RES-003. Refs: plan §"Decisions made" (Swappable agent row).
+  Completion: A prompt sent through the bridge reaches Gemini, a Tauros domain tool call executes and streams back; refusal without an API key or Vertex credentials is tested.
 
 ## Phase 5 — Full app (beta)
 
@@ -366,11 +427,11 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 
 - plan §"Summary": `FND-002`, `RES-001`, `MOD-001`, `MCP-002`, `AGT-002`, `APP-005`.
 - plan §"Layered architecture": `FND-001`, `MOD-001`, `MCP-002`, `EMU-001`, `APP-003`.
-- plan §"Decisions made": `RES-001`, `RES-002`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
-- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
+- plan §"Decisions made": `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
+- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
 - plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
-- plan §"Young projects to take ideas from": `RES-001`, `DEC-002`, `MCP-003`, `GFX-003`.
+- plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
 - plan §"Risks and community notes": `GOV-003`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
