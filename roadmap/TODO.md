@@ -111,12 +111,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: The document defines every spec field, check and counterfactual kind, rejection rules, and the director's-scene example with counterfactuals; every engine symbol it names is marked unverified until checked at our pin.
   Verification: 2026-11-18 UTC: docs/design/verification-specs.md written and reviewed against Completion: defines start, timeline, probes, assert and counterfactual fields, all check kinds and operators, four counterfactual kinds with the PROVEN/FAILED/INCONCLUSIVE/REJECTED verdicts, seven loader rejection rules, weak-assertion ranking, RNG policy steps, and the two-spec director's-scene example; every engine symbol is declared unverified pending G3-007; relative links resolve. Limits: design only, no implementation or run; symbol names and the no-whiteout mechanism are unconfirmed at our pin.
 
-- [ ] **Not started** **DEC-001** Choose the project licence for a future open-source release.
+- [x] **Done** **DEC-001** Choose the project licence for a future open-source release.
   Depends on: none.
   Responsible: Owner
-  Owner: unassigned
+  Owner: Simone
   Scope: Pick an OSI licence compatible with MPL-2.0 libmgba and with possible MIT (poryrom) and Apache-2.0 (porygon) reuse; decide attribution/NOTICE handling. Refs: plan §"Decisions made" (User row), plan §"Rules for the agents writing the code" (Licenses), plan §"Risks and community notes" (Licenses).
   Completion: Decision with rationale recorded in master.md; LICENSE text identified for FND-001 to add.
+  Verification: 2026-11-18 UTC: the Owner chose MIT in chat ("for the community"); recorded in master.md; LICENSE (MIT, Tauros contributors) added, workspace and crates declare license = "MIT", README License section states third-party notice duties from DEC-002 and that hacks do not inherit the license. Limits: no third-party notices file yet; it is needed only with the first binary release.
 
 - [x] **Done** **DEC-002** Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.
   Depends on: none.

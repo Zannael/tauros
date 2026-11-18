@@ -16,7 +16,7 @@ edition = "2021"
 rust-version = "1.94"
 publish = false
 repository = "https://github.com/Zannael/tauros"
-# The licence is added once DEC-001 is decided.
+license = "MIT"
 
 [workspace.dependencies]
 tauros-model = { path = "crates/model" }

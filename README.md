@@ -89,4 +89,11 @@ GBA toolchain and pinned base ROM (Docker, no host installs):
 python3 scripts/setup_toolchain.py
 ```
 
+## License
+
+Tauros is released under the [MIT License](LICENSE), for the community. Binary
+releases also carry the notices of linked third-party code (mGBA MPL-2.0, blip_buf
+LGPL-2.1, inih BSD-3); see DEC-002 in the master. Hacks made with Tauros are their
+authors' own work and do not inherit Tauros's license.
+
 Contributor and agent workflow: [AGENTS.md](AGENTS.md).

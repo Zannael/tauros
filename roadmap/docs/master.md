@@ -72,6 +72,13 @@ agreement and an entry here.
     poryrom's image, not to Docker as such.
   - *Consequence:* Docker is a runtime requirement of Tauros.
 
+## Project licence (DEC-001)
+
+**Accepted** 2026-11-18 by the owner: Tauros is MIT-licensed. It is compatible with
+the DEC-002 obligations: MIT code may link MPL-2.0, LGPL-2.1 and BSD components, and
+binary releases ship their notices and point to their sources. Hacks made with
+Tauros do not inherit its licence.
+
 ## Semantic model mapping (MOD-001)
 
 **Verified** 2026-11-18 UTC.
@@ -328,8 +335,7 @@ Consequences, as verified facts rather than decisions:
 
 ## Open decisions
 
-Tracked as tasks, not here: DEC-001 (project licence; must fit the DEC-002 licence
-obligations). The voice engine is chosen within AGT-004.
+Tracked as tasks, not here. The voice engine is chosen within AGT-004.
 Record each outcome below when accepted.
 
 ## Unverified claims from the specification

@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
+license = "MIT"  # bindings only; libmgba itself is MPL-2.0 (see README)
 links = "mgba"
 
 [build-dependencies]
