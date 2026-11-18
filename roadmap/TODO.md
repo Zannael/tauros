@@ -200,12 +200,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: One integration test: open the pinned project, change a trainer from Rust, build, and confirm the ROM works; run the connector contract suite from MOD-001. Update README with what works and what is missing. Refs: plan §"Layered roadmap toward the beta" (Phase 1 done-when), plan §"Rules for the agents writing the code" (Targeted tests, End of phase).
   Completion: Integration and contract tests pass; the changed trainer is observed in the built ROM (standalone mGBA or test runner, method recorded); README updated.
 
-- [ ] **Not started** **G3-007** Re-measure engine limits at our pinned expansion.
+- [x] **Done** **G3-007** Re-measure engine limits at our pinned expansion.
   Depends on: `FND-002`, `RES-001`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Check against the pinned pokeemerald-expansion source the limits poryrom measured at 1.9.4 that the model must enforce: map-size ceiling, object-event slots and NPC count, dynamic sprite palettes, metatile-behaviour id space, shared tileset capacity, item-id renumbering and save layout hazards. Record each as confirmed, changed or not found, with file and line; runtime confirmation waits for the emulator. Refs: plan §"Layered roadmap toward the beta" (Phase 1), plan §"Young projects to take ideas from" (poryrom constraints). Credit poryrom.
   Completion: master.md lists each limit with value, source location at our pin and status; nothing from 1.9.4 is carried over unchecked.
+  Verification: 2026-11-18 UTC: read the pinned expansion source at 3796c72 (fieldmap.h/.c, global.h, overworld config, sprite.c, event_object_movement.c, field_weather.c, metatile_behaviors.h, items.h, pokeball.h/.c, pokemon.h, save.h/.c) and scanned all 134 metatile_attributes.bin files and the general tileset PNG/metatiles; each limit recorded in master.md with value, file:line and status (6 confirmed, 3 changed, 1 new). Limits: static reading only, no runtime measurement; the NPC spawn-window behaviour and palette overflow rendering are inferred from code, not observed.
 
 - [ ] **Not started** **G3-008** Static pre-build validation in the connector contract.
   Depends on: `MOD-001`, `G3-003`, `G3-007`.

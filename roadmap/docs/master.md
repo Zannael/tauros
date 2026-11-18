@@ -94,6 +94,29 @@ agreement and an entry here.
 - *Not yet verified:* that the ROM boots. That belongs to G3-006 and the emulator
   work.
 
+## Engine limits at expansion 1.16.4 (G3-007)
+
+**Verified** 2026-11-18 UTC by reading the pinned source (commit `3796c72`) and
+scanning its data files. These are static checks; runtime confirmation waits for the
+emulator. The baseline is poryrom's measurements at 1.9.4 (credited, RES-001).
+
+| Limit | Value at our pin | Source | Status vs 1.9.4 |
+| --- | --- | --- | --- |
+| Map size | `(w+15)×(h+14) ≤ 10240` blocks (`MAP_OFFSET_W` 15, `MAP_OFFSET_H` 14, `MAX_MAP_DATA_SIZE` 10240) | include/fieldmap.h:15-25; src/fieldmap.c:170-174 | **Confirmed.** Width and height are set before the size test, which returns silently and leaves the buffer `MAPGRID_UNDEFINED`. |
+| Object events on screen | 16 slots (`OBJECT_EVENTS_COUNT`), one used by the player: 15 NPCs. Follower Pokémon would take another, but `OW_FOLLOWERS_ENABLED` is FALSE by default | include/constants/global.h:95; include/config/overworld.h:61 | **Confirmed.** |
+| Object event templates per map | 64 (`OBJECT_EVENT_TEMPLATES_COUNT`) | include/constants/global.h:100 | New entry (not in the 1.9.4 notes read) |
+| Sprite palettes | 16 OBJ palette slots (`sSpritePaletteTags[16]`); when none is free in the overworld, the engine first despawns generated overworld encounters; if still full, `IndexOfSpritePaletteTag` returns 0xFF, stored in the 4-bit `oam.paletteNum` as slot 15, so the sprite silently uses another palette | src/sprite.c:255, 1640-1668, 535, 1717 | **Confirmed, with new mitigation.** The encounter eviction did not appear in the 1.9.4 notes. Weather allocates its own palette tags (src/field_weather.c:201, 926). |
+| Metatile behaviours | 240 defined (`NUM_METATILE_BEHAVIORS`), 8-bit field (`METATILE_ATTR_BEHAVIOR_MASK` 0xFF), 255 = `MB_INVALID`: ids 240–254 are appendable. 27 `MB_UNUSED_*` names; scanning all 134 `metatile_attributes.bin` files finds 2 of them live (`MB_UNUSED_SOOTOPOLIS_DEEP_WATER` id 24, 6 metatiles; `_2` id 26, 1 metatile); no id ≥ 240 in data | include/constants/metatile_behaviors.h; include/global.fieldmap.h:39 | **Changed/qualified.** Not "full": 15 ids can be appended and 25 unused names are dead in data. |
+| Shared primary tileset | `gTileset_General` uses 512/512 tiles and 512/512 metatiles (`NUM_TILES_IN_PRIMARY`, `NUM_METATILES_IN_PRIMARY` 512); primary palettes 6 of 13 | include/fieldmap.h:8-14; data/tilesets/primary/general | **Confirmed full.** |
+| Item ids and saves | All 872 items have explicit ids (1–873, `ITEMS_COUNT` after them). Bag slots store the raw `enum Item` (packed) | include/constants/items.h; include/global.h:675-679, 1087-1090 | **Changed.** Adding an item appends an id and renumbers nothing. Changing an existing id still silently shifts saved bag contents. |
+| Poké Balls | 27 balls; ball id comes from the item's `secondaryId` (`ItemIdToBallId`); the Pokémon stores it in 6 bits (max 63) | include/constants/pokeball.h; src/pokeball.c:1441; include/pokemon.h:141 | **Changed.** Adding a ball no longer forces item renumbering. The new limit is 63 ball ids. |
+| Save sectors | 3968 data bytes per sector (`SECTOR_DATA_SIZE`); `SaveBlock3` size statically asserted | include/save.h:7; src/save.c:80 | Size limits are checked at compile time; same-size layout changes remain undetected (structural, not re-measured). |
+
+Rules for G3-008:
+- Reject oversize maps, more than 15 simultaneous NPCs in view, renumbering of
+  existing item ids, and new behaviours other than appended or confirmed-dead ids.
+- Warn on maps that need more than the free sprite palette slots.
+
 ## Agent SDK authentication (RES-002)
 
 **Verified** 2026-11-18 UTC by reading official Anthropic pages (accessed that day):
