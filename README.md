@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/logo.avif" alt="Tauros logo" width="160"></p>
+
 # Tauros
 
 All-in-one Pokémon ROM hack editor: a Tauri app with a common semantic model,
