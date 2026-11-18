@@ -1,0 +1,32 @@
+# Private or copyrighted game data: decomp clones, ROMs, saves and savestates stay local.
+/decomps/
+/games/
+/private/
+*.gba
+*.gb
+*.gbc
+*.nds
+*.sav
+*.srm
+*.ss[0-9]
+*.elf
+
+# Credentials and local configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+credentials.json
+
+# Build output and caches
+/target/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store

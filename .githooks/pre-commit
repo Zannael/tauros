@@ -1,0 +1,5 @@
+#!/bin/sh
+# Versioned hook: enable with `git config core.hooksPath .githooks`.
+set -e
+python3 scripts/check_private.py
+python3 scripts/check_roadmap.py
