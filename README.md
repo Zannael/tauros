@@ -6,8 +6,40 @@ All-in-one Pokémon ROM hack editor: a Tauri app with a common semantic model,
 domain tools exposed over MCP for agents, swappable decomp connectors and an
 integrated mGBA preview. Personal project, planned for a possible open-source release.
 
-Status: planning. No product code exists yet. See the [specification](romhack-editor-reuse-plan.md),
-the [roadmap](roadmap/TODO.md) and [verified facts and decisions](roadmap/docs/master.md).
+See the [specification](romhack-editor-reuse-plan.md), the [roadmap](roadmap/TODO.md)
+and [verified facts and decisions](roadmap/docs/master.md).
+
+## Status
+
+Phase 1 (model and Gen 3 connector) is complete as a Rust library with tests; there
+is no user interface yet.
+
+What works, on a pokeemerald-expansion 1.16.4 project:
+
+- **Semantic model and connector contract** (`crates/model`): trainers, maps,
+  events, scenes and flags, applied as change sets with a provenance label.
+- **Lossless read/write** (`crates/connector-gen3`): trainers and parties
+  (`trainers.party`), maps, layouts and events in Porymap's JSON format, scripts via
+  Poryscript and flag allocation. Reading and rewriting every trainer, map and scene
+  unchanged touches no file; an edit changes only its own lines.
+- **Snapshot before every write**: each change set is an automatic git commit in
+  the game project, so it can be undone.
+- **Builds** in a hardened Docker toolchain (no network, no root): incremental
+  `make`, structured build errors with file and line, and the expansion's test
+  runner with parsed results.
+- **End-to-end check**: a trainer changed from Rust builds into a ROM that differs
+  from the base ROM only in that trainer's level byte
+  (`crates/connector-gen3/tests/phase1_integration.rs`).
+
+What is missing:
+
+- Creating new trainers (G3-009) and new maps or resizing layouts (G3-010).
+- Validating engine limits before a write (G3-008); the limits are measured in the
+  master, not yet enforced.
+- Running the ROM: the integrated mGBA emulator (EMU-*) is not wired yet, so changes
+  are checked in the built ROM's bytes, not in play.
+- The MCP server (MCP-*), the agent bridge (AGT-*), graphics (GFX-*), the Tauri app
+  (APP-*) and connectors for other generations (GB-*, NDS-*).
 
 ## External sources
 
@@ -87,6 +119,12 @@ GBA toolchain and pinned base ROM (Docker, no host installs):
 
 ```bash
 python3 scripts/setup_toolchain.py
+```
+
+Container build tests (pinned expansion, base build and image from the setup script):
+
+```bash
+TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test phase1_integration --test toolchain_build
 ```
 
 ## License

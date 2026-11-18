@@ -16,7 +16,7 @@ not belong here.
 
 - **Verified** 2026-11-18 UTC, by directory listing: before GOV-001 the repository
   contained only the specification; no source code, git repository, Makefile, CI or
-  AGENTS.md existed. No product phase has started.
+  AGENTS.md existed. No product phase had started; Phase 1 closed with G3-006.
 - **Verified** 2026-11-18 UTC: the host has Python 3.10.12, cargo/rustc and Node.js
   22.14.0 installed. Versions of devkitARM, Poryscript, Porytiles and Tauri tooling are
   not checked (FND-002).
@@ -303,6 +303,17 @@ saving/reopening in Porymap and GUI inspection of every map were not checked.
 The map/layout and block/metatile roundtrip tests were rerun and passed that day
 (939 maps, 785 layouts, 9058 events, 1570 binary files, 134 tilesets); the earlier
 container build evidence remains recorded in TODO.md under G3-004/G3-005.
+
+**Verified** 2026-11-18 UTC (G3-006): Phase 1 is complete. On a copy of the base
+build, raising TRAINER_ROXANNE_1's lead from level 12 to 13 through
+`Gen3Connector::apply` and building with `make rom syms` in the container yields a
+ROM of the same size that differs from the base ROM in exactly one byte (ROM offset
+`0x479db2`, 12 to 13). That byte lies 26 bytes into the party that
+`gTrainers[DIFFICULTY_NORMAL][TRAINER_ROXANNE_1]` points to (`0x8479d98`); the
+table is at `0x844d8d8` with 3 x 855 rows of 52 bytes, derived from the `.sym` size
+and the project's headers. The base build is therefore byte-reproducible for an
+unchanged source. Method: byte-level test runner, not an emulator; the trainer was
+not observed in a running battle.
 
 ## Agent SDK authentication (RES-002)
 
