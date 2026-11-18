@@ -24,3 +24,8 @@ tauros-connector-gen3 = { path = "crates/connector-gen3" }
 tauros-emu = { path = "crates/emu" }
 tauros-mcp = { path = "crates/mcp" }
 tauros-agent-bridge = { path = "crates/agent-bridge" }
+
+# Dependencies (hashing, bindgen) are optimised even in debug builds; the workspace's
+# own crates stay unoptimised for debugging.
+[profile.dev.package."*"]
+opt-level = 2

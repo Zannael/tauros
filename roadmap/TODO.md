@@ -171,33 +171,37 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, no remote operation is invoked, and a push attempt from a taken-over project fails.
   Verification: 2026-11-18 UTC: crates/connector-gen3/src/snapshot.rs implements GitGuard (take_over, snapshot, write with restore); `cargo test -p tauros-connector-gen3` passes 8 tests in temporary repositories: dirty work is committed before the write and the change commit's parent is that snapshot with Tauros-Provenance and Tauros-Snapshot trailers; a clean tree uses HEAD; a failing pre-commit hook aborts before the write runs and leaves files and history unchanged; a failing write restores tracked and new files while keeping ignored files; a no-op write records no commit; after take-over both remotes have the disabled push URL, push via remote and via direct URL both fail and the bare upstream receives no refs; the audited command log contains no network subcommand; an existing pre-push hook is preserved. Mutations removing the restore or the hook each failed one test. Limits: the guard lives in connector-gen3 for now (GB-002 will need it shared); a user's global core.hooksPath bypasses the installed hook, leaving the disabled push URL as the only barrier.
 
-- [ ] **Not started** **G3-002** Lossless read/write of trainers and parties in pokeemerald-expansion.
+- [x] **Done** **G3-002** Lossless read/write of trainers and parties in pokeemerald-expansion.
   Depends on: `MOD-001`, `G3-001`, `FND-002`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Parse and emit the expansion's trainer and party data into the model, preserving unrelated bytes and formatting. Refs: plan §"Layered roadmap toward the beta" (Phase 1), plan §"Rules for the agents writing the code" (Targeted tests, Compatible formats).
   Completion: Roundtrip test (read then write unchanged) is byte-identical on the pinned expansion; editing one trainer changes only that trainer's lines; the project still builds with `make`.
+  Verification: 2026-11-18 UTC: `cargo test --workspace` (connector-gen3 tests pinned_formats, connector_contract, snapshot and unit tests) on `git archive` copies of the pinned expansion 3796c72, and `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test toolchain_build`. Roundtrip: all four .party files (trainers 855, trainers_frlg 624, battle_partners 2, debug_trainers 2 trainers) split and re-emitted, and every trainer rewritten unchanged, are byte-identical; every trainer removed and rewritten from the model alone reads back equal; every species, item, move, ability and AI-flag name resolves by trainerproc's own rules to a constant the project defines (Geodude to SPECIES_GEODUDE, Oran Berry to ITEM_ORAN_BERRY). Local edit: TRAINER_ROXANNE_1 level +1 and an Oran Berry changed exactly two lines (`Level: 12` to `13`, `Geodude` to `Geodude @ Oran Berry`), committed with `Tauros-Provenance: ai-assisted`; rewriting all 855 trainers unchanged touched no file and made no commit; `contract::assert_contract` passes. Build: the edited copy built with `make rom syms` in the hardened container and the generated src/data/trainers.h holds the new `.lvl`. Fixed on the way: the G3-001 guard now runs git with `core.autocrlf=false` (the owner's global `input` setting would have normalised CRLF palettes on snapshot and restore; regression test added and seen failing without the fix), and generic validation no longer re-checks an upsert identical to the current entity (TRAINER_NONE has no Pokémon). Limits: the connector exposes src/data/trainers.party only (the other .party files are roundtrip-tested, not loaded); new trainer constants are G3-009; blocks containing C comments are read-only; the trainer is not yet observed in the running ROM (G3-006).
 
-- [ ] **Not started** **G3-003** Lossless read/write of maps, layouts and events in Porymap format.
+- [ ] **In progress** **G3-003** Lossless read/write of maps, layouts and events in Porymap format.
   Depends on: `MOD-001`, `G3-001`, `FND-002`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Reimplement reading and writing of Porymap's map JSON, layouts, metatiles and events (warps, NPCs, triggers, signs); do not embed Porymap. Refs: plan §"Mature tools to integrate as they are" (Porymap note), plan §"Layered roadmap toward the beta" (Phase 1), plan §"Rules for the agents writing the code" (Compatible formats).
   Completion: Byte-identical roundtrip over every map of the pinned expansion; an edited map opens in Porymap and the project builds with `make`.
+  Note: (owner: Claude Code, implementation, byte-identical roundtrip and build verified; waiting for an edited map to be opened in Porymap, which has no Linux build at 6.3.1)
 
-- [ ] **Not started** **G3-004** Scripts via Poryscript and flag management.
+- [x] **Done** **G3-004** Scripts via Poryscript and flag management.
   Depends on: `MOD-001`, `G3-001`, `FND-002`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Represent scenes as Poryscript sources compiled by the Poryscript CLI; read and allocate flags without colliding with existing ones. Refs: plan §"Layered roadmap toward the beta" (Phase 1), plan §"Mature tools to integrate as they are" (Poryscript).
   Completion: A generated scene compiles with Poryscript and builds; flag allocation is tested against the pinned expansion's existing flags; roundtrip of existing flags is lossless.
+  Verification: 2026-11-18 UTC: `cargo test --workspace` and `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test toolchain_build` on `git archive` copies of the pinned expansion. Scene: a Poryscript scene (Route101_EventScript_TaurosScene, using an allocated flag) was compiled by Poryscript 3.6.1 in the hardened container into data/maps/Route101/scenes/, included right after Route101's scripts.inc in data/event_scripts.s, wired to a new Route 101 NPC, and the project built with `make rom syms`; the label is in pokeemerald.sym and in the generated Route101 events.inc. A Poryscript syntax error comes back as `PORYSCRIPT ERROR: line 2: missing closing parenthesis for command 'msgbox'`. Assembly scenes: the 16 570 distinct global labels of map and shared scripts.inc files load as scenes; rewriting 16 569 of them unchanged (all but the label defined twice) touched no file; editing one changed one line; adding then removing a scene restored scripts.inc. Flags: flags.h's 2301 FLAG_ defines (Emerald branch) load with values evaluated from the C expressions; 1787 are referenced somewhere, 373 are FLAG_UNUSED_* placeholders (2 of them referenced). Allocating two flags took FLAG_UNUSED_0x020 and 0x021 (unreferenced, unshared, inside the 0x20..0x500 event range), rewrote exactly those two lines, left every other flag's value unchanged, and the allocated names read back as flags; a name already defined or referenced is rejected. Limits: existing scripts stay assembly scenes (no decompilation to Poryscript); compiled .inc files are written by Tauros at apply time and committed beside their .pory, not regenerated by `make`; the one label defined twice under `.if` (MtChimney_EventScript_BagIsFull) is read-only; scenes cannot move between maps; only FLAG_UNUSED_* placeholders are allocated (no flag-space growth).
 
-- [ ] **Not started** **G3-005** Incremental build and expansion test-runner wrapper.
+- [x] **Done** **G3-005** Incremental build and expansion test-runner wrapper.
   Depends on: `FND-002`, `MOD-001`.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Invoke `make` incrementally inside the FND-002 toolchain container with the same hardened run options, with structured error capture, and run the expansion's headless C test runner with parsed results. Refs: plan §"Layered roadmap toward the beta" (Phase 1, incremental build), plan §"Mature tools to integrate as they are" (Expansion test runner).
   Completion: A no-change rebuild is measurably faster than a clean build (timings recorded); build errors and test results are returned as structured values in tests.
+  Verification: 2026-11-18 UTC: `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test toolchain_build` and unit tests. Timings on a full `git archive` copy with 16 jobs: clean `make rom syms` 90.2 s, no-change rebuild 2.0 s; a second run on the final code 86.0 s and 2.0 s, producing the same edited ROM (sha256 f80a5b24…); an earlier manual probe 95.3 s and 2.1 s. Structured errors: a bad trainers.party key came back as file src/data/trainers.party, line 88 with trainerproc's message, a C syntax error as src/main.c:471:21, and make's own failure lines as Makefile or trainer_rules.mk diagnostics. Test runner: `make check TESTS='Trainer Party'` built the test ROM and ran mgba-rom-test-hydra in the container (68.5 s); 6 cases parsed, all PASS, totals PASSED 6 and TOTAL 6. The Rust hardened `docker run` arguments and image tag equal setup_toolchain.py's `hardened_run` and `image_tag` (test). Toolchain change: the expansion's bundled runner needs libelf.so.1, so libelf1 0.188-2.1 was added to the image (new tag tauros-gba-toolchain:d75267a55161); `setup_toolchain.py install` rebuilt the base ROM with the same sha256 as before. Limits: container tests run only with TAUROS_DOCKER_TESTS=1; only a filtered subset of the expansion's tests was run.
 
 - [ ] **Not started** **G3-006** Phase 1 integration test and README update.
   Depends on: `G3-002`, `G3-003`, `G3-004`, `G3-005`.
@@ -220,6 +224,20 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Owner: unassigned
   Scope: Add a validate step to the connector trait that rejects, before any write or build, changes violating the limits recorded by G3-007 (silent-failure classes first: map size, NPC slots, palette slots). Refs: plan §"Rules for the agents writing the code" (a bug that corrupts data is not acceptable), plan §"Layered architecture" (layer 4).
   Completion: Tests with fixtures just inside and just outside each limit pass and fail respectively; the pinned project's own maps validate without false positives (count recorded).
+
+- [ ] **Not started** **G3-009** Create new trainers with their constants.
+  Depends on: `G3-002`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Let an UpsertTrainer create a trainer whose constant does not exist yet: add the `TRAINER_` define to include/constants/opponents.h, raise `TRAINERS_COUNT_EMERALD` within `MAX_TRAINERS_COUNT_EMERALD` (trainer flags share that space) and append the block to trainers.party. Found by G3-002, which rejects unknown constants (rule `trainer.constant`). Refs: plan §"Layered roadmap toward the beta" (Phase 3, create_trainer), plan §"Rules for the agents writing the code" (Compatible formats).
+  Completion: A created trainer builds and appears in the generated trainers.h; exceeding the free slots is rejected before any write; existing trainer ids are unchanged.
+
+- [ ] **Not started** **G3-010** Create maps and resize layouts.
+  Depends on: `G3-003`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Create maps (map directory, map.json, map_groups.json entry, layout entry with blockdata and border) and resize existing layouts (map.bin and layouts.json) through the model. Found by G3-003, which rejects both (rules `map.create`, `map.layout_size`). Refs: plan §"Layered roadmap toward the beta" (Phase 5), plan §"Rules for the agents writing the code" (Compatible formats).
+  Completion: A created map and a resized map build and open in Porymap; untouched maps stay byte-identical.
 
 ## Phase 2 — Emulator
 
@@ -268,7 +286,7 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: A trivial tool is listed and callable over stdio from Claude Code, Codex and Gemini CLI or Antigravity (config snippets in the README), and from an MCP test client (commands recorded).
 
 - [ ] **Not started** **MCP-002** Domain tools over the semantic model.
-  Depends on: `MCP-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-008`.
+  Depends on: `MCP-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-008`, `G3-009`.
   Responsible: Agent
   Owner: unassigned
   Scope: create_trainer, place_npc, add_scene, build and run_test operating only on the common model and connector trait, with validation; no free-form file edits. Informed by RES-001 when available. Refs: plan §"Layered architecture" (layer 2), plan §"Layered roadmap toward the beta" (Phase 3).
@@ -443,8 +461,8 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Summary": `FND-002`, `RES-001`, `MOD-001`, `MCP-002`, `AGT-002`, `APP-005`.
 - plan §"Layered architecture": `FND-001`, `MOD-001`, `MCP-002`, `EMU-001`, `APP-003`.
 - plan §"Decisions made": `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
-- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
-- plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
+- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
+- plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.

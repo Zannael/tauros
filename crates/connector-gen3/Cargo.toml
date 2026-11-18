@@ -10,3 +10,4 @@ license.workspace = true
 
 [dependencies]
 tauros-model.workspace = true
+sha2 = "0.10"

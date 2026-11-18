@@ -172,6 +172,37 @@ fn validation_rules() {
 }
 
 #[test]
+fn unchanged_upserts_are_not_checked_again() {
+    // A project may hold data the generic rules would reject for a new entity (an
+    // empty placeholder trainer, a warp to an engine pseudo-map); rewriting it
+    // unchanged is a no-op, while changing it is checked.
+    let mut snap = sample();
+    let empty = trainer("TRAINER_NONE", vec![]);
+    snap.trainers.insert(empty.id.clone(), empty.clone());
+    let mut map = snap.maps[&MapId::from("MAP_ROUTE101")].clone();
+    map.events.push(Event::Warp {
+        position: Position { x: 3, y: 3, elevation: None },
+        destination_map: MapId::from("MAP_DYNAMIC"),
+        destination_warp: 0x7F,
+        extensions: Extensions::new(),
+    });
+    snap.maps.insert(map.id.clone(), map.clone());
+    let rewrite = ChangeSet::new("x", Provenance::Human)
+        .with(Change::UpsertTrainer { trainer: empty.clone() })
+        .with(Change::UpsertMap { map: map.clone() });
+    assert_eq!(validate::check(&snap, &rewrite), []);
+    let mut renamed = empty;
+    renamed.name = "NOBODY".into();
+    let mut moved = map;
+    moved.name.push('X');
+    let edit = ChangeSet::new("x", Provenance::Human)
+        .with(Change::UpsertTrainer { trainer: renamed })
+        .with(Change::UpsertMap { map: moved });
+    let rules: Vec<_> = validate::check(&snap, &edit).into_iter().map(|v| v.rule).collect();
+    assert_eq!(rules, ["party.size", "warp.destination"]);
+}
+
+#[test]
 fn gen1_capabilities_reject_held_items() {
     let mut snap = sample();
     snap.game.capabilities.held_items = false;

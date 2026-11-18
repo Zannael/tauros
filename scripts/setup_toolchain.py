@@ -126,6 +126,7 @@ def tool_versions(tag: str) -> dict:
         "poryscript": "poryscript -v 2>&1 | head -n1",
         "porytiles": "porytiles --version 2>&1 | head -n1",
         "libpng-dev": "dpkg-query -W -f='${Version}' libpng-dev",
+        "libelf1": "dpkg-query -W -f='${Version}' libelf1",
     }
     command = "; ".join(f"printf '%s=' {name}; {probe}; echo" for name, probe in probes.items())
     out = run(hardened_run(tag, command), capture=True)

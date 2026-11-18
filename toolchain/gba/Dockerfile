@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
 # GBA build toolchain for Tauros. Pins must match toolchain/sources.json (checked by tests).
 # Built and run by scripts/setup_toolchain.py; builds run without network and without root.
+# libelf1 is needed by the expansion's bundled test runner (tools/mgba/mgba-rom-test).
 FROM devkitpro/devkitarm:20260221@sha256:4debd5b33cf4361a557b6bf3be5ff823804868125ce1429912f1a4e773e7ac5d
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpng-dev unzip \
+    && apt-get install -y --no-install-recommends libpng-dev libelf1 unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ADD --checksum=sha256:249f9adeb3b6d7f2e33347c1d0bce5f3ff8fb06e914c75b81d08187f8404c4ff \

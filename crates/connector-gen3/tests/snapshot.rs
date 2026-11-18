@@ -183,3 +183,22 @@ fn take_over_requires_a_directory() {
     let missing = std::env::temp_dir().join("tauros-g3-001-does-not-exist");
     assert!(matches!(GitGuard::take_over(&missing), Err(GuardError::NotADirectory(_))));
 }
+
+#[test]
+fn snapshots_and_restores_are_byte_exact_whatever_the_line_ending_config() {
+    let dir = project();
+    // A user config that converts line endings must not leak into snapshots.
+    git(&dir.0, &["config", "core.autocrlf", "input"]);
+    let crlf = b"JASC-PAL\r\n0100\r\n".to_vec();
+    fs::write(dir.0.join("00.pal"), &crlf).unwrap();
+    let guard = GitGuard::take_over(&dir.0).unwrap();
+    let result = guard.write("fail", Provenance::Human, |root| {
+        fs::write(root.join("00.pal"), b"changed")?;
+        Err(std::io::Error::other("boom"))
+    });
+    assert!(matches!(result, Err(GuardError::Write { .. })), "{result:?}");
+    assert_eq!(fs::read(dir.0.join("00.pal")).unwrap(), crlf, "restore rewrote line endings");
+    let snapshot = git(&dir.0, &["rev-parse", "HEAD"]).1;
+    let stored = Command::new("git").arg("-C").arg(&dir.0).args(["show", &format!("{snapshot}:00.pal")]).output().unwrap().stdout;
+    assert_eq!(stored, crlf, "snapshot normalised line endings");
+}

@@ -166,9 +166,12 @@ impl GitGuard {
             debug_assert!(!NETWORK_SUBCOMMANDS.contains(sub), "network git command {sub}");
         }
         self.log.borrow_mut().push(args.iter().map(|a| a.to_string()).collect());
+        // Snapshots and restores must be byte-exact whatever the user's git config:
+        // line-ending conversion would rewrite files (e.g. CRLF palettes) on restore.
         let output = Command::new("git")
             .arg("-C")
             .arg(&self.root)
+            .args(["-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.safecrlf=false"])
             .args(args)
             .env("GIT_TERMINAL_PROMPT", "0")
             .output()

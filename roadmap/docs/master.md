@@ -198,6 +198,13 @@ Implementation: MOD-001 (type and change-set field), G3-001 (commit trailer
 - *Not yet verified:* that the ROM boots. That belongs to G3-006 and the emulator
   work.
 
+**Verified** 2026-11-18 UTC (G3-005): the expansion's bundled test runner
+(`tools/mgba/mgba-rom-test`) needs `libelf.so.1`, missing from the image above.
+`libelf1` 0.188-2.1 was added to the Dockerfile; the image is now
+`tauros-gba-toolchain:d75267a55161`, and `setup_toolchain.py install` rebuilt the
+base ROM with the same ROM and `.sym` sha256 as above (the build is reproducible
+across the two images).
+
 ## Engine limits at expansion 1.16.4 (G3-007)
 
 **Verified** 2026-11-18 UTC by reading the pinned source (commit `3796c72`) and
@@ -220,6 +227,74 @@ Rules for G3-008:
 - Reject oversize maps, more than 15 simultaneous NPCs in view, renumbering of
   existing item ids, and new behaviours other than appended or confirmed-dead ids.
 - Warn on maps that need more than the free sprite palette slots.
+
+## Gen 3 connector (G3-002..G3-005)
+
+**Verified** 2026-11-18 UTC on `git archive` copies of the pinned expansion
+(`3796c72`), by the tests in `crates/connector-gen3/tests`; evidence and limits per
+task are in the TODO's Verification fields. Code: `crates/connector-gen3`
+(`Gen3Connector`).
+
+Facts about the pinned data:
+- *Trainers:* src/data/trainers.party holds 855 trainers, trainers_frlg.party 624,
+  battle_partners.party and debug_trainers.party 2 each. trainerproc maps display
+  names to constants by fixed rules (`fprint_constant`, `fprint_species`) plus two
+  tables (gendered species such as `Nidoran (M)`, item-selected forms such as
+  `Arceus-Fire`); with those rules every name in the four files resolves to a
+  constant the headers define. A Pokémon without `Level:` gets level 100.
+- *Maps:* 939 `map.json` files. 95 of them (FRLG) write empty arrays as `[\n\n  ]`,
+  so re-serialising JSON is not lossless; `connections` is a list, `null` or `0`.
+  `dest_warp_id` is a string, numeric or `WARP_ID_DYNAMIC`/`WARP_ID_SECRET_BASE`
+  (include/constants/maps.h). `MAP_DYNAMIC` is a pseudo-map used as a warp
+  destination. Coord events are `trigger` or `weather`; bg events `sign`,
+  `hidden_item` or `secret_base`; object events `object` or `clone`.
+- *Layouts:* 785 layouts; 20 `map.bin` files hold one block more than
+  `layouts.json` declares (unused or alternate layouts); the engine reads only
+  width × height blocks. 134 tilesets: Emerald attributes are 16-bit, FRLG 32-bit.
+- *Scripts:* 16 570 distinct global labels in map and shared `scripts.inc` files;
+  one, `MtChimney_EventScript_BagIsFull`, is defined twice, in the two branches of
+  an `.if`. `data/event_scripts.s` includes the FRLG maps' scripts inside `.if IS_FRLG`.
+- *Flags:* flags.h has 2301 `FLAG_` defines for the Emerald build (FRLG's are in
+  flags_frlg.h); 1787 are referenced outside their definition; 373 are
+  `FLAG_UNUSED_*` placeholders, 2 of which are referenced. Event flags lie between
+  `TEMP_FLAGS_END` + 1 (0x20) and `TRAINER_FLAGS_START` (0x500).
+- *Build:* clean `make rom syms` of a full copy takes 90–95 s with 16 jobs, a
+  no-change rebuild about 2 s. `make check TESTS='<prefix>'` runs a filtered
+  subset of the expansion's tests in the container.
+
+Decisions (agent-owned, within the tasks' scope):
+- *Lossless by construction.* `.party` files are split into trainer blocks and
+  edited line by line; JSON is parsed into a tree that keeps each scalar's text and
+  the whitespace around members; script files are split at global labels. An
+  unchanged entity is never re-rendered, and changed events are aligned with a
+  longest common subsequence so insertions and removals leave other events alone.
+- *Names:* the model holds constants; writes reuse the file's spelling, then an
+  in-game name that resolves back to the constant, then the constant itself.
+  trainerproc's naming rules are reimplemented; its two species tables are read at
+  run time from the project's `tools/trainerproc/main.c`, not copied into Tauros.
+- *Events* are written grouped by kind (one JSON array each), so the model order
+  is meaningful within a kind only.
+- *Scenes:* existing scripts are `Assembly` scenes (one per global label). A
+  Poryscript scene is stored as `data/maps/<Map>/scenes/<Label>.pory` (or
+  `data/scripts/scenes/` without a map), compiled by Tauros into `<Label>.inc` and
+  included right after its map's `scripts.inc`, so it is assembled under the same
+  conditions as the map.
+- *Flag allocation* renames one unreferenced `FLAG_UNUSED_*` placeholder in the
+  event range whose value no other flag shares (lowest first), rewriting only that
+  line; it never invents a value.
+- *Git snapshots are byte-exact:* the G3-001 guard runs git with
+  `core.autocrlf=false`, since the owner's global `core.autocrlf=input` would
+  normalise CRLF palettes on snapshot and restore.
+- *Validation (MOD-001 amendment):* an upsert identical to the current entity is
+  not re-checked, so a project's own data (an empty `TRAINER_NONE`, warps to
+  `MAP_DYNAMIC`) never fails validation when rewritten unchanged.
+- *Not yet supported, rejected before writing:* new trainer constants (G3-009),
+  new maps and layout resizing (G3-010), editing trainer blocks that contain C
+  comments, labels defined twice, moving scenes between maps.
+
+**Unverified** (G3-003): that a map edited by Tauros opens in Porymap. Porymap
+6.3.1 ships no Linux build; the edited map was only checked by the game build's own
+`mapjson` tool and by reading it back.
 
 ## Agent SDK authentication (RES-002)
 

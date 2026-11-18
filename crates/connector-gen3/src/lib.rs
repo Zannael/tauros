@@ -2,4 +2,14 @@
 //! writes project files losslessly into `tauros-model` types (G3-002..G3-005) and
 //! depends only on the model. All writes go through [`snapshot::GitGuard`].
 
+pub mod flags;
+pub mod json;
+pub mod maps;
+pub mod names;
+pub mod party;
+pub mod project;
+pub mod scripts;
 pub mod snapshot;
+pub mod toolchain;
+
+pub use project::Gen3Connector;

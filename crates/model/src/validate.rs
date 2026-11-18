@@ -1,6 +1,8 @@
 //! Game-independent validation, shared by every connector. Changes are checked in
 //! order against a working copy, so later changes see earlier ones (add a map, then
-//! an event on it). Connectors add their game-specific rules on top (G3-008).
+//! an event on it). An upsert identical to the current entity is a no-op and is not
+//! checked again, so a project's own data never fails validation when rewritten
+//! unchanged. Connectors add their game-specific rules on top (G3-008).
 
 use crate::change::{Change, ChangeSet, Violation};
 use crate::entities::{Event, EventKind, Flag, Trainer};
@@ -22,7 +24,9 @@ pub fn simulate(snapshot: &ProjectSnapshot, changes: &ChangeSet) -> Result<Proje
         let i = Some(index);
         match change {
             Change::UpsertTrainer { trainer } => {
-                found.extend(check_trainer(&work, &snapshot.game.capabilities, trainer, i));
+                if work.trainers.get(&trainer.id) != Some(trainer) {
+                    found.extend(check_trainer(&work, &snapshot.game.capabilities, trainer, i));
+                }
                 work.trainers.insert(trainer.id.clone(), trainer.clone());
             }
             Change::RemoveTrainer { id } => {
@@ -31,8 +35,10 @@ pub fn simulate(snapshot: &ProjectSnapshot, changes: &ChangeSet) -> Result<Proje
                 }
             }
             Change::UpsertMap { map } => {
-                for event in &map.events {
-                    found.extend(check_event(&work, event, i, Some(&map.id)));
+                if work.maps.get(&map.id) != Some(map) {
+                    for event in &map.events {
+                        found.extend(check_event(&work, event, i, Some(&map.id)));
+                    }
                 }
                 work.maps.insert(map.id.clone(), map.clone());
             }
