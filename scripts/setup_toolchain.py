@@ -6,7 +6,8 @@
 
 Pins live in toolchain/sources.json. Data lives under $TAUROS_DATA (default
 ~/.local/share/tauros): engines/<name>-<ref> is a pristine shallow clone with push
-disabled, never built in place; engines/<name>-<ref>-base is a `git archive` copy
+disabled, never built in place; sources/<name>-<ref> holds pinned native source
+compiled by Cargo build scripts (libmgba); engines/<name>-<ref>-base is a `git archive` copy
 built in a hardened container (no network, host uid/gid, no capabilities, read-only
 root). Python 3.10+, standard library only.
 """
@@ -60,7 +61,7 @@ def load_manifest(path: Path = MANIFEST) -> dict:
     engines = manifest.get("engines", [])
     if not engines:
         errors.append("at least one engine required")
-    for engine in engines:
+    for engine in engines + manifest.get("sources", []):
         if not COMMIT.match(engine.get("commit", "")):
             errors.append(f"engine {engine.get('name')}: commit must be a full 40-hex sha")
         if not engine.get("ref") or not str(engine.get("url", "")).startswith("https://"):
@@ -101,6 +102,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def source_dir(data: Path, source: dict) -> Path:
+    return data / "sources" / f"{source['name']}-{source['ref'].replace('/', '-')}"
+
+
 def engine_dirs(data: Path, engine: dict) -> tuple[Path, Path]:
     slug = f"{engine['name']}-{engine['ref'].replace('/', '-')}"
     return data / "engines" / slug, data / "engines" / f"{slug}-base"
@@ -135,11 +140,12 @@ def tool_versions(tag: str) -> dict:
     return versions
 
 
-def ensure_engine(engine: dict, clone: Path, install: bool) -> bool:
+def ensure_clone(engine: dict, clone: Path, install: bool) -> bool:
+    """Shallow, pristine clone of one pinned commit with push disabled."""
     created = False
     if not clone.exists():
         if not install:
-            raise SetupError(f"engine clone missing: {clone}")
+            raise SetupError(f"clone missing: {clone}")
         clone.mkdir(parents=True)
         run(["git", "init", "-q"], cwd=clone)
         run(["git", "remote", "add", "origin", engine["url"]], cwd=clone)
@@ -149,11 +155,11 @@ def ensure_engine(engine: dict, clone: Path, install: bool) -> bool:
         created = True
     head = run(["git", "rev-parse", "HEAD"], cwd=clone, capture=True).strip()
     if head != engine["commit"]:
-        raise SetupError(f"engine at {head}, pinned {engine['commit']}")
+        raise SetupError(f"{clone.name} at {head}, pinned {engine['commit']}")
     if run(["git", "status", "--porcelain"], cwd=clone, capture=True).strip():
-        raise SetupError(f"engine clone is dirty; it must stay pristine: {clone}")
+        raise SetupError(f"clone is dirty; it must stay pristine: {clone}")
     if run(["git", "remote", "get-url", "--push", "origin"], cwd=clone, capture=True).strip() != "DISABLED":
-        raise SetupError("engine push URL must be DISABLED")
+        raise SetupError(f"{clone.name}: push URL must be DISABLED")
     return created
 
 
@@ -235,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {name}: {version}")
         for engine in manifest["engines"]:
             clone, base = engine_dirs(data, engine)
-            if ensure_engine(engine, clone, install):
+            if ensure_clone(engine, clone, install):
                 changes.append(f"cloned {engine['name']} {engine['ref']}")
             if build_base(engine, clone, base, tag, install):
                 changes.append(f"built base ROM for {engine['name']} {engine['ref']}")
@@ -243,6 +249,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"engine {engine['name']} {engine['ref']} {engine['commit'][:12]} (clean, push disabled)")
             print(f"  base rom sha256 {record['rom_sha256']}")
             print(f"  base sym sha256 {record['sym_sha256']}")
+        for source in manifest.get("sources", []):
+            clone = source_dir(data, source)
+            if ensure_clone(source, clone, install):
+                changes.append(f"cloned {source['name']} {source['ref']}")
+            print(f"source {source['name']} {source['ref']} {source['commit'][:12]} "
+                  "(clean, push disabled)")
         print("changes: " + (", ".join(changes) if changes else "none"))
         return 0
     except (OSError, SetupError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:

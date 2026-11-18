@@ -1,0 +1,13 @@
+[package]
+name = "tauros-mgba-sys"
+description = "Raw FFI bindings to libmgba 0.10.5 (MPL-2.0), built statically from pinned upstream source (DEC-002)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+links = "mgba"
+
+[build-dependencies]
+bindgen = "0.73"
+cmake = "0.1"

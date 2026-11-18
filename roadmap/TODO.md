@@ -118,13 +118,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Pick an OSI licence compatible with MPL-2.0 libmgba and with possible MIT (poryrom) and Apache-2.0 (porygon) reuse; decide attribution/NOTICE handling. Refs: plan §"Decisions made" (User row), plan §"Rules for the agents writing the code" (Licenses), plan §"Risks and community notes" (Licenses).
   Completion: Decision with rationale recorded in master.md; LICENSE text identified for FND-001 to add.
 
-- [ ] **In progress** **DEC-002** Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.
+- [x] **Done** **DEC-002** Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.
   Depends on: none.
   Responsible: Agent
   Owner: Claude Code
   Scope: Evaluate mgba-rs 0.1 (single commit) coverage of framebuffer, audio, input, savestates, memory and Lua; compare forking against own bindings; choose static versus dynamic linking and document the MPL-2.0 source-availability obligation. Resolves the tension between plan §"Decisions made" (Core row, mgba-rs) and plan §"Young projects to take ideas from" (no young projects as dependencies) via an own interface. Refs: plan §"Risks and community notes" (Licenses, Young dependencies).
   Completion: master.md records the decision, pinned upstream revision, linking model and licence obligations; a prototype builds and runs a ROM-less init/teardown on the dev machine, with the command used.
-  Note: (owner: Claude Code, evaluating mgba-rs, alternatives and linking model)
+  Verification: 2026-11-18 UTC: mgba-rs cloned read-only at f8c4c81 and reviewed (vendored 0.11-dev without upstream commit, limited safe API); decision, pinned revision (mGBA 0.10.5 at 26b7884), static linking model and MPL-2.0/LGPL-2.1/BSD obligations recorded in master.md "libmgba consumption (DEC-002)"; prototype crate tauros-mgba-sys built libmgba from the pinned source; `cargo test -p tauros-mgba-sys` ran the ROM-less init/teardown test (pass), and the ignored test with TAUROS_BASE_ROM ran the base ROM 120 frames, read game code BPEE from 0x080000AC, saved and reloaded a savestate (pass). Limits: audio and input untested; no safe wrapper yet (EMU-001); amd64 Linux only.
 
 - [ ] **Not started** **DEC-003** Decide whether and how to label AI-generated versus hand-made content.
   Depends on: none.

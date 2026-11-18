@@ -72,6 +72,46 @@ agreement and an entry here.
     poryrom's image, not to Docker as such.
   - *Consequence:* Docker is a runtime requirement of Tauros.
 
+## libmgba consumption (DEC-002)
+
+**Accepted** 2026-11-18 (agent-owned decision task; the owner asked to proceed):
+- *No mgba-rs dependency.* mgba-rs (ocnc, MIT, crates `mgba`/`mgba-sys` 0.1.0, single
+  commit `f8c4c81`) vendors an mGBA 0.11-dev snapshot without recording its
+  upstream commit. Its safe API covers only ROM, frames, keys, video and audio, and
+  its maintenance is unknown.
+- *Instead:* our own `tauros-mgba-sys` crate builds **unmodified mGBA 0.10.5**
+  (latest release, tag commit `26b7884bc25a5933960f3cdcd98bac1ae14d42e2`, MPL-2.0)
+  from `$TAUROS_DATA/sources/mgba-0.10.5`, fetched and pinned by
+  `scripts/setup_toolchain.py`.
+  - It uses a cmake static build plus bindgen; the approach is learned from
+    mgba-rs, with credit.
+  - Configuration: GBA and GB cores on, scripting/Lua, debuggers, Qt, SDL and
+    ffmpeg off. Rust reads memory directly, so Lua is not needed.
+  - Only `tauros-emu` may depend on it; the safe wrapper and the emulator trait
+    come in EMU-001.
+- *Linking: static*, matching the plan's single binary. The static `libmgba.a`
+  contains mGBA's own MPL-2.0 code, `blip_buf` (LGPL-2.1) and `inih` (BSD-3);
+  zlib comes from the system.
+
+  For personal use nothing applies. On any binary distribution:
+  1. state where the unmodified libmgba 0.10.5 source is available (MPL-2.0);
+  2. provide the complete corresponding source of Tauros, or object files, so users
+     can relink against a modified `blip_buf` (LGPL-2.1 §6);
+  3. ship the MPL, LGPL and BSD notices.
+
+  These are satisfied by an open-source release with a third-party notices file.
+  DEC-001 must pick a licence compatible with this.
+
+**Verified** 2026-11-18 UTC:
+- `cargo test -p tauros-mgba-sys` builds libmgba 0.10.5 and passes the ROM-less
+  init and teardown test; `projectVersion` reports `0.10.5`.
+- The ignored prototype test, run with `TAUROS_BASE_ROM` set to the FND-002 base
+  ROM, passed:
+  - it loaded the ROM, ran 120 frames with a non-blank framebuffer;
+  - it read the cartridge game code `BPEE` at 0x080000AC through `busRead8`;
+  - it saved and reloaded a savestate.
+- `ar t libmgba.a` lists `blip_buf.c.o`, `ini.c.o` and `png-io.c.o`.
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in
@@ -231,8 +271,8 @@ Consequences, as verified facts rather than decisions:
 
 ## Open decisions
 
-Tracked as tasks, not here: DEC-001 (project licence), DEC-002 (libmgba consumption and
-linking), DEC-003 (AI provenance label). The voice engine is chosen within AGT-004.
+Tracked as tasks, not here: DEC-001 (project licence; must fit the DEC-002 licence
+obligations), DEC-003 (AI provenance label). The voice engine is chosen within AGT-004.
 Record each outcome below when accepted.
 
 ## Unverified claims from the specification

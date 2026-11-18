@@ -34,5 +34,15 @@
       "rom": "pokeemerald.gba",
       "sym": "pokeemerald.sym"
     }
+  ],
+  "sources": [
+    {
+      "name": "mgba",
+      "url": "https://github.com/mgba-emu/mgba.git",
+      "ref": "0.10.5",
+      "commit": "26b7884bc25a5933960f3cdcd98bac1ae14d42e2",
+      "license": "MPL-2.0",
+      "purpose": "libmgba built statically by crates/mgba-sys (DEC-002); never modified"
+    }
   ]
 }

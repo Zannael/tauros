@@ -48,6 +48,14 @@ ideas are reimplemented in Rust with credit.
   round-trip testing of map data, and the replay versus live-play model for
   emulator testing.
 
+- [mgba-rs](https://github.com/ocnc/mgba-rs) by ocnc (MIT), studied at commit
+  `f8c4c81`: building libmgba statically with cmake and generating bindings with
+  bindgen, the approach followed by `crates/mgba-sys`.
+
+Tauros links [mGBA](https://mgba.io/) 0.10.5 (MPL-2.0), unmodified, which bundles
+`blip_buf` (LGPL-2.1) and `inih` (BSD-3); see DEC-002 in the master for the
+obligations that apply to binary releases.
+
 The analysis and the accepted decision are in
 [roadmap/docs/res-001-poryrom-porygon.md](roadmap/docs/res-001-poryrom-porygon.md)
 and [roadmap/docs/master.md](roadmap/docs/master.md).
