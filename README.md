@@ -62,4 +62,21 @@ git config core.hooksPath .githooks
 python3 -m unittest discover -s tests -v
 ```
 
+Rust workspace (toolchain pinned by `rust-toolchain.toml`), one crate per layer of
+the specification under `crates/`:
+
+```bash
+cargo build --workspace
+```
+
+```bash
+cargo test --workspace
+```
+
+GBA toolchain and pinned base ROM (Docker, no host installs):
+
+```bash
+python3 scripts/setup_toolchain.py
+```
+
 Contributor and agent workflow: [AGENTS.md](AGENTS.md).

@@ -1,0 +1,15 @@
+[package]
+name = "tauros-app"
+description = "Layer 1: the Tauros desktop app (Tauri shell arrives with EMU-004)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+tauros-model.workspace = true
+tauros-connector-gen3.workspace = true
+tauros-emu.workspace = true
+tauros-mcp.workspace = true
+tauros-agent-bridge.workspace = true

@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/model",
+    "crates/connector-gen3",
+    "crates/emu",
+    "crates/mcp",
+    "crates/agent-bridge",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+publish = false
+repository = "https://github.com/Zannael/tauros"
+# The licence is added once DEC-001 is decided.
+
+[workspace.dependencies]
+tauros-model = { path = "crates/model" }
+tauros-connector-gen3 = { path = "crates/connector-gen3" }
+tauros-emu = { path = "crates/emu" }
+tauros-mcp = { path = "crates/mcp" }
+tauros-agent-bridge = { path = "crates/agent-bridge" }

@@ -118,12 +118,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Pick an OSI licence compatible with MPL-2.0 libmgba and with possible MIT (poryrom) and Apache-2.0 (porygon) reuse; decide attribution/NOTICE handling. Refs: plan §"Decisions made" (User row), plan §"Rules for the agents writing the code" (Licenses), plan §"Risks and community notes" (Licenses).
   Completion: Decision with rationale recorded in master.md; LICENSE text identified for FND-001 to add.
 
-- [ ] **Not started** **DEC-002** Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.
+- [ ] **In progress** **DEC-002** Decide how to consume libmgba: mgba-rs as is, a fork, or own bindings, and the linking model.
   Depends on: none.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Evaluate mgba-rs 0.1 (single commit) coverage of framebuffer, audio, input, savestates, memory and Lua; compare forking against own bindings; choose static versus dynamic linking and document the MPL-2.0 source-availability obligation. Resolves the tension between plan §"Decisions made" (Core row, mgba-rs) and plan §"Young projects to take ideas from" (no young projects as dependencies) via an own interface. Refs: plan §"Risks and community notes" (Licenses, Young dependencies).
   Completion: master.md records the decision, pinned upstream revision, linking model and licence obligations; a prototype builds and runs a ROM-less init/teardown on the dev machine, with the command used.
+  Note: (owner: Claude Code, evaluating mgba-rs, alternatives and linking model)
 
 - [ ] **Not started** **DEC-003** Decide whether and how to label AI-generated versus hand-made content.
   Depends on: none.
@@ -134,12 +135,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
 
 ## Phase 0 — Foundations
 
-- [ ] **Not started** **FND-001** Create the Rust crate workspace with one crate per layer.
+- [x] **Done** **FND-001** Create the Rust crate workspace with one crate per layer.
   Depends on: none.
   Responsible: Agent
-  Owner: unassigned
+  Owner: Claude Code
   Scope: Cargo workspace with crates model, connector-gen3, emu, mcp, agent-bridge, app (the Tauri app crate may be a placeholder until EMU-004); dependency direction follows the layer diagram (connectors depend on model; mcp on model and connector/emulator traits). Add .gitignore excluding decomp clones, ROMs, savestates and build output; add README skeleton. Refs: plan §"Layered roadmap toward the beta" (Phase 0), plan §"Layered architecture", plan §"Rules for the agents writing the code" (No Nintendo assets). Licence file is added once DEC-001 is decided, not here.
   Completion: `cargo build --workspace` and `cargo test --workspace` succeed; the crate dependency graph contains no upward edges (checked with `cargo tree`); no ROM or decomp file is tracked.
+  Verification: 2026-11-18 UTC: Cargo workspace with crates tauros-model, -connector-gen3, -emu, -mcp, -agent-bridge and -app (placeholder binary; Tauri arrives with EMU-004), toolchain pinned to Rust 1.94.1, all crates publish = false; `cargo build --workspace` and `cargo test --workspace` succeed and `cargo run -p tauros-app` prints the version; `cargo tree --workspace` shows only downward edges; tests/test_layers.py enforces the allowed-dependency matrix via `cargo metadata` and failed as expected when a model→emu edge was added; `git ls-files` contains no ROM or decomp file and `target/` is ignored. Limits: crates contain only documentation until their tasks; no licence until DEC-001.
 
 - [x] **Done** **FND-002** Toolchain setup script for devkitARM, Poryscript, Porytiles and the decomp base.
   Depends on: none.
