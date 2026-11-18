@@ -63,11 +63,11 @@ function onFrame(data) {
   frames++;
   if (seen++ === 0) log(`first frame: ${bytes.length} bytes (${data instanceof ArrayBuffer ? 'binary' : typeof data})`);
   const now = performance.now();
-  if (now - lastFps >= 1000 && !status.dataset.focus) {
+  if (now - lastFps >= 1000) {
     const fps = frames * 1000 / (now - lastFps);
     if (seen < 400) log(`${fps.toFixed(1)} fps`);
     status.textContent = `${romName} · ${fps.toFixed(1)} fps` +
-      (audio && audio.state === 'running' ? '' : ' · sound off (click or press a key)');
+      (audio && audio.state === 'running' ? '' : ' · sound off (click the game)');
     frames = 0;
     lastFps = now;
   }
@@ -87,13 +87,9 @@ function updateKey(event, down) {
 }
 window.addEventListener('keydown', (e) => { ensureAudio(); updateKey(e, true); });
 window.addEventListener('keyup', (e) => updateKey(e, false));
-window.addEventListener('blur', () => {
-  if (mask) { mask = 0; invoke('set_buttons', { mask }); }
-  status.dataset.focus = 'lost';
-  status.textContent = 'Keyboard focus lost: click the game to play.';
-});
-window.addEventListener('focus', () => { delete status.dataset.focus; });
-// Keep keyboard focus on the page itself, not on the Open ROM button.
+// On Linux the app reads the keyboard on the GTK window (main.rs) and these
+// handlers never see the mapped keys; elsewhere they are the input path.
+window.addEventListener('blur', () => { if (mask) { mask = 0; invoke('set_buttons', { mask }); } });
 canvas.tabIndex = 0;
 canvas.addEventListener('mousedown', () => canvas.focus());
 window.addEventListener('load', () => { window.focus(); canvas.focus(); });

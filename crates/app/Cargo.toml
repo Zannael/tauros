@@ -23,3 +23,8 @@ tauri = { version = "2", features = [] }
 # Serve ui/ from the binary even in debug builds (there is no dev server).
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# The same gtk-rs version Tauri uses: keyboard input is read on the GTK window
+# itself, before WebKit and the input method see it.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

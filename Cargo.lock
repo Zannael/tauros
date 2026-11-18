@@ -3528,6 +3528,7 @@ version = "0.1.0"
 name = "tauros-app"
 version = "0.1.0"
 dependencies = [
+ "gtk",
  "tauri",
  "tauri-build",
  "tauros-agent-bridge",

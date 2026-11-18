@@ -138,12 +138,82 @@ fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
     send(&app, Command::Pause(paused))
 }
 
+/// The button bit (in `Button::ALL` order) for a GDK key name, case-insensitive:
+/// arrows, X = A, Z = B, Enter = Start, Backspace = Select, A = L, S = R.
+fn bit_for_key_name(name: &str) -> Option<u16> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "x" => 0,
+        "z" => 1,
+        "backspace" => 2,
+        "return" | "kp_enter" => 3,
+        "right" => 4,
+        "left" => 5,
+        "up" => 6,
+        "down" => 7,
+        "s" => 8,
+        "a" => 9,
+        _ => return None,
+    })
+}
+
+/// Reads the keyboard on the GTK window: key events reach the toplevel before
+/// WebKit and any input method, so the game gets them whatever the page's focus.
+#[cfg(target_os = "linux")]
+fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>) -> tauri::Result<()> {
+    use gtk::prelude::*;
+    use std::cell::Cell;
+    use std::rc::Rc;
+    let gtk_window = window.gtk_window()?;
+    let mask = Rc::new(Cell::new(0u16));
+    let logged = Rc::new(Cell::new(0u32));
+    let (clear_mask, clear_commands) = (mask.clone(), commands.clone());
+    let handler = move |event: &gtk::gdk::EventKey, down: bool| {
+        let name = event.keyval().name().map(|n| n.to_string()).unwrap_or_default();
+        let bit = bit_for_key_name(&name);
+        if logged.get() < 4 {
+            logged.set(logged.get() + 1);
+            eprintln!("tauros: key {name:?} {} -> {bit:?}", if down { "down" } else { "up" });
+        }
+        let Some(bit) = bit else { return gtk::glib::Propagation::Proceed };
+        let next = if down { mask.get() | 1 << bit } else { mask.get() & !(1 << bit) };
+        if next != mask.get() {
+            mask.set(next);
+            let _ = commands.send(Command::Buttons(buttons_from_mask(next)));
+        }
+        gtk::glib::Propagation::Stop
+    };
+    let press = Rc::new(handler);
+    let release = press.clone();
+    gtk_window.connect_key_press_event(move |_, e| press(e, true));
+    gtk_window.connect_key_release_event(move |_, e| release(e, false));
+    // Release everything when the window loses focus, so no key stays held.
+    gtk_window.connect_focus_out_event(move |_, _| {
+        if clear_mask.replace(0) != 0 {
+            let _ = clear_commands.send(Command::Buttons(Buttons::NONE));
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    Ok(())
+}
+
 fn main() {
     let (tx, rx) = mpsc::channel();
+    #[cfg(target_os = "linux")]
+    let keyboard = tx.clone();
     std::thread::Builder::new().name("emulator".into()).spawn(move || emulator_thread(rx)).expect("emulator thread");
     let initial_rom = std::env::args_os().nth(1).map(PathBuf::from);
     tauri::Builder::default()
         .manage(App { commands: Mutex::new(tx), initial_rom })
+        .setup(move |app| {
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                let window = app.get_webview_window("main").expect("main window");
+                native_keyboard(&window, keyboard.clone())?;
+            }
+            let _ = app;
+            Ok(())
+        })
         .on_page_load(|window, payload| {
             eprintln!("tauros: page {:?} {} in {}", payload.event(), payload.url(), window.label());
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
@@ -158,6 +228,16 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gdk_key_names_map_to_buttons() {
+        assert_eq!(bit_for_key_name("x"), Some(0));
+        assert_eq!(bit_for_key_name("X"), Some(0));
+        assert_eq!(bit_for_key_name("Return"), Some(3));
+        assert_eq!(bit_for_key_name("BackSpace"), Some(2));
+        assert_eq!(bit_for_key_name("Left"), Some(5));
+        assert_eq!(bit_for_key_name("q"), None);
+    }
 
     #[test]
     fn mask_bits_follow_button_order() {
