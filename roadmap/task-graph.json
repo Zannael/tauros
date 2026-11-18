@@ -1,13 +1,16 @@
 {
-  "active_ids": [
-    "EMU-004"
-  ],
+  "active_ids": [],
   "ready_ids": [
     "G3-008",
     "G3-009",
     "G3-010",
+    "EMU-005",
     "MCP-001",
     "AGT-001",
+    "APP-001",
+    "APP-002",
+    "APP-003",
+    "APP-004",
     "GFX-001",
     "GB-001",
     "NDS-001"
@@ -16,8 +19,13 @@
     "G3-008",
     "G3-009",
     "G3-010",
+    "EMU-005",
     "MCP-001",
     "AGT-001",
+    "APP-001",
+    "APP-002",
+    "APP-003",
+    "APP-004",
     "GFX-001",
     "GB-001",
     "NDS-001"
@@ -625,7 +633,7 @@
       ],
       "id": "EMU-004",
       "incomplete_prerequisites": [],
-      "note": "(owner: Claude Code, shell built and smoke-tested at 59.7 fps; waiting for the Owner's manual check of video, input and audio)",
+      "note": null,
       "owner": "Claude Code",
       "prerequisites": [
         "EMU-001",
@@ -635,17 +643,15 @@
       "scope": "Tauri app shell rendering the framebuffer with keyboard input and audio; no editor features. Refs: plan §\"Decisions made\" (Core row), plan §\"Layered roadmap toward the beta\" (Phase 2).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
       "source_line": 277,
-      "status": "In progress",
+      "status": "Done",
       "title": "Minimal Tauri window showing the emulator.",
-      "verification": null
+      "verification": "2026-11-18 UTC: manual check by the Owner on his Linux machine (Pop!_OS 22.04, X11): `TAUROS_LOG_KEYS=1 cargo run --release -p tauros-app` with the base Emerald ROM; asked to check video, audio and keys, he answered \"va una bomba\" (works great). His log showed 59.6-59.8 fps, Web Audio running at 44100 Hz and 8 A presses reaching the core; replaying those presses headless at the same frames goes intro -> title (CB2_InitTitleScreen) -> main menu (CB2_MainMenu). Agent checks: `cargo test -p tauros-app` (button mask, GDK key names, minimum-hold latch), clippy clean, release and debug builds smoke-run at 59.7 fps, XTEST keys skipped the intro to the title screen (window screenshots). Fixed on the way: libmgba built without GCC LTO (release links failed); keyboard read on the GTK window (page key events never arrived from the Owner's keyboard); presses held 4 frames (GTK delivered press and release in the same frame). Limits: Linux/X11 only checked; audio quality judged by the Owner, not measured; no gamepad; keys fixed (no remapping UI)."
     },
     {
       "completion": "Integration test passes; Owner confirms the window starts at the chosen point; README updated.",
       "dependents": [],
       "id": "EMU-005",
-      "incomplete_prerequisites": [
-        "EMU-004"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -819,8 +825,7 @@
       ],
       "id": "AGT-003",
       "incomplete_prerequisites": [
-        "AGT-002",
-        "EMU-004"
+        "AGT-002"
       ],
       "note": null,
       "owner": null,
@@ -928,9 +933,7 @@
         "APP-005"
       ],
       "id": "APP-001",
-      "incomplete_prerequisites": [
-        "EMU-004"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -951,9 +954,7 @@
         "APP-005"
       ],
       "id": "APP-002",
-      "incomplete_prerequisites": [
-        "EMU-004"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -975,9 +976,7 @@
         "APP-005"
       ],
       "id": "APP-003",
-      "incomplete_prerequisites": [
-        "EMU-004"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -1000,9 +999,7 @@
         "PROV-001"
       ],
       "id": "APP-004",
-      "incomplete_prerequisites": [
-        "EMU-004"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -1098,8 +1095,7 @@
       "dependents": [],
       "id": "GFX-002",
       "incomplete_prerequisites": [
-        "GFX-001",
-        "EMU-004"
+        "GFX-001"
       ],
       "note": null,
       "owner": null,
@@ -1219,27 +1215,27 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "70542e8ca2a0e0870a3b71433741e5fb111387b89580c2edf461f1d864c2b6a8",
+  "todo_sha256": "c585ab7d6d955121096494cdc1a7808ecaa360544df59d183971a7906910e54c",
   "topological_layers": [
     [
       "G3-008",
       "G3-009",
       "G3-010",
-      "EMU-004",
+      "EMU-005",
       "MCP-001",
       "AGT-001",
+      "APP-001",
+      "APP-002",
+      "APP-003",
+      "APP-004",
       "GFX-001",
       "GB-001",
       "NDS-001"
     ],
     [
-      "EMU-005",
       "MCP-002",
       "MCP-003",
-      "APP-001",
-      "APP-002",
-      "APP-003",
-      "APP-004",
+      "PROV-001",
       "GFX-002",
       "GFX-003",
       "GFX-004",
@@ -1249,8 +1245,7 @@
       "MCP-004",
       "AGT-002",
       "AGT-006",
-      "AGT-007",
-      "PROV-001"
+      "AGT-007"
     ],
     [
       "AGT-003",

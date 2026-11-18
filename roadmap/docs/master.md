@@ -245,6 +245,15 @@ information; they come from compiling a probe against the project's headers
 (SaveBlock1 location 4, pos 0, flags 0x1270, 0x12C bytes; Main callback2 4,
 state 0x438).
 
+**Verified** 2026-11-18 UTC (EMU-004, Owner's manual check): the Tauri 2 app
+plays a ROM at 59.7 fps with audio and keyboard on the Owner's Linux machine.
+Accepted design (agent-owned): emulator on its own thread; one binary channel
+message per frame (RGBA + i16 audio); audio through Web Audio, so no native
+audio library is needed; keyboard read on the GTK toplevel, because WebKitGTK
+page events did not arrive from the Owner's keyboard; each press held at least 4
+frames, because GTK delivered press and release in the same frame. libmgba must
+be built with `BUILD_LTO=OFF`: GCC LTO objects break release links.
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in
