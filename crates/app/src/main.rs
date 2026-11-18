@@ -144,7 +144,12 @@ fn main() {
     let initial_rom = std::env::args_os().nth(1).map(PathBuf::from);
     tauri::Builder::default()
         .manage(App { commands: Mutex::new(tx), initial_rom })
-        .on_page_load(|window, payload| eprintln!("tauros: page {:?} {} in {}", payload.event(), payload.url(), window.label()))
+        .on_page_load(|window, payload| {
+            eprintln!("tauros: page {:?} {} in {}", payload.event(), payload.url(), window.label());
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = window.set_focus();
+            }
+        })
         .invoke_handler(tauri::generate_handler![attach, load_rom, log, set_buttons, set_paused])
         .run(tauri::generate_context!())
         .expect("error while running Tauros");

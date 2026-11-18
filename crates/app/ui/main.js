@@ -5,6 +5,16 @@ const { invoke, Channel } = window.__TAURI__.core;
 const WIDTH = 240, HEIGHT = 160, VIDEO_BYTES = WIDTH * HEIGHT * 4, AUDIO_RATE = 32768;
 // Bit order: A, B, Select, Start, Right, Left, Up, Down, R, L.
 const KEYS = { KeyX: 0, KeyZ: 1, Backspace: 2, Enter: 3, ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7, KeyS: 8, KeyA: 9 };
+// Fallbacks when the physical code is missing (some input methods, e.g. IBus,
+// make WebKitGTK report an empty code): by key name, then by legacy keyCode.
+const BY_KEY = { x: 0, z: 1, Backspace: 2, Enter: 3, ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7, s: 8, a: 9 };
+const BY_KEYCODE = { 88: 0, 90: 1, 8: 2, 13: 3, 39: 4, 37: 5, 38: 6, 40: 7, 83: 8, 65: 9 };
+function buttonBit(event) {
+  if (event.code in KEYS) return KEYS[event.code];
+  const key = event.key && event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (key in BY_KEY) return BY_KEY[key];
+  return BY_KEYCODE[event.keyCode];
+}
 
 const log = (message) => invoke('log', { message: String(message) });
 window.addEventListener('error', (e) => log(`script error: ${e.message} at ${e.filename}:${e.lineno}`));
@@ -53,7 +63,7 @@ function onFrame(data) {
   frames++;
   if (seen++ === 0) log(`first frame: ${bytes.length} bytes (${data instanceof ArrayBuffer ? 'binary' : typeof data})`);
   const now = performance.now();
-  if (now - lastFps >= 1000) {
+  if (now - lastFps >= 1000 && !status.dataset.focus) {
     const fps = frames * 1000 / (now - lastFps);
     if (seen < 400) log(`${fps.toFixed(1)} fps`);
     status.textContent = `${romName} · ${fps.toFixed(1)} fps` +
@@ -63,24 +73,34 @@ function onFrame(data) {
   }
 }
 
-let mask = 0;
+let mask = 0, rawLogs = 0;
 function updateKey(event, down) {
-  const bit = KEYS[event.code];
+  const bit = buttonBit(event);
+  if (rawLogs++ < 4) log(`${event.type} code=${JSON.stringify(event.code)} key=${JSON.stringify(event.key)} keyCode=${event.keyCode} -> ${bit}`);
   if (bit === undefined) return;
   event.preventDefault();
   const next = down ? mask | (1 << bit) : mask & ~(1 << bit);
   if (next !== mask) {
     mask = next;
-    invoke('set_buttons', { mask });
+    invoke('set_buttons', { mask }).catch((err) => log(`set_buttons failed: ${err}`));
   }
 }
 window.addEventListener('keydown', (e) => { ensureAudio(); updateKey(e, true); });
 window.addEventListener('keyup', (e) => updateKey(e, false));
-window.addEventListener('blur', () => { if (mask) { mask = 0; invoke('set_buttons', { mask }); } });
+window.addEventListener('blur', () => {
+  if (mask) { mask = 0; invoke('set_buttons', { mask }); }
+  status.dataset.focus = 'lost';
+  status.textContent = 'Keyboard focus lost: click the game to play.';
+});
+window.addEventListener('focus', () => { delete status.dataset.focus; });
+// Keep keyboard focus on the page itself, not on the Open ROM button.
+canvas.tabIndex = 0;
+canvas.addEventListener('mousedown', () => canvas.focus());
+window.addEventListener('load', () => { window.focus(); canvas.focus(); });
 canvas.addEventListener('click', ensureAudio);
 document.addEventListener('visibilitychange', () => invoke('set_paused', { paused: document.hidden }));
 
-document.getElementById('open').addEventListener('click', () => { ensureAudio(); document.getElementById('file').click(); });
+document.getElementById('open').addEventListener('click', (e) => { ensureAudio(); document.getElementById('file').click(); e.target.blur(); });
 document.getElementById('file').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
