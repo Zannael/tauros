@@ -292,9 +292,17 @@ Decisions (agent-owned, within the tasks' scope):
   new maps and layout resizing (G3-010), editing trainer blocks that contain C
   comments, labels defined twice, moving scenes between maps.
 
-**Unverified** (G3-003): that a map edited by Tauros opens in Porymap. Porymap
-6.3.1 ships no Linux build; the edited map was only checked by the game build's own
-`mapjson` tool and by reading it back.
+**Verified** 2026-11-18 UTC (G3-003): the owner opened the prepared
+`porymap-check-g3-003` project (edit commit `5c7d71e9`) in Porymap 6.3.1
+installed from Flathub on Linux, with game version `pokeemerald`. The screenshot
+supplied in chat shows Route101 rendered and the added NPC selected at
+x=12, y=10, elevation=3, with `OBJ_EVENT_GFX_BOY_1`,
+`MOVEMENT_TYPE_FACE_DOWN` and `Route101_EventScript_Boy`. This closes the
+previously missing edited-map opening check. Limits: one edited map was inspected;
+saving/reopening in Porymap and GUI inspection of every map were not checked.
+The map/layout and block/metatile roundtrip tests were rerun and passed that day
+(939 maps, 785 layouts, 9058 events, 1570 binary files, 134 tilesets); the earlier
+container build evidence remains recorded in TODO.md under G3-004/G3-005.
 
 ## Agent SDK authentication (RES-002)
 

@@ -1,19 +1,25 @@
 {
-  "active_ids": [
-    "G3-003"
-  ],
+  "active_ids": [],
   "ready_ids": [
+    "G3-006",
+    "G3-008",
     "G3-009",
+    "G3-010",
     "EMU-001",
     "MCP-001",
     "AGT-001",
+    "GFX-001",
     "GB-001"
   ],
   "ready_unassigned_ids": [
+    "G3-006",
+    "G3-008",
     "G3-009",
+    "G3-010",
     "EMU-001",
     "MCP-001",
     "AGT-001",
+    "GFX-001",
     "GB-001"
   ],
   "retired_ids": [],
@@ -355,8 +361,8 @@
       ],
       "id": "G3-003",
       "incomplete_prerequisites": [],
-      "note": "(owner: Claude Code, implementation, byte-identical roundtrip and build verified; waiting for an edited map to be opened in Porymap, which has no Linux build at 6.3.1)",
-      "owner": "Claude Code",
+      "note": null,
+      "owner": "Codex",
       "prerequisites": [
         "MOD-001",
         "G3-001",
@@ -366,9 +372,9 @@
       "scope": "Reimplement reading and writing of Porymap's map JSON, layouts, metatiles and events (warps, NPCs, triggers, signs); do not embed Porymap. Refs: plan §\"Mature tools to integrate as they are\" (Porymap note), plan §\"Layered roadmap toward the beta\" (Phase 1), plan §\"Rules for the agents writing the code\" (Compatible formats).",
       "section": "Tauros roadmap / Phase 1 — Semantic model and Gen 3 connector",
       "source_line": 182,
-      "status": "In progress",
+      "status": "Done",
       "title": "Lossless read/write of maps, layouts and events in Porymap format.",
-      "verification": null
+      "verification": "2026-11-18 UTC: Codex reran `cargo test -p tauros-connector-gen3 --test pinned_formats every_map_and_layout_roundtrips -- --nocapture` and `cargo test -p tauros-connector-gen3 --test pinned_formats every_block_and_metatile_file_roundtrips -- --nocapture`: both passed against pinned expansion 3796c72, covering 939 maps, 785 layouts, 9058 events, 1570 map/border binary files and 134 tilesets with byte-identical roundtrips. Build evidence: the edited Route 101 project built with `make rom syms` in the hardened container in the earlier integration run recorded under G3-004/G3-005; that build was not rerun for this documentation update. Manual compatibility: the owner opened the prepared `porymap-check-g3-003` project (edit commit 5c7d71e9) in Porymap 6.3.1 from Flathub on Linux, choosing pokeemerald; the screenshot supplied in chat shows Route101 rendered and the added NPC selected at x=12, y=10, elevation=3, graphics OBJ_EVENT_GFX_BOY_1, movement MOVEMENT_TYPE_FACE_DOWN and script Route101_EventScript_Boy. Limits: GUI verification covers opening and inspecting this edited map, not a Porymap save/reopen or every map in the GUI; new maps and layout resizing remain G3-010."
     },
     {
       "completion": "A generated scene compiles with Poryscript and builds; flag allocation is tested against the pinned expansion's existing flags; roundtrip of existing flags is lossless.",
@@ -423,9 +429,7 @@
       "completion": "Integration and contract tests pass; the changed trainer is observed in the built ROM (standalone mGBA or test runner, method recorded); README updated.",
       "dependents": [],
       "id": "G3-006",
-      "incomplete_prerequisites": [
-        "G3-003"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -469,9 +473,7 @@
         "MCP-002"
       ],
       "id": "G3-008",
-      "incomplete_prerequisites": [
-        "G3-003"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -511,9 +513,7 @@
       "completion": "A created map and a resized map build and open in Porymap; untouched maps stay byte-identical.",
       "dependents": [],
       "id": "G3-010",
-      "incomplete_prerequisites": [
-        "G3-003"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -599,8 +599,7 @@
       ],
       "id": "EMU-003",
       "incomplete_prerequisites": [
-        "EMU-002",
-        "G3-003"
+        "EMU-002"
       ],
       "note": null,
       "owner": null,
@@ -701,7 +700,6 @@
       "id": "MCP-002",
       "incomplete_prerequisites": [
         "MCP-001",
-        "G3-003",
         "G3-008",
         "G3-009"
       ],
@@ -939,7 +937,6 @@
       ],
       "id": "APP-001",
       "incomplete_prerequisites": [
-        "G3-003",
         "EMU-004"
       ],
       "note": null,
@@ -1090,9 +1087,7 @@
         "GFX-004"
       ],
       "id": "GFX-001",
-      "incomplete_prerequisites": [
-        "G3-003"
-      ],
+      "incomplete_prerequisites": [],
       "note": null,
       "owner": null,
       "prerequisites": [
@@ -1235,51 +1230,48 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "8a95f933e5eb7d8671cf9d5d6d5568f063403274c7ebb5b73a4fcd741861cde7",
+  "todo_sha256": "6ba6b471f43b405f824f71d6f9b79c82367e049615d61239dc76a0ff284c704a",
   "topological_layers": [
-    [
-      "G3-003",
-      "G3-009",
-      "EMU-001",
-      "MCP-001",
-      "AGT-001",
-      "GB-001"
-    ],
     [
       "G3-006",
       "G3-008",
+      "G3-009",
       "G3-010",
+      "EMU-001",
+      "MCP-001",
+      "AGT-001",
+      "GFX-001",
+      "GB-001"
+    ],
+    [
       "EMU-002",
       "EMU-004",
-      "GFX-001",
+      "MCP-002",
+      "GFX-003",
+      "GFX-004",
       "GB-002",
       "NDS-001"
     ],
     [
       "EMU-003",
-      "MCP-002",
+      "AGT-002",
+      "AGT-006",
+      "AGT-007",
       "APP-001",
       "APP-002",
       "APP-004",
-      "GFX-002",
-      "GFX-003",
-      "GFX-004"
+      "GFX-002"
     ],
     [
       "EMU-005",
       "MCP-003",
-      "AGT-002",
-      "AGT-006",
-      "AGT-007",
+      "AGT-003",
+      "AGT-005",
       "APP-003",
       "PROV-001"
     ],
     [
       "MCP-004",
-      "AGT-003",
-      "AGT-005"
-    ],
-    [
       "AGT-004"
     ],
     [
