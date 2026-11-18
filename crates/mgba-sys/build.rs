@@ -81,6 +81,8 @@ fn main() {
         .allowlist_function("mLogSetDefaultLogger")
         .allowlist_function("VFileOpen")
         .allowlist_function("VFileFromMemory")
+        .allowlist_type("mCoreMemoryBlock")
+        .allowlist_type("mCoreMemoryBlockFlags")
         .allowlist_function("GBAIsROM")
         .allowlist_function("blip_set_rates")
         .allowlist_function("blip_samples_avail")

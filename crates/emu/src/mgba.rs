@@ -4,7 +4,8 @@
 //! video buffer; both live as long as the core and are only replaced after the
 //! previous ROM is unloaded.
 
-use crate::{Buttons, EmuError, Emulator, Frame};
+use crate::{Buttons, EmuError, Emulator, Frame, MemoryRegion};
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::sync::Once;
 use tauros_mgba_sys as sys;
@@ -72,6 +73,14 @@ impl Mgba {
     /// The libmgba version this core was built from.
     pub fn version() -> String {
         unsafe { std::ffi::CStr::from_ptr(sys::projectVersion).to_string_lossy().into_owned() }
+    }
+
+    /// The region holding `[addr, addr + len)`, if any.
+    fn region(&self, addr: u32, len: usize) -> Result<MemoryRegion, EmuError> {
+        self.memory_regions()
+            .into_iter()
+            .find(|r| r.contains(addr, len))
+            .ok_or_else(|| EmuError::Memory(format!("{len} bytes at {addr:#010x} are not inside one mapped region")))
     }
 
     fn key_bits(buttons: Buttons) -> u32 {
@@ -171,6 +180,78 @@ impl Emulator for Mgba {
             out.truncate(start + 2 * read.max(0) as usize);
             read.max(0) as usize
         }
+    }
+    fn memory_regions(&self) -> Vec<MemoryRegion> {
+        unsafe {
+            let mut blocks: *const sys::mCoreMemoryBlock = std::ptr::null();
+            let n = ((*self.core).listMemoryBlocks.unwrap())(self.core, &mut blocks);
+            std::slice::from_raw_parts(blocks, n)
+                .iter()
+                .filter(|b| b.flags & sys::mCORE_MEMORY_MAPPED != 0 && b.flags & sys::mCORE_MEMORY_VIRTUAL == 0)
+                .map(|b| MemoryRegion {
+                    id: CStr::from_ptr(b.internalName).to_string_lossy().into_owned(),
+                    name: CStr::from_ptr(b.shortName).to_string_lossy().into_owned(),
+                    start: b.start,
+                    size: b.size,
+                    // libmgba cannot patch I/O registers (GBAPatch8/16 stub them).
+                    writable: b.flags & sys::mCORE_MEMORY_WRITE != 0 && CStr::from_ptr(b.internalName).to_bytes() != b"io",
+                })
+                .collect()
+        }
+    }
+
+    fn read_memory(&self, addr: u32, len: usize) -> Result<Vec<u8>, EmuError> {
+        self.region(addr, len)?;
+        let read = unsafe { (*self.core).rawRead8.unwrap() };
+        Ok((0..len as u32).map(|i| unsafe { read(self.core, addr + i, -1) } as u8).collect())
+    }
+
+    fn write_memory(&mut self, addr: u32, bytes: &[u8]) -> Result<(), EmuError> {
+        let region = self.region(addr, bytes.len())?;
+        if !region.writable {
+            return Err(EmuError::Memory(format!("{} ({}) is read-only", region.name, region.id)));
+        }
+        // Byte patches are stubbed for video memory, so write aligned halfwords,
+        // merging the neighbouring byte read back from the core.
+        let (read, write) = unsafe { ((*self.core).rawRead16.unwrap(), (*self.core).rawWrite16.unwrap()) };
+        for (i, &b) in bytes.iter().enumerate() {
+            let at = addr + i as u32;
+            let half = unsafe { read(self.core, at & !1, -1) } as u16;
+            let merged = if at & 1 == 0 { half & 0xFF00 | b as u16 } else { half & 0x00FF | (b as u16) << 8 };
+            unsafe { write(self.core, at & !1, -1, merged) };
+        }
+        Ok(())
+    }
+
+    fn save_state(&mut self) -> Result<Vec<u8>, EmuError> {
+        if self.rom.is_none() {
+            return Err(EmuError::NoRom);
+        }
+        unsafe {
+            let mut state = vec![0u8; ((*self.core).stateSize.unwrap())(self.core)];
+            if !((*self.core).saveState.unwrap())(self.core, state.as_mut_ptr().cast()) {
+                return Err(EmuError::State("libmgba could not save the state".into()));
+            }
+            Ok(state)
+        }
+    }
+
+    fn load_state(&mut self, state: &[u8]) -> Result<(), EmuError> {
+        if self.rom.is_none() {
+            return Err(EmuError::NoRom);
+        }
+        unsafe {
+            let size = ((*self.core).stateSize.unwrap())(self.core);
+            if state.len() != size {
+                return Err(EmuError::State(format!("state is {} bytes, this core expects {size}", state.len())));
+            }
+            if !((*self.core).loadState.unwrap())(self.core, state.as_ptr().cast()) {
+                return Err(EmuError::State("libmgba rejected the state (different ROM or corrupted)".into()));
+            }
+            // Keep the held buttons: a state carries the keys of the moment it was taken.
+            ((*self.core).setKeys.unwrap())(self.core, Self::key_bits(self.buttons));
+        }
+        Ok(())
     }
 }
 

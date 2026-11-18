@@ -198,6 +198,31 @@ logger. `Mgba` is `Send`, not `Sync`. The test cartridge is original assembly
 (`crates/emu/tests/probe/probe.s`) embedded as bytes, so the always-on tests need
 no ROM.
 
+**Verified** 2026-11-18 UTC (EMU-002): the `Emulator` trait gained
+`memory_regions`, `read_memory`/`write_memory` (plus `read_u16`/`read_u32`) and
+`save_state`/`load_state`.
+- Reads use libmgba's side-effect-free `rawRead8`. A range must lie inside one
+  mapped region (the virtual whole-bus block is not listed).
+- libmgba 0.10.5 stubs `GBAPatch8` for VRAM, OAM, palette and I/O, and
+  `GBAPatch16` for I/O. Tauros therefore writes aligned halfwords (merging the
+  neighbouring byte) and reports `io` as not writable. ROM regions are read-only.
+- A GBA state is 397312 bytes; a wrong size is refused. `load_state` re-applies
+  the buttons currently held.
+- Restoring a state reproduces the EWRAM and IWRAM of the moment it was saved.
+  Replaying from it gives the same framebuffer, EWRAM, IWRAM and VRAM as the
+  original run, after a detour with different input (probe with A, Emerald with
+  Start).
+- In the user-built Emerald, `gSaveBlock2Ptr` and `gSaveBlock1Ptr` (IWRAM) point
+  into `gSaveblock2` and `gSaveblock1` moved by the same offset, a multiple of 4
+  below 128 (`SetSaveBlocksPointers`). ROM read through the bus equals the file at
+  `gTrainers`.
+
+**Observed, cause unverified** (EMU-002): the save-block offset differed between
+test processes (72, then 48), while twin cores in one process stayed identical.
+Hypothesis: the game's random seed depends on host time through mGBA's default
+RTC source (`unixTime`, gpio.c). EMU-003 should pin the clock if it needs
+reproducible boots.
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in

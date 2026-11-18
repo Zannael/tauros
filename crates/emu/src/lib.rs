@@ -4,7 +4,8 @@
 //!
 //! The trait is deliberately small and synchronous: the caller owns the loop and
 //! decides when to run a frame, what to show and where audio goes. Pacing, threads
-//! and windows belong to the app (EMU-004), savestates and memory to EMU-002.
+//! and windows belong to the app (EMU-004). Savestates and direct memory access
+//! (EMU-002) let tests and agent tools check the game through RAM instead of pixels.
 
 mod mgba;
 
@@ -85,6 +86,25 @@ impl Frame {
     }
 }
 
+/// A mapped region of the console's address space.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryRegion {
+    /// Short stable identifier (`wram`, `iwram`, `io`, `cart0`, ...).
+    pub id: String,
+    /// Human-readable name (`EWRAM`, `IWRAM`, `MMIO`, `ROM`, ...).
+    pub name: String,
+    pub start: u32,
+    pub size: u32,
+    pub writable: bool,
+}
+
+impl MemoryRegion {
+    /// Whether `[addr, addr + len)` lies inside this region.
+    pub fn contains(&self, addr: u32, len: usize) -> bool {
+        addr >= self.start && (addr - self.start) as u64 + len as u64 <= self.size as u64
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmuError {
     /// The core could not be created or initialised.
@@ -93,6 +113,10 @@ pub enum EmuError {
     Rom(String),
     /// An operation needs a loaded ROM.
     NoRom,
+    /// A memory access outside a mapped region, or a write to a read-only one.
+    Memory(String),
+    /// A savestate could not be taken or restored.
+    State(String),
 }
 
 impl fmt::Display for EmuError {
@@ -101,6 +125,8 @@ impl fmt::Display for EmuError {
             EmuError::Core(m) => write!(f, "emulator core: {m}"),
             EmuError::Rom(m) => write!(f, "ROM: {m}"),
             EmuError::NoRom => write!(f, "no ROM loaded"),
+            EmuError::Memory(m) => write!(f, "memory: {m}"),
+            EmuError::State(m) => write!(f, "savestate: {m}"),
         }
     }
 }
@@ -133,4 +159,31 @@ pub trait Emulator {
     /// Appends the audio produced since the last call to `out` as interleaved
     /// stereo `i16` samples (left, right) and returns the number of stereo frames.
     fn drain_audio(&mut self, out: &mut Vec<i16>) -> usize;
+
+    /// The mapped regions of the address space.
+    fn memory_regions(&self) -> Vec<MemoryRegion>;
+
+    /// Reads `len` bytes at `addr`, without the side effects of a CPU read. The
+    /// range must lie inside one region.
+    fn read_memory(&self, addr: u32, len: usize) -> Result<Vec<u8>, EmuError>;
+
+    /// Writes `bytes` at `addr` inside one writable region.
+    fn write_memory(&mut self, addr: u32, bytes: &[u8]) -> Result<(), EmuError>;
+
+    /// The whole console state, restorable with `load_state` on a core running the
+    /// same ROM.
+    fn save_state(&mut self) -> Result<Vec<u8>, EmuError>;
+
+    /// Restores a state taken by `save_state`.
+    fn load_state(&mut self, state: &[u8]) -> Result<(), EmuError>;
+
+    /// Reads a little-endian `u32`.
+    fn read_u32(&self, addr: u32) -> Result<u32, EmuError> {
+        Ok(u32::from_le_bytes(self.read_memory(addr, 4)?.try_into().unwrap()))
+    }
+
+    /// Reads a little-endian `u16`.
+    fn read_u16(&self, addr: u32) -> Result<u16, EmuError> {
+        Ok(u16::from_le_bytes(self.read_memory(addr, 2)?.try_into().unwrap()))
+    }
 }
