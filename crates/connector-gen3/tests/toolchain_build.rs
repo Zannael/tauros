@@ -1,10 +1,13 @@
-//! Builds in the hardened toolchain container (G3-002..G3-005): an edited trainer,
-//! an edited map and a generated Poryscript scene build with `make`; a no-change
-//! rebuild is faster than a clean one; build errors and test-runner results come
-//! back as structured values.
+//! Builds in the hardened toolchain container (G3-002..G3-005, G3-011): an edited
+//! trainer, an edited map and a generated Poryscript scene build with `make`; build
+//! errors and test-runner results come back as structured values; a no-change
+//! rebuild is faster than a clean one.
 //!
-//! The container tests take minutes, so they run only with `TAUROS_DOCKER_TESTS=1`
-//! (and the pinned expansion and toolchain image present); otherwise they skip.
+//! The default container test starts from a copy of the base build, so `make`
+//! rebuilds only what the test edits; it runs with `TAUROS_DOCKER_TESTS=1` (and the
+//! pinned expansion, base build and toolchain image present), otherwise it skips.
+//! The clean-build timing and the test runner take minutes: they are in an ignored
+//! test, run with `cargo test -p tauros-connector-gen3 --test toolchain_build -- --ignored`.
 
 mod common;
 
@@ -23,9 +26,14 @@ fn toolchain() -> Toolchain {
 /// The toolchain, or `None` (after printing why) when container tests are off.
 fn docker() -> Option<Toolchain> {
     if std::env::var_os("TAUROS_DOCKER_TESTS").is_none() {
-        eprintln!("SKIPPED: set TAUROS_DOCKER_TESTS=1 to run the container build tests (they take minutes)");
+        eprintln!("SKIPPED: set TAUROS_DOCKER_TESTS=1 to run the container build tests");
         return None;
     }
+    image()
+}
+
+/// The toolchain when its image is present.
+fn image() -> Option<Toolchain> {
     let tc = toolchain();
     let present = Command::new("docker").args(["image", "inspect", &tc.image]).output().is_ok_and(|o| o.status.success());
     if !present {
@@ -76,10 +84,10 @@ fn scene_source() -> String {
 }
 
 #[test]
-fn edited_project_builds_incrementally_with_structured_results() {
+fn edited_project_builds_with_structured_errors() {
     let Some(engine) = common::engine() else { return };
     let Some(tc) = docker() else { return };
-    let dir = common::fixture(&engine, "g3-build", &[]);
+    let Some(dir) = common::built_fixture(&engine, "g3-build") else { return };
     let mut c = Gen3Connector::open(dir.path(), Some(tc.clone())).unwrap();
     let before = c.load().unwrap();
 
@@ -139,16 +147,10 @@ fn edited_project_builds_incrementally_with_structured_results() {
     eprintln!("compiled scene:\n{compiled}");
     assert!(compiled.contains(&format!("{SCENE}::")));
 
-    // Clean build, then a no-change rebuild.
+    // Incremental build of the edits on top of the base build.
     let start = Instant::now();
     let out = c.build().unwrap_or_else(|e| panic!("build failed: {e:?}"));
-    let clean = start.elapsed();
-    let start = Instant::now();
-    let report = c.build_report().unwrap();
-    let noop = start.elapsed();
-    assert!(report.success);
-    eprintln!("clean build {:.1}s, no-change rebuild {:.1}s, rom sha256 {}", clean.as_secs_f64(), noop.as_secs_f64(), out.rom_sha256);
-    assert!(noop * 5 < clean, "no-change rebuild is not measurably faster");
+    eprintln!("incremental build of the edits {:.1}s, rom sha256 {}", start.elapsed().as_secs_f64(), out.rom_sha256);
     assert!(out.rom.is_file() && out.symbols.as_ref().is_some_and(|s| s.is_file()));
     let base = fs::read_to_string(engine.parent().unwrap().join(format!("{}-base/tauros-base-build.json", engine.file_name().unwrap().to_string_lossy()))).unwrap();
     assert!(!base.contains(&out.rom_sha256), "the edited ROM equals the base ROM");
@@ -183,6 +185,24 @@ fn edited_project_builds_incrementally_with_structured_results() {
     assert_eq!((error.level, error.line), (Level::Error, Some(main_text.lines().count() as u32 + 2)));
     assert!(error.column.is_some());
     fs::write(&main, &main_text).unwrap();
+}
+
+#[test]
+#[ignore = "clean build and test runner in the container take minutes"]
+fn clean_build_is_slower_than_no_change_and_test_runner_is_parsed() {
+    let Some(engine) = common::engine() else { return };
+    let Some(tc) = image() else { return };
+    let dir = common::fixture(&engine, "g3-clean", &[]);
+    let start = Instant::now();
+    let clean_report = tc.build_rom(dir.path()).unwrap();
+    let clean = start.elapsed();
+    assert!(clean_report.success, "{:?}", clean_report.diagnostics);
+    let start = Instant::now();
+    let report = tc.build_rom(dir.path()).unwrap();
+    let noop = start.elapsed();
+    assert!(report.success);
+    eprintln!("clean build {:.1}s, no-change rebuild {:.1}s", clean.as_secs_f64(), noop.as_secs_f64());
+    assert!(noop * 5 < clean, "no-change rebuild is not measurably faster");
 
     // The expansion's headless test runner, filtered, parsed into results.
     let tests = tc.run_tests(dir.path(), Some("Trainer Party")).unwrap();

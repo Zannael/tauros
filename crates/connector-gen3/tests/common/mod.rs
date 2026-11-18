@@ -95,7 +95,31 @@ pub fn fixture(engine: &Path, tag: &str, paths: &[&str]) -> TempDir {
         .success();
     assert!(ok && archive.wait().unwrap().success(), "git archive failed");
     fs::write(dir.path().join(".histignore"), "").unwrap();
-    git(dir.path(), &["init", "-q"]);
+    init_repository(dir.path());
+    dir
+}
+
+/// A copy of the FND-002 base build (sources plus build tree, timestamps kept), so
+/// `make` rebuilds only what a test edits. `None` (after printing why) when the base
+/// build is missing or not for the pinned commit.
+pub fn built_fixture(engine: &Path, tag: &str) -> Option<TempDir> {
+    let base = engine.with_file_name(format!("{}-base", engine.file_name().unwrap().to_string_lossy()));
+    let record = fs::read_to_string(base.join("tauros-base-build.json")).unwrap_or_default();
+    if !record.contains(ENGINE_COMMIT) {
+        eprintln!("SKIPPED: base build missing at {}; run `python3 scripts/setup_toolchain.py`", base.display());
+        return None;
+    }
+    let dir = TempDir::new(tag);
+    let ok = Command::new("cp").arg("-a").arg(base.join(".")).arg(dir.path()).status().unwrap().success();
+    assert!(ok, "copying the base build failed");
+    fs::remove_file(dir.path().join("tauros-base-build.json")).unwrap();
+    // Build outputs are ignored by the expansion's .gitignore, so only sources are committed.
+    init_repository(dir.path());
+    Some(dir)
+}
+
+fn init_repository(dir: &Path) {
+    git(dir, &["init", "-q"]);
     for (k, v) in [
         ("user.name", "Tauros Test"),
         ("user.email", "test@tauros.invalid"),
@@ -103,11 +127,10 @@ pub fn fixture(engine: &Path, tag: &str, paths: &[&str]) -> TempDir {
         ("core.hooksPath", ".git/hooks"),
         ("core.autocrlf", "false"),
     ] {
-        git(dir.path(), &["config", k, v]);
+        git(dir, &["config", k, v]);
     }
-    git(dir.path(), &["add", "-A"]);
-    git(dir.path(), &["commit", "-q", "-m", "fixture: pinned expansion"]);
-    dir
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "fixture: pinned expansion"]);
 }
 
 /// Files under `root/dir` (recursive) whose name satisfies `keep`, sorted.

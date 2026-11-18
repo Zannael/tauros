@@ -239,6 +239,14 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Create maps (map directory, map.json, map_groups.json entry, layout entry with blockdata and border) and resize existing layouts (map.bin and layouts.json) through the model. Found by G3-003, which rejects both (rules `map.create`, `map.layout_size`). Refs: plan §"Layered roadmap toward the beta" (Phase 5), plan §"Rules for the agents writing the code" (Compatible formats).
   Completion: A created map and a resized map build and open in Porymap; untouched maps stay byte-identical.
 
+- [x] **Done** **G3-011** Faster container build tests.
+  Depends on: `G3-005`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: Requested by the owner on 2026-11-18 to keep the development loop light: seed the container build-test fixtures from the FND-002 base build (copied with timestamps) so `make` rebuilds only edited files, and move the clean-build timing and the test-runner run into an explicitly ignored slow test. Refs: plan §"Layered roadmap toward the beta" (Phase 1, incremental build), plan §"Rules for the agents writing the code" (Targeted tests).
+  Completion: The default container test run builds the edited project incrementally and takes well under the previous ~3 minutes (timings recorded); the slow test still checks clean versus no-change timing and the test runner when run with `--ignored`.
+  Verification: 2026-11-18 UTC: `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test toolchain_build` now copies the base build (`cp -a`, timestamps kept; build outputs stay out of the fixture's git through the expansion's .gitignore) and took 105 s in total instead of 166–200 s; the edited project's incremental build took 30.4 s and produced the same ROM as the earlier clean build of the same edits (sha256 f80a5b24…), and the error-capture checks passed unchanged. `cargo test ... -- --ignored` ran the slow test: clean build 93.1 s, no-change rebuild 2.1 s, `make check TESTS='Trainer Party'` 6 PASS in 73.9 s. Without the opt-ins `cargo test` reports the slow test as ignored, not as passed. Limits: the default container test still needs TAUROS_DOCKER_TESTS=1 and a base build; editing flags.h makes the incremental build recompile most C files.
+
 ## Phase 2 — Emulator
 
 - [ ] **Not started** **EMU-001** Emulator connector interface and libmgba core.
@@ -461,8 +469,8 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Summary": `FND-002`, `RES-001`, `MOD-001`, `MCP-002`, `AGT-002`, `APP-005`.
 - plan §"Layered architecture": `FND-001`, `MOD-001`, `MCP-002`, `EMU-001`, `APP-003`.
 - plan §"Decisions made": `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
-- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
-- plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
+- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`, `G3-011`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
+- plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.
