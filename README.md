@@ -16,7 +16,8 @@ and is never committed or pushed: not here, and not back to its upstream.
 | Kind | Examples | Location | Rule |
 | --- | --- | --- | --- |
 | Game projects (decomp bases) | pokeemerald-expansion, pret/pokeemerald | `$TAUROS_DATA/projects/<name>` | The user's local fork. Push to any remote is disabled; nothing is contributed upstream. |
-| Toolchain | devkitARM, Poryscript, Porytiles, mGBA | `$TAUROS_DATA/tools/` or system packages | Installed at pinned versions by the setup script. |
+| Pinned engines | pokeemerald-expansion at a fixed tag | `$TAUROS_DATA/engines/` | Pristine clones, never built in place; projects and base builds are `git archive` copies. |
+| Toolchain | devkitARM, Poryscript, Porytiles | Docker image `tauros-gba-toolchain` | Built from `toolchain/gba/Dockerfile` at pinned versions; builds run without network and without root. Nothing is installed on the host. |
 | Study references | poryrom, porygon, mgba-live-mcp, mcp-mgba | `$TAUROS_DATA/references/<name>` | Read-only, pinned commit. Never a dependency; never installed as a plugin; code reused only after a recorded decision, with licence credit. |
 | Code dependencies | Rust crates, npm packages | Package manager caches | Declared in `Cargo.toml`/`package.json`, pinned by lock files. |
 | Graphics assets | sprite packs, community tilesets | `$TAUROS_DATA/assets/` | Downloaded on demand, with author credits; never committed. |

@@ -50,6 +50,50 @@ agreement and an entry here.
   - Details: [res-001-poryrom-porygon.md](res-001-poryrom-porygon.md).
     Follow-ups: DOC-001, VER-001, G3-007, G3-008.
 
+- **Accepted** 2026-11-18, decided by the agent with the owner's delegation ("choose
+  the safest and cleanest way for the system"): the GBA toolchain runs in Docker,
+  not on the host.
+  - *Why:* devkitPro's devkitARM binaries extracted from the official image require
+    glibc 2.36, while the host (Ubuntu 22.04) has 2.35 (verified by running them).
+    A native install needs sudo and system packages.
+  - *Image:* `devkitpro/devkitarm:20260221` pinned by digest
+    `sha256:4debd5b33cf4361a557b6bf3be5ff823804868125ce1429912f1a4e773e7ac5d`, already
+    present locally and also used by another of the owner's projects. On top:
+    `libpng-dev`, Poryscript 3.6.1 and Porytiles 2.0.0, both downloaded with sha256
+    verification.
+  - *Hardening (as in opeNSUI's compose):* builds run with `--network none`, the
+    host uid/gid, `--cap-drop ALL`, `no-new-privileges`, a read-only root and a tmpfs
+    `/tmp`, mounting only the game project directory.
+  - *Engine:* pokeemerald-expansion pinned at `expansion/1.16.4` (commit `3796c72`),
+    the latest 1.16 patch, as the plan targets 1.16.x; 1.17.2 exists and is not
+    adopted. Pristine clones live in `$TAUROS_DATA/engines/` and are never built in
+    place.
+  - *Supersedes* the RES-001 note that Docker builds were skipped: that referred to
+    poryrom's image, not to Docker as such.
+  - *Consequence:* Docker is a runtime requirement of Tauros.
+
+## Toolchain and base build (FND-002)
+
+**Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in
+[toolchain/sources.json](../../toolchain/sources.json)):
+- *Image:* `tauros-gba-toolchain:349743719ad7`.
+- *Tools:* devkitARM `arm-none-eabi-gcc` 15.2.0, Poryscript 3.6.1, Porytiles 2.0.0,
+  libpng-dev 1.6.39-2+deb12u6.
+- *Engine:* pokeemerald-expansion `expansion/1.16.4` at
+  `3796c72237d2ebf0361c6f4a1b4be551d8858904`, built unmodified as `pokeemerald.gba`.
+  - ROM sha256 `267819561bc027dc12373757d325626d7918ce9ea47773415712e2ea5528ddba`
+  - `.sym` sha256 `8fb8f2b4fed8877d720b0a0a02e898d97b3abdc6c1935575626ea0d9f85c16e5`
+  - Both come from one ELF; the pair is recorded beside the build in
+    `$TAUROS_DATA/engines/…-base/tauros-base-build.json`. This is the reference
+    "base ROM" for VER-001 counterfactuals.
+- *Build facts at this pin:*
+  - The expansion refuses to build a tree without git history unless `.histignore`
+    exists.
+  - `make syms` run separately relinks the ELF after the ROM was produced, so
+    always build `rom syms` in one invocation.
+- *Not yet verified:* that the ROM boots. That belongs to G3-006 and the emulator
+  work.
+
 ## Agent SDK authentication (RES-002)
 
 **Verified** 2026-11-18 UTC by reading official Anthropic pages (accessed that day):

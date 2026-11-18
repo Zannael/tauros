@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "image": {
+    "name": "tauros-gba-toolchain",
+    "dockerfile": "toolchain/gba/Dockerfile",
+    "base": "devkitpro/devkitarm:20260221",
+    "base_digest": "sha256:4debd5b33cf4361a557b6bf3be5ff823804868125ce1429912f1a4e773e7ac5d"
+  },
+  "downloads": [
+    {
+      "name": "poryscript",
+      "version": "3.6.1",
+      "url": "https://github.com/huderlem/poryscript/releases/download/3.6.1/poryscript-linux.zip",
+      "sha256": "249f9adeb3b6d7f2e33347c1d0bce5f3ff8fb06e914c75b81d08187f8404c4ff",
+      "license": "MIT",
+      "homepage": "https://github.com/huderlem/poryscript"
+    },
+    {
+      "name": "porytiles",
+      "version": "2.0.0",
+      "url": "https://github.com/grunt-lucas/porytiles/releases/download/v2.0.0/porytiles-linux-amd64.zip",
+      "sha256": "68c904c3ff707ed2d6de0372073f165e627ec3ee7855eedbb3363184cc9212a4",
+      "license": "MIT",
+      "homepage": "https://github.com/grunt-lucas/porytiles"
+    }
+  ],
+  "engines": [
+    {
+      "name": "pokeemerald-expansion",
+      "url": "https://github.com/rh-hideout/pokeemerald-expansion.git",
+      "ref": "expansion/1.16.4",
+      "commit": "3796c72237d2ebf0361c6f4a1b4be551d8858904",
+      "license": "none declared upstream; never redistributed by Tauros",
+      "rom": "pokeemerald.gba",
+      "sym": "pokeemerald.sym"
+    }
+  ]
+}
