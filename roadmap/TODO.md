@@ -126,12 +126,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: master.md records the decision, pinned upstream revision, linking model and licence obligations; a prototype builds and runs a ROM-less init/teardown on the dev machine, with the command used.
   Verification: 2026-11-18 UTC: mgba-rs cloned read-only at f8c4c81 and reviewed (vendored 0.11-dev without upstream commit, limited safe API); decision, pinned revision (mGBA 0.10.5 at 26b7884), static linking model and MPL-2.0/LGPL-2.1/BSD obligations recorded in master.md "libmgba consumption (DEC-002)"; prototype crate tauros-mgba-sys built libmgba from the pinned source; `cargo test -p tauros-mgba-sys` ran the ROM-less init/teardown test (pass), and the ignored test with TAUROS_BASE_ROM ran the base ROM 120 frames, read game code BPEE from 0x080000AC, saved and reloaded a savestate (pass). Limits: audio and input untested; no safe wrapper yet (EMU-001); amd64 Linux only.
 
-- [ ] **Not started** **DEC-003** Decide whether and how to label AI-generated versus hand-made content.
+- [x] **Done** **DEC-003** Decide whether and how to label AI-generated versus hand-made content.
   Depends on: none.
   Responsible: Owner
-  Owner: unassigned
+  Owner: Simone
   Scope: Decide on the provenance label suggested in plan §"Risks and community notes" (Positioning), considering PokéCommunity's AI ban and pret's AI-code policy; define what is recorded (scripts, wiring, text, art) and where. Decision only; implementation, if any, becomes a new task.
   Completion: Decision recorded in master.md; if adopted, an implementation task referencing this ID is added here.
+  Verification: 2026-11-18 UTC: the Owner decided in chat to label everything AI may touch, with three classes defined by the Owner (AI-Generated, AI-Assisted, Human); decision and definitions recorded in master.md "Provenance labels (DEC-003)"; implementation split into `MOD-001` (provenance type and change-set field), `G3-001` (provenance in snapshot commits) and `PROV-001` (app display and export). Limits: the approval-only edge case and aggregation rule are recorded as interpretations for the Owner to confirm.
 
 ## Phase 0 — Foundations
 
@@ -153,19 +154,21 @@ contracts live in [docs/master.md](docs/master.md). The derived
 
 ## Phase 1 — Semantic model and Gen 3 connector
 
-- [ ] **Not started** **MOD-001** Define the common semantic model and the decomp connector contract.
+- [x] **Done** **MOD-001** Define the common semantic model and the decomp connector contract.
   Depends on: `FND-001`.
   Responsible: Agent
-  Owner: unassigned
-  Scope: Rust types for Trainer, Party, Map, Event, Scene, Species and Flag shared by every game, plus the connector trait (load, save, build, change-set) in crate model. Design must accommodate Gen 1-2 (.asm macros) and DS (JSON per trainer, NARC, 3D maps kept outside the shared map type) without implementing them. Refs: plan §"Layered architecture" (layer 3, layer 4), plan §"Beyond Gen 3: Gen 1-2 and DS".
+  Owner: Claude Code
+  Scope: Rust types for Trainer, Party, Map, Event, Scene, Species and Flag shared by every game, plus the connector trait (load, save, build, change-set) in crate model. Every change set carries a provenance label (AI-Generated, AI-Assisted, Human) per `DEC-003`. Design must accommodate Gen 1-2 (.asm macros) and DS (JSON per trainer, NARC, 3D maps kept outside the shared map type) without implementing them. Refs: plan §"Layered architecture" (layer 3, layer 4), plan §"Beyond Gen 3: Gen 1-2 and DS".
   Completion: Model and trait compile with rustdoc; a written mapping table in master.md shows each type against Gen 3, Gen 1-2 and DS sources; a contract test suite exists that any connector can run.
+  Verification: 2026-11-18 UTC: crates/model defines ids, Trainer/Party/PartyMember, Map/MapGeometry/Event/Connection, Scene, Species, Flag, GameInfo/Capabilities, ProjectSnapshot, ChangeSet with Provenance, Violation, the Connector trait, generic validation, an in-memory reference connector and the 8-check contract suite; `cargo test -p tauros-model` passes 9 tests (reference connector satisfies the contract; a deliberately lossy, unvalidated connector fails 6 named checks; validation rules; Gen 1 capabilities; provenance history; JSON round trip of change sets and snapshots); `RUSTDOCFLAGS=-D warnings cargo doc` and clippy are clean; mapping table recorded in master.md "Semantic model mapping (MOD-001)" with Gen 1-2/DS cells not opened marked to verify. Limits: no real connector runs the suite yet (G3-006); Gen 1-2/DS fit is checked against file listings and one DS trainer file only.
 
-- [ ] **Not started** **G3-001** Snapshot-before-write guard for game projects.
+- [x] **Done** **G3-001** Snapshot-before-write guard for game projects.
   Depends on: `FND-001`.
   Responsible: Agent
-  Owner: unassigned
-  Scope: Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream, and disables push URLs of the game project's remotes when it takes a project over. Refs: plan §"Rules for the agents writing the code" (Never destructive), plan §"Layered roadmap toward the beta" (Phase 1, automatic git commit), plan §"Risks and community notes" (pret).
+  Owner: Claude Code
+  Scope: Every connector write goes through a guard that creates a git commit in the user's game project first and refuses to write if the snapshot fails; never pushes or contributes upstream, and disables push URLs of the game project's remotes when it takes a project over. Each change commit records its provenance label (`DEC-003`) as a commit trailer. Refs: plan §"Rules for the agents writing the code" (Never destructive), plan §"Layered roadmap toward the beta" (Phase 1, automatic git commit), plan §"Risks and community notes" (pret).
   Completion: Tests show a write creates a commit before modification, a failed commit aborts the write leaving files unchanged, no remote operation is invoked, and a push attempt from a taken-over project fails.
+  Verification: 2026-11-18 UTC: crates/connector-gen3/src/snapshot.rs implements GitGuard (take_over, snapshot, write with restore); `cargo test -p tauros-connector-gen3` passes 8 tests in temporary repositories: dirty work is committed before the write and the change commit's parent is that snapshot with Tauros-Provenance and Tauros-Snapshot trailers; a clean tree uses HEAD; a failing pre-commit hook aborts before the write runs and leaves files and history unchanged; a failing write restores tracked and new files while keeping ignored files; a no-op write records no commit; after take-over both remotes have the disabled push URL, push via remote and via direct URL both fail and the bare upstream receives no refs; the audited command log contains no network subcommand; an existing pre-push hook is preserved. Mutations removing the restore or the hook each failed one test. Limits: the guard lives in connector-gen3 for now (GB-002 will need it shared); a user's global core.hooksPath bypasses the installed hook, leaving the disabled push URL as the only barrier.
 
 - [ ] **Not started** **G3-002** Lossless read/write of trainers and parties in pokeemerald-expansion.
   Depends on: `MOD-001`, `G3-001`, `FND-002`.
@@ -372,6 +375,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: One end-to-end check covering map, trainer/scene editing, chat, voice, preview and undo; README documents beta capabilities and gaps. Refs: plan §"Layered roadmap toward the beta" (Phase 5 beta), plan §"Rules for the agents writing the code" (End of phase).
   Completion: Integration test passes; Owner confirms the beta flow; README updated.
 
+- [ ] **Not started** **PROV-001** Show and export provenance labels in the app.
+  Depends on: `APP-004`, `MOD-001`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Display the AI-Generated / AI-Assisted / Human label of every changed entity in the change history and editors, let the human promote a label when they intervene, and export a per-project provenance report suitable for a release note. Per master.md "Provenance labels (DEC-003)". Refs: plan §"Risks and community notes" (Positioning).
+  Completion: Tests show labels follow the definitions (an AI change becomes AI-Assisted after a human edit, never back to AI-Generated); the export lists every labelled entity with its label and commit.
+
 ## Phase 6 — Graphics
 
 - [ ] **Not started** **GFX-001** Asset pipeline with palette and VRAM validator.
@@ -438,7 +448,7 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
-- plan §"Risks and community notes": `GOV-003`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
+- plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
 - plan §"Next steps": `GOV-001`, `FND-001`, `FND-002`, `RES-001`, `RES-002`.
 - plan §"Sources": reference list only; cited by the tasks above, no own work.
 

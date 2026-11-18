@@ -72,6 +72,63 @@ agreement and an entry here.
     poryrom's image, not to Docker as such.
   - *Consequence:* Docker is a runtime requirement of Tauros.
 
+## Semantic model mapping (MOD-001)
+
+**Verified** 2026-11-18 UTC.
+- *Code:* the types live in `crates/model` (`tauros-model`).
+- *Gen 3 paths:* read in the pinned expansion (commit `3796c72`).
+- *Gen 1-2 and DS paths:* listed through the GitHub API at pret/pokered `ba9c056`,
+  pret/pokecrystal `9ce4c4e` and pret/pokeplatinum `62bdaac`. Cells marked *(to
+  verify)* were not opened and belong to GB-001 / NDS-001.
+
+| Model type | Gen 3 (pokeemerald-expansion) | Gen 1-2 (pokered / pokecrystal) | DS (pokeplatinum) |
+| --- | --- | --- | --- |
+| `Trainer`, `Party`, `PartyMember` | `src/data/trainers.party`: `=== TRAINER_X ===` blocks in Showdown syntax with display names (`Geodude @ Oran Berry`). The connector maps names to constants. | `data/trainers/parties.asm` in both; level, species and, in Crystal, items and moves *(field layout to verify)* | `res/trainers/data/<trainer>.json`: `name`, `class`, `items`, `ai_flags`, `double_battle`, `party[]` with `species`, `level`, `item`, `moves`; `form`, `iv_scale` and `ball_seal` go into `extensions` |
+| `Map`, `MapGeometry::Grid`, `Connection` | `data/maps/<Map>/map.json` (id, name, layout, music, weather, connections…), `data/layouts/layouts.json`, binary `map.bin`/`border.bin` | pokered `data/maps/headers`, `data/maps/objects`, `maps/*.blk`; pokecrystal `maps/<Map>.asm` + `.blk` | `res/field/maps/<map>/`. 3D terrain is `MapGeometry::External`, edited outside the shared model |
+| `Event` (`Npc`, `Warp`, `Trigger`, `Background`) | `map.json` `object_events`, `warp_events`, `coord_events` (`type: trigger`), `bg_events` (`type: sign` etc.) | object, warp, coord and bg event lists in the map object files *(to verify)* | *(to verify)* |
+| `Scene` | `data/maps/<Map>/scripts.inc` (`Assembly`) or `.pory` (`Poryscript`) | `scripts/*.asm` (pokered), `maps/<Map>.asm` script sections (pokecrystal) | `res/field/scripts/` (`Other`) |
+| `Species` | `include/constants/species.h` and `src/data/pokemon/species_info/` | *(to verify)* | *(to verify)* |
+| `Flag` | `include/constants/flags.h` (2301 `FLAG_` defines) | pokered `constants/event_constants.asm`; pokecrystal `constants/event_flags.asm`, `engine_flags.asm` | *(to verify)* |
+
+Design decisions:
+- *The model is a view.* Connectors keep the files as the source of truth and apply
+  `ChangeSet`s losslessly. Game-specific fields ride in `Extensions`.
+- *Identifiers* are the game's constants.
+- *Events* are addressed by kind and index, because order is meaningful.
+- *Every `ChangeSet`* carries a summary and a `Provenance` label.
+- *Validation:* generic rules in `validate` check change sets in order against a
+  working copy (party size, levels, moves, held items, abilities, species, warp
+  destinations, event, trainer and scene existence, unique flags). Game limits are
+  added per connector (G3-008).
+- *Contract:* the suite (`contract::assert_contract`) has 8 checks: determinism,
+  sane capabilities, empty no-op, lossless unchanged rewrite, local and visible
+  edits, rejection without writes, missing targets, atomicity.
+
+## Provenance labels (DEC-003)
+
+**Accepted** 2026-11-18 by the owner: a provenance label is attached wherever AI can
+intervene. That covers scripts, wiring, text, data, maps and graphics, in the app,
+in commits and in exported reports. The owner's definitions:
+
+| Label | Definition |
+| --- | --- |
+| **AI-Generated** | The thing was conceived and built entirely by AI, with no human taking part anywhere in the process. |
+| **AI-Assisted** | A human took part in at least one step between conception and completion; AI was also used. |
+| **Human** | AI was never used for that thing. |
+
+Interpretations to be confirmed by the owner. They are applied as defaults in the
+implementation:
+- *Approval only:* a human who only approves an AI result without changing it counts
+  as taking part, so the result is AI-Assisted. The alternative would keep it
+  AI-Generated.
+- *Monotonic labels:* a human edit turns AI-Generated into AI-Assisted, and an AI
+  edit turns Human into AI-Assisted. Nothing ever returns to AI-Generated or Human.
+- *Aggregates* such as a map or a release take the most AI-involved label among
+  their parts (Generated > Assisted > Human).
+
+Implementation: MOD-001 (type and change-set field), G3-001 (commit trailer
+`Tauros-Provenance:`), PROV-001 (app display and export).
+
 ## libmgba consumption (DEC-002)
 
 **Accepted** 2026-11-18 (agent-owned decision task; the owner asked to proceed):
@@ -272,7 +329,7 @@ Consequences, as verified facts rather than decisions:
 ## Open decisions
 
 Tracked as tasks, not here: DEC-001 (project licence; must fit the DEC-002 licence
-obligations), DEC-003 (AI provenance label). The voice engine is chosen within AGT-004.
+obligations). The voice engine is chosen within AGT-004.
 Record each outcome below when accepted.
 
 ## Unverified claims from the specification
