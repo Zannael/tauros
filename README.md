@@ -38,6 +38,9 @@ Started in Phase 2:
   and its libmgba 0.10.5 implementation.
   Tested with an original probe cartridge (`crates/emu/tests/probe/probe.s`) and
   with the user-built pokeemerald-expansion ROM.
+- **Boot into a map** (`crates/connector-gen3/src/boot.rs`): starts a built ROM
+  headless at a named map and position with chosen flags set, through the game's
+  own callbacks, and checks the result in RAM.
 
 What is missing:
 
@@ -45,7 +48,7 @@ What is missing:
 - Validating engine limits before a write (G3-008); the limits are measured in the
   master, not yet enforced.
 - Playing the ROM inside Tauros: the headless mGBA core exists (see below), but
-  there is no window yet (EMU-004) and no booting into a chosen map (EMU-003). Phase 1 edits are checked in the built ROM's
+  there is no window yet (EMU-004). Phase 1 edits are checked in the built ROM's
   bytes, not in play.
 - The MCP server (MCP-*), the agent bridge (AGT-*), graphics (GFX-*), the Tauri app
   (APP-*) and connectors for other generations (GB-*, NDS-*).

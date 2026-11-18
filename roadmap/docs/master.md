@@ -223,6 +223,28 @@ Hypothesis: the game's random seed depends on host time through mGBA's default
 RTC source (`unixTime`, gpio.c). EMU-003 should pin the clock if it needs
 reproducible boots.
 
+**Accepted** 2026-11-18 (EMU-003, agent-owned): booting into a map is
+game-specific, so it lives in `tauros-connector-gen3::boot`. The connector
+depends on the `tauros-emu` trait for this, and on no emulator implementation.
+The ROM is never patched: the boot drives the game's own callbacks through
+memory writes.
+
+**Verified** 2026-11-18 UTC (EMU-003) on the pinned expansion's base build. The
+boot runs these steps:
+1. Wait until `gMain.callback2` leaves 0 and `CB2_InitCopyrightScreenAfterBootup`
+   (about frame 177, when `CB2_ExpansionIntro` starts).
+2. Set `callback2 = CB2_NewGame` with callback1 = 0 and state = 0. The game
+   reaches `CB2_Overworld` inside the moving truck (group 25, num 40).
+3. Write `gSaveBlock1Ptr->location` (warpId -1, x, y) and `->pos`, set the flag
+   bits, and set `callback2 = CB2_LoadMap`, the way `DoWarp` ends.
+4. The target map loads; the whole boot takes 284 frames.
+
+Writing `sWarpDestination` instead has no effect: only `WarpIntoMap` copies it.
+The struct offsets cannot come from gdb, because the built ELF has no type
+information; they come from compiling a probe against the project's headers
+(SaveBlock1 location 4, pos 0, flags 0x1270, 0x12C bytes; Main callback2 4,
+state 0x438).
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in
