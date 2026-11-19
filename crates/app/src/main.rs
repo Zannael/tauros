@@ -8,23 +8,37 @@
 //! draws it on a canvas and plays the audio with the Web Audio API, so the app
 //! needs no native audio library.
 //!
+//! The chat panel talks to the Claude Agent SDK sidecar (`AGT-003`). Its session
+//! gets the Tauros MCP tools of the project given with `--project`, served in this
+//! process; each turn's events reach the page over a channel as they stream.
+//!
 //! Usage: `tauros-app --help`; choose a ROM or a project boot target.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
+use tauros_agent_bridge::claude_sidecar::ClaudeSidecarConfig;
+use tauros_agent_bridge::AgentEvent;
+use tauros_app::chat::{claude_backend, Chat};
 use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
 use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
+use tauros_app::mcp_host::build_project_mcp_server;
 use tauros_app::playback::{buttons_from_mask, emulator_thread, Command};
+use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_emu::Buttons;
 
 struct App {
     commands: Mutex<Sender<Command>>,
     /// A command-line ROM or project target, loaded when the window attaches.
     initial_launch: Option<Launch>,
+    chat: Chat,
+    /// Set while a text field has focus: game keys then go to the field.
+    typing: Arc<AtomicBool>,
 }
 
 impl App {
@@ -86,6 +100,59 @@ fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
     send(&app, Command::Pause(paused))
 }
 
+/// Sends a chat message; the turn's events stream to `on_event` until it completes.
+/// Runs off the main thread: the first message starts the sidecar and MCP server.
+#[tauri::command(async)]
+fn chat_send(app: tauri::State<'_, App>, text: String, on_event: Channel<AgentEvent>) -> Result<String, String> {
+    let turn = app.chat.send(&text, move |event| {
+        let _ = on_event.send(event);
+    })?;
+    Ok(turn.to_string())
+}
+
+#[tauri::command(async)]
+fn chat_cancel(app: tauri::State<'_, App>) -> Result<(), String> {
+    app.chat.cancel()
+}
+
+/// Ends the conversation; the next message starts a new one.
+#[tauri::command(async)]
+fn chat_reset(app: tauri::State<'_, App>) {
+    app.chat.reset();
+}
+
+/// The page reports whether a text field has focus, so typed keys are not game input.
+#[tauri::command]
+fn set_typing(app: tauri::State<'_, App>, typing: bool) -> Result<(), String> {
+    app.typing.store(typing, Ordering::Relaxed);
+    if typing {
+        send(&app, Command::Buttons(Buttons::NONE))?;
+    }
+    Ok(())
+}
+
+/// The chat for this launch: the Claude sidecar from this repository, with the
+/// Tauros MCP tools of the launch's project when there is one.
+fn project_chat(project: Option<PathBuf>) -> Chat {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    Chat::new(move || {
+        let server = match &project {
+            Some(project) => {
+                let toolchain = Toolchain::for_repository(&repo).ok();
+                Some(build_project_mcp_server(project, toolchain, None)?)
+            }
+            None => None,
+        };
+        let working_dir = project.clone().unwrap_or_else(|| repo.clone());
+        claude_backend(ClaudeSidecarConfig::from_repo_root(&repo), server, working_dir, BTreeMap::new())
+    })
+}
+
+#[tauri::command]
+fn chat_info(app: tauri::State<'_, App>) -> Option<String> {
+    app.project_root().map(|root| root.display().to_string())
+}
+
 #[tauri::command]
 fn history_list(
     app: tauri::State<'_, App>,
@@ -133,7 +200,7 @@ fn bit_for_key_name(name: &str) -> Option<u16> {
 /// Reads the keyboard on the GTK window: key events reach the toplevel before
 /// WebKit and any input method, so the game gets them whatever the page's focus.
 #[cfg(target_os = "linux")]
-fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>) -> tauri::Result<()> {
+fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>, typing: Arc<AtomicBool>) -> tauri::Result<()> {
     use gtk::prelude::*;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -144,6 +211,12 @@ fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>) -> 
     let verbose = std::env::var_os("TAUROS_LOG_KEYS").is_some();
     let (clear_mask, clear_commands) = (mask.clone(), commands.clone());
     let handler = move |event: &gtk::gdk::EventKey, down: bool| {
+        if typing.load(Ordering::Relaxed) {
+            if mask.replace(0) != 0 {
+                let _ = commands.send(Command::Buttons(Buttons::NONE));
+            }
+            return gtk::glib::Propagation::Proceed;
+        }
         let name = event.keyval().name().map(|n| n.to_string()).unwrap_or_default();
         let bit = bit_for_key_name(&name);
         if logged.get() < 4 || verbose {
@@ -186,17 +259,22 @@ fn main() {
         }
     };
     let (tx, rx) = mpsc::channel();
+    let typing = Arc::new(AtomicBool::new(false));
+    let chat = project_chat(match &initial_launch {
+        Some(Launch::Point { project, .. }) => Some(project.clone()),
+        _ => None,
+    });
     #[cfg(target_os = "linux")]
-    let keyboard = tx.clone();
+    let (keyboard, keyboard_typing) = (tx.clone(), typing.clone());
     std::thread::Builder::new().name("emulator".into()).spawn(move || emulator_thread(rx)).expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch })
+        .manage(App { commands: Mutex::new(tx), initial_launch, chat, typing })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
                 use tauri::Manager;
                 let window = app.get_webview_window("main").expect("main window");
-                native_keyboard(&window, keyboard.clone())?;
+                native_keyboard(&window, keyboard.clone(), keyboard_typing.clone())?;
             }
             let _ = app;
             Ok(())
@@ -209,7 +287,12 @@ fn main() {
             set_buttons,
             set_paused,
             history_list,
-            history_undo
+            history_undo,
+            chat_send,
+            chat_cancel,
+            chat_reset,
+            chat_info,
+            set_typing
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauros");

@@ -74,7 +74,9 @@ function onFrame(data) {
 }
 
 let mask = 0, rawLogs = 0;
+const isTextField = (el) => el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
 function updateKey(event, down) {
+  if (isTextField(event.target)) return;
   const bit = buttonBit(event);
   if (rawLogs++ < 4) log(`${event.type} code=${JSON.stringify(event.code)} key=${JSON.stringify(event.key)} keyCode=${event.keyCode} -> ${bit}`);
   if (bit === undefined) return;
@@ -177,3 +179,138 @@ document.getElementById('refresh-history').addEventListener('click', (e) => {
   canvas.focus();
 });
 
+
+// AGT-003: chat with the agent. Each turn's events (text and thinking deltas, tool
+// calls, status, errors, completion) arrive on a channel as they stream.
+const chatLog = document.getElementById('chat-log');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+const chatStop = document.getElementById('chat-stop');
+let chatBusy = false, chatGeneration = 0;   // a new chat ignores the old turn's late events
+
+invoke('chat_info').then((project) => {
+  document.getElementById('chat-scope').textContent = project
+    ? `Tauros tools on ${project}`
+    : 'No project open: start with --project to give the agent the Tauros tools';
+});
+
+// Text fields take the keyboard: the app stops reading game keys while one has focus.
+for (const field of [chatInput]) {
+  field.addEventListener('focus', () => invoke('set_typing', { typing: true }));
+  field.addEventListener('blur', () => invoke('set_typing', { typing: false }));
+}
+
+function chatAppend(className, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${className}`;
+  div.textContent = text;
+  chatLog.appendChild(div);
+  chatScroll();
+  return div;
+}
+
+function chatScroll() {
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+const toolName = (name) => (name.startsWith('mcp__') ? name.split('__').slice(2).join('__') || name : name);
+
+// Tool results are usually MCP content blocks; show their text, else the JSON.
+function formatOutput(output) {
+  if (Array.isArray(output) && output.every((b) => b && b.type === 'text')) return output.map((b) => b.text).join('\n');
+  if (typeof output === 'string') return output;
+  return JSON.stringify(output, null, 2);
+}
+
+function setChatBusy(busy) {
+  chatBusy = busy;
+  chatSend.disabled = busy;
+  chatStop.hidden = !busy;
+}
+
+function startTurn(text) {
+  chatAppend('user', text);
+  let agent = null;      // the assistant bubble receiving text deltas
+  const tools = new Map();
+  const channel = new Channel();
+  const generation = chatGeneration;
+  channel.onmessage = (event) => {
+    if (generation !== chatGeneration) return;
+    switch (event.type) {
+      case 'text_delta':
+        if (!agent) agent = chatAppend('agent streaming', '');
+        agent.textContent += event.delta;
+        break;
+      case 'tool_call_started': {
+        if (agent) { agent.classList.remove('streaming'); agent = null; }
+        const details = document.createElement('details');
+        details.className = 'tool';
+        const summary = document.createElement('summary');
+        const name = document.createElement('span');
+        name.className = 'tool-name';
+        name.textContent = toolName(event.name);
+        const state = document.createElement('span');
+        state.className = 'tool-state';
+        state.textContent = 'running…';
+        summary.append(name, state);
+        const args = document.createElement('pre');
+        args.textContent = `arguments: ${JSON.stringify(event.arguments, null, 2)}`;
+        details.append(summary, args);
+        chatLog.appendChild(details);
+        tools.set(event.call_id, { details, state });
+        break;
+      }
+      case 'tool_call_completed': {
+        const tool = tools.get(event.call_id);
+        if (!tool) break;
+        tool.details.classList.add(event.is_error ? 'failed' : 'ok');
+        tool.state.textContent = event.is_error ? 'failed' : 'done';
+        const out = document.createElement('pre');
+        out.textContent = `result: ${formatOutput(event.output)}`;
+        tool.details.appendChild(out);
+        if (event.is_error) tool.details.open = true;
+        break;
+      }
+      case 'error':
+        chatAppend('error', event.message);
+        break;
+      case 'turn_completed': {
+        if (agent) agent.classList.remove('streaming');
+        const usage = event.usage ? ` · ${event.usage.input_tokens} in / ${event.usage.output_tokens} out tokens` : '';
+        if (event.finish_reason !== 'completed' || usage) chatAppend('meta', `${event.finish_reason}${usage}`);
+        setChatBusy(false);
+        break;
+      }
+      default:
+        break;   // turn_started, thinking_delta and status are not shown
+    }
+    chatScroll();
+  };
+  setChatBusy(true);
+  invoke('chat_send', { text, onEvent: channel }).catch((err) => {
+    chatAppend('error', `${err}`);
+    setChatBusy(false);
+  });
+}
+
+document.getElementById('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = chatInput.value.trim();
+  if (!text || chatBusy) return;
+  chatInput.value = '';
+  startTurn(text);
+});
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    document.getElementById('chat-form').requestSubmit();
+  }
+});
+chatStop.addEventListener('click', () => invoke('chat_cancel').catch((err) => chatAppend('error', `${err}`)));
+document.getElementById('chat-new').addEventListener('click', async () => {
+  chatGeneration++;
+  await invoke('chat_reset');
+  chatLog.innerHTML = '';
+  setChatBusy(false);
+  chatInput.focus();
+});

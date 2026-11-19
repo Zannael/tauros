@@ -758,6 +758,58 @@ live_claude_sdk_sidecar_calls_in_process_mcp -- --ignored --nocapture` passed
 `query()` executed `create_trainer` (`TRAINER_CLAUDE_LIVE`) directly on the
 in-process `TaurosServer` and streamed tool and text events back to Rust.
 
+## Streaming chat panel (AGT-003)
+
+**Accepted** 2026-11-19 (agent-owned): the app's chat (`crates/app/src/chat.rs`,
+`Chat`) holds one `AgentBridge` session, started on the first message by a factory
+(`claude_backend`: Claude sidecar with `AuthMode::HostSignIn` plus an
+`InProcessMcpHost` serving `build_project_mcp_server` for the `--project` launch,
+or no MCP server without a project). Each turn's `AgentEvent`s are forwarded on a
+Tauri channel (`chat_send`) as they arrive; one turn at a time, `chat_cancel`
+stops it, `chat_reset` closes the session. While a page text field has focus,
+`set_typing` makes the GTK keyboard handler pass keys to WebKit and releases held
+game buttons. The agent's MCP emulator is a separate `Mgba` instance from the
+window's game; sharing it is `APP-003`.
+
+**Accepted** 2026-11-19 (agent-owned): the sidecar runs `query()` with
+`persistSession: true` (was `false` in `AGT-002`) so `resume` can reload earlier
+turns; transcripts are written by the unmodified host Claude Code CLI to its own
+store (`~/.claude/projects/`), never by Tauros. The sidecar also releases the
+session's active turn before emitting `turn_completed`, so a next message sent on
+that event is not refused as busy.
+
+**Verified** 2026-11-19 UTC: with `persistSession: false` a live second turn failed
+with `No conversation found with session ID` (resume needs the transcript); with
+`true`, `TAUROS_LIVE_CLAUDE=1 cargo test -p tauros-app --test chat_panel
+live_chat_remembers_the_previous_turn -- --ignored` passed (8.5 s): the second
+turn returned the code word given in the first. Before the release fix the same
+test's second `send` was refused with `already has an active turn`.
+
+**Verified** 2026-11-19 UTC (Owner manual check): in `tauros-app` launched on
+`director-scene-mcp004`, a chat request ran the live `tauros_status` tool (shown
+as done in the panel) and the reply completed. The domain MCP tools have no way
+to list or search trainers, so the agent could not answer "trainers containing
+DIRECTOR"; it also mentioned a "Trainer panel" that the app does not have yet.
+
+## Agent reach over the whole game (Owner direction)
+
+**Accepted** 2026-11-19 (Owner, in chat): the end goal is that the Owner narrates
+what should happen (for example: a character arrives, snow starts falling, a battle
+starts, afterwards the player is teleported) and the agent builds it, verifies it
+and shows it in the preview. Missing agent abilities are not listed up front:
+- the MCP grows through generic, model-driven tools (describe, query, get; `MCP-005`),
+  so the question becomes whether the model represents a part of the game, not
+  whether a tool exists;
+- reading what the model does not cover goes through read-only, project-confined
+  source access; writes stay domain tools behind the snapshot guard;
+- gaps are found by using the app and enter TODO.md only when they recur.
+
+Hypothesis, not verified: most of such a narration is already expressible as one
+Poryscript scene (movements, weather, trainer battle, warp) via `add_scene`, as the
+director's scene showed; what the agent lacks is knowing the game's vocabulary and
+checking the result. Effects the engine does not have (new animations or graphics)
+would need C or asset changes outside today's domain tools.
+
 ## Phase 3 director's scene & no-whiteout mechanism (MCP-004)
 
 **Verified** 2026-11-19 UTC on pinned `pokeemerald-expansion 1.16.4` (`3796c72`):

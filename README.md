@@ -211,6 +211,19 @@ not resume a save. Coordinates are checked against map bounds, not walkability.
 Only the pinned Emerald expansion and Linux desktop have been checked; there is
 no gamepad or keyboard remapping UI yet.
 
+The panel on the right chats with the agent through the Claude Agent SDK sidecar.
+Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
+sidecar/claude-agent-sdk run build`; it uses your existing Claude Code sign-in
+(`claude auth login`), and Tauros never sees or stores the credentials. With
+`--project` the agent gets the Tauros MCP tools for that project (trainers, maps,
+scenes, flags, builds and an emulator of its own, separate from the window's game);
+without it the agent has no tools. Replies stream in as they are written, and each
+tool call shows its arguments and result. Enter sends, Shift+Enter starts a new
+line, Stop ends the current reply and New chat forgets the conversation. While the
+text box has focus, the keyboard types into it instead of playing the game.
+Conversation transcripts are saved by the Claude Code CLI in its own store
+(`~/.claude/projects/`), which is how later messages see the earlier ones.
+
 Run the Phase 2 integration test (no display server needed, but Docker and the
 pinned engine/base build must be available; an opted-in run fails if missing):
 

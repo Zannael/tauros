@@ -1,4 +1,5 @@
-//! Desktop launch path, change-history and in-process MCP host helpers shared by the Tauri shell and tests.
+//! Desktop launch path, chat, change-history and in-process MCP host helpers shared by the Tauri shell and tests.
+pub mod chat;
 pub mod history;
 pub mod launch;
 pub mod mcp_host;

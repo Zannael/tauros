@@ -44,6 +44,14 @@ function ackErr(id: string, code: ErrorCode, message: string): void {
 }
 
 function emitEvent(sessionId: string, event: AgentEvent): void {
+  // Release the session before announcing the end of its turn, so a client that
+  // sends the next message as soon as it sees `turn_completed` is not refused.
+  if (event.type === 'turn_completed') {
+    const session = sessions.get(sessionId);
+    if (session?.activeTurn?.turnId === event.turn_id) {
+      session.activeTurn = undefined;
+    }
+  }
   emit({ type: 'event', session_id: sessionId, event });
 }
 
@@ -136,7 +144,9 @@ async function runSdkTurn(
     // Keep edits strictly inside Tauros's domain MCP tools (no built-in file/shell tools).
     tools: [],
     includePartialMessages: true,
-    persistSession: false,
+    // `resume` reloads the previous turns from the host CLI's own transcript
+    // store; without persistence every turn would start a new conversation.
+    persistSession: true,
     settingSources: [],
     resume: session.sdkSessionId,
   };

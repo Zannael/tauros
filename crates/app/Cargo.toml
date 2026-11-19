@@ -19,6 +19,7 @@ tauros-emu.workspace = true
 tauros-mcp.workspace = true
 tauros-agent-bridge.workspace = true
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "sync"] }
 
@@ -31,6 +32,3 @@ custom-protocol = ["tauri/custom-protocol"]
 # itself, before WebKit and the input method see it.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
-
-[dev-dependencies]
-serde_json = "1"
