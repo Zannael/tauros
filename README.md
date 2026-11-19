@@ -11,8 +11,9 @@ and [verified facts and decisions](roadmap/docs/master.md).
 
 ## Status
 
-Phase 1 (model and Gen 3 connector) is complete as a Rust library with tests; there
-is no user interface yet.
+Phase 1 (model and Gen 3 connector) is complete as a Rust library with tests.
+Phase 2 is complete: the minimal Tauri emulator window supports ROM playback
+and a chosen map start, verified by the integration test and the Owner's manual check.
 
 What works, on a pokeemerald-expansion 1.16.4 project:
 
@@ -31,7 +32,22 @@ What works, on a pokeemerald-expansion 1.16.4 project:
   from the base ROM only in that trainer's level byte
   (`crates/connector-gen3/tests/phase1_integration.rs`).
 
-Started in Phase 2:
+Additional Gen 3 capabilities:
+
+- **New trainers**: `UpsertTrainer` appends a `TRAINER_` constant and party block
+  in one snapshot-guarded transaction. Existing ids stay unchanged; allocation is
+  bounded by `MAX_TRAINERS_COUNT_EMERALD` (nine free slots in the pinned base).
+- **Static preflight**: `Connector::validate`, `apply` and the Gen 3 build path
+  check the cumulative map state: padded map size, object template capacity,
+  NPC pressure in spawn windows and estimated palette pressure. Existing NPC
+  pressure at connector open, flag-dependent visibility and palette uncertainty
+  produce warnings; new/worsened unconditional NPC overflow is rejected.
+  Warnings require runtime judgement: scripts, walkability and moving NPCs are
+  not simulated. Item ids and metatile behaviour tables remain read-only in the model;
+  edits to their numeric ids after connector open are checked before writing/building
+  to prevent renumbering existing items or reusing live metatile behaviours.
+
+Available in Phase 2:
 
 - **Headless emulator** (`crates/emu`): an `Emulator` trait (load ROM, run frames,
   RGBA framebuffer, buttons, stereo audio, savestates, memory reads and writes)
@@ -39,19 +55,42 @@ Started in Phase 2:
   Tested with an original probe cartridge (`crates/emu/tests/probe/probe.s`) and
   with the user-built pokeemerald-expansion ROM.
 - **Boot into a map** (`crates/connector-gen3/src/boot.rs`): starts a built ROM
-  headless at a named map and position with chosen flags set, through the game's
-  own callbacks, and checks the result in RAM.
+  at a named map and position with chosen flags set, through the game's
+  own callbacks, and checks the result in RAM. The desktop worker uses this same
+  path before streaming frames to the window.
+- **Tauri player** (`crates/app`): RGBA canvas, keyboard, Web Audio, pause when
+  hidden, ROM file picker and CLI launch. The Phase 2 integration test follows
+  CLI selection through project loading, boot and the actual Tauri frame channel,
+  for two distinct maps.
 
 What is missing:
 
-- Creating new trainers (G3-009) and new maps or resizing layouts (G3-010).
-- Validating engine limits before a write (G3-008); the limits are measured in the
-  master, not yet enforced.
-- Playing the ROM inside Tauros: the headless mGBA core exists (see below), but
-  there is no window yet (EMU-004). Phase 1 edits are checked in the built ROM's
-  bytes, not in play.
-- The MCP server (MCP-*), the agent bridge (AGT-*), graphics (GFX-*), the Tauri app
-  (APP-*) and connectors for other generations (GB-*, NDS-*).
+- Creating new maps or resizing layouts (G3-010).
+- Streaming chat & voice UI (`AGT-003`/`004`), API-key/Codex/Gemini adapters (`AGT-005..007`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
+
+Available in Phase 3 (complete) & Phase 4 (in progress):
+
+- **Domain & emulator MCP server** (`crates/mcp`, `crates/app/src/bin/tauros-mcp-project.rs`):
+  exposes `tauros_status`, `create_trainer`, `place_npc`, `add_scene`, `build`,
+  `run_test`, `emu_boot`, `emu_press_input`, `emu_screenshot`, `emu_save_state`,
+  `emu_load_state`, `emu_assert_ram` and `run_verification` (`VER-001` inert specs
+  with `shift`/`wrong_value`/`cold_boot`/`base_rom` counterfactuals). `tauros-mcp-project`
+  wires a real Gen 3 project and libmgba emulator over stdio with automatic ROM/`.sym`
+  reload after `build`.
+- **Phase 3 director's scene end-to-end test** (`crates/app/tests/phase3_director_scene.rs`):
+  creates a 3-Pokémon trainer, Poryscript scene with atomic flag allocation and
+  no-whiteout battle (`B_FLAG_NO_WHITEOUT = FLAG_TEMP_1`), places the NPC, builds
+  in the hardened Docker container, boots mGBA to the scene and proves the lost
+  battle without whiteout via `run_verification` (`verdict: PROVEN`).
+- **Swappable agent bridge & TypeScript Agent SDK sidecar** (`crates/agent-bridge`,
+  `sidecar/claude-agent-sdk/`, `crates/app/src/mcp_host.rs`): vendor-independent
+  `AgentBridge` trait, supervised Node.js sidecar wrapping `@anthropic-ai/claude-agent-sdk`
+  (`AuthMode::HostSignIn` per RES-002; no credentials collected or stored), and
+  `InProcessMcpHost` connecting the sidecar to the in-process `TaurosServer` over a
+  private local Unix domain socket.
+- **Non-destructive change history & undo** (`crates/app/src/history.rs`): lists
+  G3-001 commits with provenance/origin and restores any snapshot without losing
+  prior history.
 
 ## External sources
 
@@ -145,6 +184,140 @@ Backspace = Select, A/S = L/R. Sound starts after the first click or key press.
 
 ```bash
 cargo run -p tauros-app -- path/to/rom.gba
+```
+
+Start a built pokeemerald-expansion project in Petalburg City, in front of the gym:
+
+```bash
+cargo run -p tauros-app -- --project "$TAUROS_DATA/projects/my-hack" \
+  --map MAP_PETALBURG_CITY --x 15 --y 10 --flag FLAG_BADGE01_GET
+```
+
+Replace the project path with your built project's directory. Supply `--project`,
+`--map`, `--x` and `--y` together; repeat `--flag` to set several saved flags.
+`--help` prints the accepted syntax. Opening a file in the window starts a normal
+ROM boot; the chosen point applies to the CLI project launch.
+
+The project must already contain `pokeemerald.gba`, `pokeemerald.sym` and generated
+`include/constants/map_groups.h` from the same `make rom syms` invocation. Rebuild
+after source changes; Tauros does not detect a stale or mismatched build here.
+Docker and the pinned toolchain image are needed to measure struct offsets against
+the project's headers. Run from this source checkout after the setup script.
+Taking the project over disables remote pushes and snapshots pending source edits
+before writing the layout probe under ignored `build/tauros/`.
+
+Boot-to-point starts a fresh game (empty name, default gender, no party); it does
+not resume a save. Coordinates are checked against map bounds, not walkability.
+Only the pinned Emerald expansion and Linux desktop have been checked; there is
+no gamepad or keyboard remapping UI yet.
+
+Run the Phase 2 integration test (no display server needed, but Docker and the
+pinned engine/base build must be available; an opted-in run fails if missing):
+
+```bash
+TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test phase2_integration -- --nocapture
+```
+
+## External MCP clients
+
+Build the headless transport (no ROM, Docker or GUI needed):
+
+```bash
+cargo build -p tauros-mcp
+python3 scripts/check_mcp.py
+cargo test -p tauros-mcp
+```
+
+The server is an embeddable Rust library with a thin `tauros-mcp` stdio binary
+(status-only when unattached) and a Layer 1 `tauros-mcp-project` stdio binary wired
+to a Gen 3 project and libmgba emulator:
+
+```bash
+cargo build -p tauros-app --bin tauros-mcp-project
+target/debug/tauros-mcp-project --project "$TAUROS_DATA/projects/my-hack"
+```
+
+Run the Phase 3 end-to-end director's scene test (Docker + pinned base build):
+
+```bash
+TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test phase3_director_scene -- --nocapture
+```
+
+Build and test the Phase 4 TypeScript Agent SDK sidecar connected to the in-process MCP:
+
+```bash
+npm --prefix sidecar/claude-agent-sdk install
+npm --prefix sidecar/claude-agent-sdk run build
+cargo test -p tauros-app --test agent_sidecar_mcp -- --nocapture
+```
+
+Stdout contains only MCP JSON-RPC; diagnostics go to stderr.
+
+Use an absolute binary path, since a client's working directory can differ from
+this checkout. These configuration formats follow the official
+[Claude Code MCP](https://code.claude.com/docs/en/mcp),
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
+[Antigravity MCP](https://antigravity.google/docs/mcp?tab=cli) documentation.
+Tauros never handles the client's provider credentials.
+
+Claude Code, from this checkout:
+
+```bash
+claude mcp add --transport stdio tauros -- "$PWD/target/debug/tauros-mcp"
+```
+
+Codex, in `~/.codex/config.toml` (or a trusted project's `.codex/config.toml`):
+
+```toml
+[mcp_servers.tauros]
+command = "/absolute/path/to/tauros/target/debug/tauros-mcp"
+```
+
+Antigravity CLI (`agy`), in `.agents/mcp_config.json` for a test workspace or
+`~/.gemini/config/mcp_config.json` globally:
+
+```json
+{
+  "mcpServers": {
+    "tauros": {
+      "command": "/absolute/path/to/tauros/target/debug/tauros-mcp"
+    }
+  }
+}
+```
+
+The same `mcpServers` block works as a temporary `mcp.json` passed to Claude Code
+for a one-shot check, without adding a permanent server:
+
+```bash
+claude -p 'Call tauros_status once and report its exact result.' \
+  --strict-mcp-config --mcp-config /path/to/mcp.json \
+  --tools '' --allowedTools mcp__tauros__tauros_status --no-session-persistence
+```
+
+Repeatable external-client checks from the configured test workspace:
+
+```bash
+codex exec --ephemeral --skip-git-repo-check --sandbox read-only \
+  'Call the Tauros MCP tool tauros_status once and report its exact result.'
+agy --print 'Call the Tauros MCP tool tauros_status once and report its exact result.' \
+  --settings '{"permissions":{"allow":["mcp(tauros/tauros_status)"]}}'
+```
+
+The Antigravity permission is limited to this invocation's status tool. Its
+optional compatibility-test binary is pinned in `toolchain/mcp-clients.json`,
+kept under `$TAUROS_DATA/tools`, and is not bundled with Tauros.
+
+Verification on 2026-11-18: the stdio test client, Codex CLI and Antigravity CLI
+1.5.11 called the tool successfully. Claude Code stopped before calling it because its OAuth session
+had expired; the Owner chose to renew and retest separately. Its live call
+remains unverified; the snippets and command above are provided for that retry.
+
+Gen 3 validation and trainer-creation checks:
+
+```bash
+cargo test -p tauros-connector-gen3 --test limits --test new_trainers
+TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test new_trainers
 ```
 
 ## License

@@ -8,11 +8,13 @@ pub mod boot;
 pub mod flags;
 pub mod json;
 pub mod maps;
+pub mod limits;
 pub mod names;
 pub mod party;
 pub mod project;
 pub mod scripts;
 pub mod snapshot;
 pub mod toolchain;
+pub mod trainers;
 
 pub use project::Gen3Connector;

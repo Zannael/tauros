@@ -114,3 +114,66 @@ channel.onmessage = onFrame;
 invoke('attach', { onFrame: channel })
   .then((name) => { if (name) { romName = name; status.textContent = name; } })
   .catch((err) => { status.textContent = `${err}`; });
+
+// APP-004: Change history view over G3-001 snapshot commits with non-destructive undo.
+const historyPanel = document.getElementById('history-panel');
+const historyList = document.getElementById('history-list');
+
+async function loadHistory() {
+  historyList.innerHTML = '';
+  try {
+    const entries = await invoke('history_list', { limit: 30 });
+    if (!entries.length) {
+      const li = document.createElement('li');
+      li.className = 'history-row';
+      li.textContent = 'No commits recorded yet.';
+      historyList.appendChild(li);
+      return;
+    }
+    for (const entry of entries) {
+      const li = document.createElement('li');
+      li.className = 'history-row';
+      const badge = document.createElement('span');
+      badge.className = 'history-origin';
+      badge.textContent = entry.provenance || entry.origin;
+      const summary = document.createElement('span');
+      summary.className = 'history-summary';
+      summary.textContent = entry.summary;
+      const sha = document.createElement('span');
+      sha.className = 'history-sha';
+      sha.textContent = entry.short_commit;
+      const btn = document.createElement('button');
+      btn.textContent = 'Restore';
+      btn.addEventListener('click', async () => {
+        try {
+          await invoke('history_undo', { targetCommit: entry.commit });
+          status.textContent = `Restored snapshot ${entry.short_commit}`;
+          await loadHistory();
+        } catch (err) {
+          status.textContent = `Undo failed: ${err}`;
+        }
+        canvas.focus();
+      });
+      li.append(badge, summary, sha, btn);
+      historyList.appendChild(li);
+    }
+  } catch (err) {
+    const li = document.createElement('li');
+    li.className = 'history-row';
+    li.textContent = `${err}`;
+    historyList.appendChild(li);
+  }
+}
+
+document.getElementById('toggle-history').addEventListener('click', (e) => {
+  historyPanel.classList.toggle('open');
+  if (historyPanel.classList.contains('open')) loadHistory();
+  e.target.blur();
+  canvas.focus();
+});
+document.getElementById('refresh-history').addEventListener('click', (e) => {
+  loadHistory();
+  e.target.blur();
+  canvas.focus();
+});
+

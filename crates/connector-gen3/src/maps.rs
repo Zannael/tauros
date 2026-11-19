@@ -243,6 +243,18 @@ pub fn event_to_json(event: &Event) -> Vec<(String, Node)> {
                 put("movement_type", Node::string(m));
             }
             if !clone {
+                if !extensions.contains_key("movement_range_x") {
+                    put("movement_range_x", Node::int(0));
+                }
+                if !extensions.contains_key("movement_range_y") {
+                    put("movement_range_y", Node::int(0));
+                }
+                if !extensions.contains_key("trainer_type") {
+                    put("trainer_type", Node::string("TRAINER_TYPE_NONE"));
+                }
+                if !extensions.contains_key("trainer_sight_or_berry_tree_id") {
+                    put("trainer_sight_or_berry_tree_id", Node::string("0"));
+                }
                 put("script", Node::string(script.as_ref().map_or("0x0", |s| s.0.as_str())));
                 put("flag", Node::string(visibility_flag.as_ref().map_or("0", |f| f.0.as_str())));
             }

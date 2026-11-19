@@ -254,6 +254,37 @@ page events did not arrive from the Owner's keyboard; each press held at least 4
 frames, because GTK delivered press and release in the same frame. libmgba must
 be built with `BUILD_LTO=OFF`: GCC LTO objects break release links.
 
+
+**Verified** 2026-11-18 UTC (EMU-005, automated checks): the desktop launch
+path accepts either a ROM file or `--project DIR --map MAP_NAME --x X --y Y`
+with repeatable `--flag FLAG_NAME`. Project launches load `pokeemerald.gba` and
+`pokeemerald.sym`, the connector snapshot and generated map constants, snapshot
+pending project edits through `GitGuard`, then measure the struct layout with the
+pinned Docker toolchain. The emulator worker loads the ROM, executes the existing
+`BootPlan` and drains skipped boot audio before streaming frames to the window.
+
+The opted-in `crates/app/tests/phase2_integration.rs` test passed with the pinned
+base-build copy: Petalburg (0,0,15,10) with `FLAG_BADGE01_GET` and Route 101
+(0,16,10,10) without requested flags each reached the target in 284 frames.
+The test checks the report, non-uniform opaque RGBA frames and bounded stereo
+samples on the actual Tauri binary channel, different images for the two maps,
+invalid CLI/map/position rejection and the ordinary ROM-load path. An opted-in
+run fails if fixtures are missing. The desktop smoke run logged the same
+Petalburg location, delivery of the first frame and 59.6–59.9 fps. A capture
+of the Tauros window showed the player standing in front of the Petalburg gym,
+with the target map and coordinates in the status bar. The capture stays local.
+**Verified** 2026-11-18 UTC (EMU-005, Owner manual check): after being asked
+to confirm the window starts at Petalburg (15,10), in front of the gym, and that
+the player can move, the Owner explicitly confirmed in chat. Phase 2 is complete.
+
+**Accepted** 2026-11-18 (EMU-005, agent-owned): the CLI target is a minimal Phase 2
+entry point; the editor's map selection UI stays in APP-003. Boot-to-point retains
+EMU-003's fresh-game and walkability limits. The caller must supply artifacts and
+sources from the same build; stale/mismatched pairs are not detected by this path.
+The source checkout, Docker and its pinned image are required for project launches;
+ordinary ROM playback does not need Docker. The layer test now reflects the
+connector-to-emulator trait dependency accepted in EMU-003.
+
 ## Toolchain and base build (FND-002)
 
 **Verified** 2026-11-18 UTC by running `scripts/setup_toolchain.py` (pins in
@@ -366,9 +397,56 @@ Decisions (agent-owned, within the tasks' scope):
 - *Validation (MOD-001 amendment):* an upsert identical to the current entity is
   not re-checked, so a project's own data (an empty `TRAINER_NONE`, warps to
   `MAP_DYNAMIC`) never fails validation when rewritten unchanged.
-- *Not yet supported, rejected before writing:* new trainer constants (G3-009),
-  new maps and layout resizing (G3-010), editing trainer blocks that contain C
+- *Not yet supported, rejected before writing:* new maps and layout resizing (G3-010), editing trainer blocks that contain C
   comments, labels defined twice, moving scenes between maps.
+
+
+### Static preflight and new trainers (G3-008, G3-009)
+
+**Verified** 2026-11-18 UTC: `Limits` reads the project's map padding, block buffer,
+object event and template constants. Before `apply`, validation simulates the
+cumulative final map state, so several individually small `AddEvent` operations
+cannot bypass capacity checks. `build_report` also checks the current source
+state before snapshotting/building and reports static warnings as structured
+build diagnostics. Boundary fixtures check 10240 padded blocks, 64 templates,
+15 simultaneous unflagged NPCs and 16 OBJ palettes including the player; each
+next value is rejected (size/templates/NPCs) or warned (palettes). Repeated
+palette tags count once, and spatially separated NPCs do not count as one group.
+A two-edit overflow leaves the project fingerprint unchanged; an external map
+edit after connector open is refused before Docker starts. The audit of all
+939 maps in the pinned project produced no blocking violations and 412 warnings.
+
+**Accepted** 2026-11-18 (agent-owned): NPC checks use the inclusive spawn window
+from `TrySpawnObjectEvents` (`src/event_object_movement.c:2889-2924` at the pin):
+20 by 17 metatiles. The initial unconditional peak is captured at connector open.
+Pre-existing pressure warns; a new/worsened peak beyond the slot budget is an
+error. Flag-controlled populations warn because the checker cannot infer their
+simultaneous visibility. This avoids rejecting the pinned scripted maps without
+claiming they are runtime-safe. Reopening a project establishes a new baseline;
+this is not a permanent historical guarantee. Moving NPCs, walkability, map
+connections, script-spawned actors and runtime weather are not simulated.
+Item ids and metatile behavior ids are also captured at open. Before a write
+or build, existing item ids must remain stable and new ids append. Existing
+behavior ids remain stable; a new behavior may append below 255 or replace a
+`MB_UNUSED_*` id whose low byte is absent from the project's metatile attributes.
+The mixed 16/32-bit scan is conservative. Boundary fixtures exercised an unused
+slot, a live slot and appended ids 254/255. These checks protect against edits
+after open; they do not establish historical compatibility with older saves.
+Palette demand is an estimate from graphics-info pointers and tags, with a player
+slot and two estimated weather slots when applicable. Dynamic/unresolved graphics
+warn; palette pressure is advisory as specified by G3-007. Item-id and metatile
+behaviour edits are not operations supported by the model and remain read-only.
+
+**Verified** 2026-11-18 UTC: creating `TRAINER_TAUROS_NEW` clones a valid trainer
+through `UpsertTrainer`, appends id 855 immediately before the Emerald count and
+raises that count from 855 to 856, preserving every other header byte. The party
+and header are written in one snapshot/provenance transaction. Reapplying the
+same trainer touches no files. An over-capacity batch is rejected without changing
+the fingerprint; exactly nine additional trainers fill the pinned count to 864.
+A hardened Docker build generated `[TRAINER_TAUROS_NEW]` in `trainers.h` and
+successfully built the ROM. No existing id is renumbered or reused on removal.
+Allocation refuses an unresolved/overlapping id range or a nonliteral count rather
+than guessing how to rewrite the header. Only the Emerald trainer table is covered.
 
 **Verified** 2026-11-18 UTC (G3-003): the owner opened the prepared
 `porymap-check-g3-003` project (edit commit `5c7d71e9`) in Porymap 6.3.1
@@ -526,3 +604,195 @@ These come from the plan and have not been checked by us:
 
 - Roadmap: format and invariants are enforced by `scripts/check_roadmap.py` and
   described in the TODO's Working contract; the workflow is in `AGENTS.md`.
+
+## External MCP stdio server (MCP-001)
+
+**Accepted** 2026-11-18 (agent-owned): `tauros-mcp` embeds rmcp 3.11.0 behind
+`TaurosServer`; its binary only selects stdio transport. Domain connectors and
+emulator implementations remain injected via traits in MCP-002/003. There is no
+network listener or provider credential handling. The skeleton's only tool,
+`tauros_status`, has read-only/idempotent annotations and returns the package
+version. stdout is protocol data; diagnostics go to stderr.
+
+**Verified** 2026-11-18 UTC: `python3 scripts/check_mcp.py` and
+`cargo test -p tauros-mcp -- --nocapture` start a real server process, initialize
+MCP, send the initialized notification, list the status tool, check its schema
+and annotation, call it, reject an unknown tool, ping, then close stdin and observe
+exit 0. The response is `Tauros 0.1.0 ready`.
+
+External-client commands and portable configuration snippets are in README
+"External MCP clients". Tests used an isolated temporary workspace and an
+absolute binary path, without changing the owner's client configuration:
+- Codex CLI: `codex exec --ephemeral --skip-git-repo-check --sandbox read-only
+  --json -c 'mcp_servers={tauros={command="/absolute/path/to/tauros-mcp"}}'
+  'Call the Tauros MCP tool tauros_status exactly once and report its exact result.'`.
+  Observed `mcp_tool_call`, server `tauros`, tool `tauros_status`, status
+  `completed`, error null, text `Tauros 0.1.0 ready`.
+- Antigravity CLI 1.5.11: `agy --print 'Call the Tauros MCP tool tauros_status
+  exactly once and report its exact result.' --print-timeout 60s
+  --settings '{"permissions":{"allow":["mcp(tauros/tauros_status)"]}}'
+  --output-format stream-json`. Observed `call_mcp_tool` DONE, output
+  `Tauros 0.1.0 ready`, final SUCCESS. The first run could not prompt for tool
+  permission in headless mode; the successful run granted only this tool for
+  that invocation. The optional client was downloaded from the official release
+  URL at the version and SHA512 in `toolchain/mcp-clients.json`, extracted only
+  under `$TAUROS_DATA/tools`, without running its installer or shell setup.
+- Claude Code: `claude -p 'Call tauros_status exactly once and report its exact
+  result.' --strict-mcp-config --mcp-config /path/to/mcp.json --setting-sources ''
+  --tools '' --allowedTools mcp__tauros__tauros_status --no-session-persistence
+  --output-format stream-json --verbose` stopped before the tool call with
+  `OAuth session expired and could not be refreshed`. No successful call is
+  claimed. **Owner accepted** documenting this limit and handling login/retest
+  separately on 2026-11-18; MCP-001 Completion was amended accordingly.
+
+Sources for the client formats: [Claude Code MCP](https://code.claude.com/docs/en/mcp),
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli),
+[Antigravity MCP](https://antigravity.google/docs/mcp?tab=cli).
+The raw client transcripts stay local because they contain machine/session data.
+
+## Swappable agent bridge interface (AGT-001)
+
+**Accepted** 2026-11-18 (agent-owned): `tauros-agent-bridge` stands alone with zero
+internal workspace dependencies (`serde` and `serde_json` only) and exposes an
+object-safe, runtime-agnostic `AgentBridge` trait (`capabilities`, `start_session`,
+`send_message`, `cancel`, `close_session`). Turns stream JSON-serialisable
+`AgentEvent` values over an `mpsc`-backed `EventStream`, so adapters backed by
+sidecar processes (`AGT-002`, `AGT-006`) or async HTTP clients (`AGT-007`) can run
+their own threads/runtimes without forcing an async runtime onto callers.
+Authentication is modelled only by category (`AuthMode`), never raw secrets.
+
+**Verified** 2026-11-18 UTC: `cargo test -p tauros-agent-bridge`, `cargo clippy
+-p tauros-agent-bridge --tests -- -D warnings`, `RUSTDOCFLAGS="-D warnings" cargo
+doc -p tauros-agent-bridge --no-deps` and `tests/test_layers.py` passed. The
+in-process `fake::FakeAdapter` exercises streaming text/thinking/status/tool-call
+events, deterministic mid-stream cancellation, auth/session error handling and JSON
+roundtrip through `Box<dyn AgentBridge>`.
+
+## Domain MCP tools (MCP-002)
+
+**Accepted** 2026-11-18 (agent-owned): `tauros_model::Connector` gained a
+default-unsupported `run_tests(filter)` method returning `TestOutput`, implemented
+on `Gen3Connector` with pre-test validation and a G3-001 snapshot. `TaurosServer`
+accepts an injected `Connector` (`with_connector` / `with_shared_connector`) and
+exposes `create_trainer`, `place_npc`, `add_scene` (with optional atomic
+`allocate_flags`), `build` and `run_test` exclusively over the semantic model; no
+free-form file edit tool exists. Mutating calls default to `ai-generated`
+provenance (`DEC-003`), validate before writing, return structured JSON errors with
+`isError: true` on rejection or failure, and keep `tauros-mcp` independent of
+`tauros-connector-gen3` (enforced by `tests/test_layers.py`).
+
+**Verified** 2026-11-18 UTC: `cargo test -p tauros-mcp` (stdio + in-process
+JSON-RPC protocol tests) and `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app
+--test mcp_domain_gen3` passed against pinned expansion `3796c72`, verifying
+`create_trainer`, `add_scene`, `place_npc`, validation rejection without writes,
+G3-001 snapshot-guard abort on a failing pre-commit hook, and hardened Docker
+`build` and `run_test` (`Trainer Party`) over MCP JSON-RPC.
+
+## Emulator MCP tools and RAM checks (MCP-003)
+
+**Accepted** 2026-11-18 (agent-owned): `TaurosServer` accepts an injected
+`EmuSession` (`with_emulator` / `with_shared_emulator`) wrapping any
+`tauros_emu::Emulator`, a parsed `.sym` `SymbolTable`, optional named constants,
+an optional unmodified base ROM and an optional `BootHook` (so `tauros-connector-gen3`'s
+`BootPlan` plugs in from Layer 1 without `tauros-mcp` depending on the Gen 3
+connector). Exposed tools: `emu_boot`, `emu_press_input`, `emu_screenshot` (PNG),
+`emu_save_state` / `emu_load_state` (bound to `rom_sha256`), `emu_assert_ram`
+(symbol-only, re-reads moving save-block pointers via `deref: true`, supports
+`flag_bit` and scalar/byte comparisons) and `run_verification` (`VER-001` inert
+JSON specs with assertion-free driver sampling and `shift` / `wrong_value` /
+`cold_boot` / `base_rom` counterfactuals).
+
+**Verified** 2026-11-18 UTC: `cargo test -p tauros-mcp -- --nocapture` passed
+all 6 tests (including mock-emulator MCP JSON-RPC tests for known states,
+negations, moving save-block deref and `PROVEN`/`FAILED`/`INCONCLUSIVE`/`REJECTED`
+verdicts, plus a live libmgba 0.10.5 test against the user-built `pokeemerald.gba`
+and `pokeemerald.sym` over MCP JSON-RPC), `cargo clippy -p tauros-mcp --tests
+-- -D warnings` and `tests/test_layers.py` passed. Limits: RNG `policy` steps and
+pointer-symbol checks (`symbol_at`/`symbol_sequence`) remain to be added when
+`MCP-004` needs them.
+
+## Change history and non-destructive undo (APP-004)
+
+**Accepted** 2026-11-18 (agent-owned): `crates/app/src/history.rs` exposes
+`list_history` and `undo_to` over a game project's git history, wired into the
+Tauri app via `history_list` / `history_undo` commands and a collapsible History
+panel in `crates/app/ui/`. Origins are classified from `Tauros-Provenance`,
+`Tauros-Snapshot` and `Tauros-Undo-Target` trailers (`agent-generated`,
+`agent-assisted`, `human`, `snapshot`, `undo`, `external`). Undo is strictly
+non-destructive: pending dirty edits are snapshotted first via `GitGuard`, the
+working tree and index are restored byte-for-byte with `git -c core.autocrlf=false
+read-tree --reset -u <target>` (preserving ignored build outputs), and a new
+`human` commit records `Tauros-Undo-Target` so even an undo is reversible.
+
+**Verified** 2026-11-18 UTC: `cargo test -p tauros-app --test history_undo`,
+`cargo test --workspace`, `cargo clippy -p tauros-app --tests -- -D warnings` and
+56 Python tests passed. Limits: UI panel not visually inspected in a live desktop
+window yet.
+
+## TypeScript Agent SDK sidecar & in-process MCP host (AGT-002)
+
+**Accepted** 2026-11-19 (agent-owned): `sidecar/claude-agent-sdk/` is a minimal
+TypeScript ESM package pinning `@anthropic-ai/claude-agent-sdk` `0.3.328` and
+communicating with Rust (`crates/agent-bridge/src/claude_sidecar.rs`,
+`ClaudeSidecarAdapter`) via NDJSON over stdin/stdout (diagnostics on stderr). Per
+`RES-002`, `AGT-002` accepts only `AuthMode::HostSignIn` (unmodified Claude Code
+host sign-in; Tauros never collects, reads, stores or intermediates claude.ai
+credentials or tokens), disables Claude Code's built-in file/shell tools
+(`tools: []`) so edits go strictly through Tauros MCP tools, and leaves API-key
+release auth to `AGT-005`. Layer 1 (`crates/app/src/mcp_host.rs`) exposes
+`InProcessMcpHost`, which serves the live in-process `TaurosServer` over a private
+`0700` local Unix domain socket bridged to the sidecar's stdio MCP client via
+`dist/mcp-bridge.js` (no network listener).
+
+**Verified** 2026-11-19 UTC: `npm --prefix sidecar/claude-agent-sdk run build`
+compiled cleanly with `typescript` 5.8.3; `cargo test -p tauros-app --test
+agent_sidecar_mcp -- --nocapture` passed (0.16 s): `ClaudeSidecarAdapter` spawned
+and supervised the compiled sidecar, rejected `AuthMode::ApiKey`, connected via
+`mcp-bridge.js` + Unix socket to the in-process `TaurosServer`, executed
+`create_trainer` (3 Pokémon) directly on the shared in-process `Connector`,
+streamed `TurnStarted -> ToolCallStarted -> ToolCallCompleted -> TextDelta ->
+TurnCompleted` back to Rust, and cancelled a delayed turn cleanly. Live run:
+`TAUROS_LIVE_CLAUDE=1 cargo test -p tauros-app --test agent_sidecar_mcp
+live_claude_sdk_sidecar_calls_in_process_mcp -- --ignored --nocapture` passed
+(7.38 s) after the Owner's `claude auth login`, confirming `@anthropic-ai/claude-agent-sdk`
+`query()` executed `create_trainer` (`TRAINER_CLAUDE_LIVE`) directly on the
+in-process `TaurosServer` and streamed tool and text events back to Rust.
+
+## Phase 3 director's scene & no-whiteout mechanism (MCP-004)
+
+**Verified** 2026-11-19 UTC on pinned `pokeemerald-expansion 1.16.4` (`3796c72`):
+- **No-whiteout mechanism:** `trainerbattle_earlyrival` has an upstream bitwise-AND
+  bug at `src/battle_setup.c:1328` (`GetRivalBattleFlags() & RIVAL_BATTLE_TUTORIAL`,
+  where `RIVAL_BATTLE_HEAL_AFTER (1) & RIVAL_BATTLE_TUTORIAL (3) != 0`), causing
+  `BATTLE_TYPE_FIRST_BATTLE` to be set on Emerald and stalling in FRLG's
+  `PrintOakText_HowDisappointing` (`src/battle_controller_oak_old_man.c:523`,
+  `B_WIN_OAK_OLD_MAN`). The clean Emerald-native mechanism at our pin is
+  `B_FLAG_NO_WHITEOUT` (`include/config/battle.h:263`, checked by
+  `jumpifnowhiteout` in `data/battle_scripts_1.s:2917` and `CB2_EndTrainerBattle`
+  in `src/battle_setup.c:1473`), configured once per project to `FLAG_TEMP_1` and
+  toggled around `trainerbattle_no_intro` + `special(HealPlayerParty)`.
+- **Layer 1 MCP wiring:** `crates/app/src/bin/tauros-mcp-project.rs` and
+  `crates/app/src/mcp_host.rs` wire `Gen3Connector` + `EmuSession` (`Mgba` +
+  `Gen3BootHook` + post-build automatic ROM/`.sym` reload); `TimelineStep` gained
+  the `VER-001` `"lose-fast"` driver policy; `crates/connector-gen3/src/maps.rs`
+  now emits required `mapjson` defaults (`movement_range_x/y`, `trainer_type`,
+  `trainer_sight_or_berry_tree_id`) for newly placed NPCs while keeping existing
+  maps byte-identical.
+- **End-to-end verification:** `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app
+  --test phase3_director_scene -- --nocapture` passed (64.44 s): created 3-Pokémon
+  `TRAINER_TAUROS_DIRECTOR`, compiled Poryscript scene
+  `PetalburgCity_EventScript_TaurosDirector` allocating `FLAG_TAUROS_DIRECTOR_SEEN`
+  (`32`), placed the Director NPC at `(15, 11)`, built `pokeemerald.gba` in Docker,
+  booted mGBA to `MAP_PETALBURG_CITY (15, 10)`, and passed `run_verification` with
+  `verdict: PROVEN` (`gBattleOutcome == B_OUTCOME_LOST (2)`, dereferenced
+  `gSaveBlock1Ptr` location == `MAP_PETALBURG_CITY`, dereferenced `pos == 655375`
+  (`x=15, y=10`, discriminating), `FLAG_TAUROS_DIRECTOR_SEEN == 1`,
+  counterfactuals `shift`, `wrong_value` and `cold_boot` all failing as expected).
+  **Verified** 2026-11-19 UTC (Owner manual preview check & live Claude Code CLI):
+  the Owner launched `tauros-app` on `director-scene-mcp004` (`MAP_PETALBURG_CITY`,
+  15, 10) and confirmed in chat that the preview test worked perfectly. Live
+  Claude Code CLI (`claude` 2.1.304) connected over stdio to `tauros-mcp-project`,
+  ran `tauros_status` -> `emu_boot` -> `emu_save_state` -> `run_verification` and
+  confirmed `verdict: PROVEN` (`rom_sha256` `ffb0c7a6…`, `sym_sha256` `3e0ebd82…`,
+  raw transcript kept locally under `$TAUROS_DATA/projects/director-scene-mcp004/build/tauros/`).
+  Phase 3 is complete.

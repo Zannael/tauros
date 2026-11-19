@@ -9,12 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Allowed internal dependencies per crate (plan "Layered architecture"; FND-001).
 # Layer 1 app wires everything; layer 2 mcp sees the model and the emulator interface;
-# connectors (layer 4) see only the model; model, emulator and agent bridge stand alone.
+# Gen 3 also uses the emulator trait for boot-to-map (accepted EMU-003 decision).
+# Model, emulator and agent bridge otherwise stand alone.
 ALLOWED = {
     "tauros-app": {"tauros-model", "tauros-connector-gen3", "tauros-emu", "tauros-mcp", "tauros-agent-bridge"},
     "tauros-mcp": {"tauros-model", "tauros-emu"},
     "tauros-agent-bridge": set(),
-    "tauros-connector-gen3": {"tauros-model"},
+    "tauros-connector-gen3": {"tauros-model", "tauros-emu"},
     "tauros-emu": {"tauros-mgba-sys"},
     "tauros-mgba-sys": set(),
     "tauros-model": set(),

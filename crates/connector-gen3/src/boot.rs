@@ -262,11 +262,11 @@ fn thumb(addr: u32) -> u32 {
 }
 
 impl BootPlan {
-    fn callback2(&self, emu: &impl Emulator) -> Result<u32, BootError> {
+    fn callback2(&self, emu: &(impl Emulator + ?Sized)) -> Result<u32, BootError> {
         Ok(emu.read_u32(self.g_main + self.layout.main_callback2)? & !1)
     }
 
-    fn set_callbacks(&self, emu: &mut impl Emulator, cb2: u32) -> Result<(), BootError> {
+    fn set_callbacks(&self, emu: &mut (impl Emulator + ?Sized), cb2: u32) -> Result<(), BootError> {
         let main = self.g_main;
         emu.write_memory(main + self.layout.main_callback1, &0u32.to_le_bytes())?;
         emu.write_memory(main + self.layout.main_callback2, &thumb(cb2).to_le_bytes())?;
@@ -274,7 +274,7 @@ impl BootPlan {
         Ok(())
     }
 
-    fn wait(&self, emu: &mut impl Emulator, what: &str, done: impl Fn(u32) -> bool) -> Result<u32, BootError> {
+    fn wait(&self, emu: &mut (impl Emulator + ?Sized), what: &str, done: impl Fn(u32) -> bool) -> Result<u32, BootError> {
         for n in 0..WAIT_LIMIT {
             if done(self.callback2(emu)?) {
                 return Ok(n);
@@ -285,7 +285,7 @@ impl BootPlan {
     }
 
     /// The location and position the game holds in `gSaveBlock1Ptr`.
-    pub fn location(&self, emu: &impl Emulator) -> Result<Location, BootError> {
+    pub fn location(&self, emu: &(impl Emulator + ?Sized)) -> Result<Location, BootError> {
         let sb1 = emu.read_u32(self.sb1_ptr)?;
         let loc = emu.read_memory(sb1 + self.layout.sb1_location, 2)?;
         let pos = emu.read_memory(sb1 + self.layout.sb1_pos, 4)?;
@@ -293,14 +293,14 @@ impl BootPlan {
     }
 
     /// Whether saved flag `n` is set.
-    pub fn flag(&self, emu: &impl Emulator, n: u32) -> Result<bool, BootError> {
+    pub fn flag(&self, emu: &(impl Emulator + ?Sized), n: u32) -> Result<bool, BootError> {
         let sb1 = emu.read_u32(self.sb1_ptr)?;
         Ok(emu.read_memory(sb1 + self.layout.sb1_flags + n / 8, 1)?[0] & 1 << (n % 8) != 0)
     }
 
     /// Resets the console and drives the game into the target; the ROM must
     /// already be loaded in `emu` and be the build the plan was made from.
-    pub fn boot(&self, emu: &mut impl Emulator) -> Result<BootReport, BootError> {
+    pub fn boot(&self, emu: &mut (impl Emulator + ?Sized)) -> Result<BootReport, BootError> {
         emu.reset()?;
         let copyright = self.cb2_copyright;
         let mut frames = self.wait(emu, "the end of the copyright screen", |cb| cb != 0 && cb != copyright)?;

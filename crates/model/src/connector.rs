@@ -2,6 +2,8 @@
 
 use crate::change::{ChangeSet, Severity, Violation};
 use crate::game::{GameInfo, ProjectSnapshot};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -18,13 +20,20 @@ use std::path::PathBuf;
 pub trait Connector {
     fn info(&self) -> GameInfo;
     fn load(&self) -> Result<ProjectSnapshot, ConnectorError>;
+    /// Preflight the cumulative final state, including connector engine limits.
+    /// Errors must prevent writes; warnings (such as uncertain palette pressure)
+    /// remain visible to callers. Build implementations also preflight source data.
     fn validate(&self, changes: &ChangeSet) -> Vec<Violation>;
     fn apply(&mut self, changes: &ChangeSet) -> Result<Applied, ConnectorError>;
     fn build(&mut self) -> Result<BuildOutput, ConnectorError>;
+    /// Runs the project's headless test suite, optionally limited to tests matching `filter`.
+    fn run_tests(&mut self, _filter: Option<&str>) -> Result<TestOutput, ConnectorError> {
+        Err(ConnectorError::NotFound("test runner is not supported by this connector".into()))
+    }
     fn fingerprint(&self) -> Result<String, ConnectorError>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Applied {
     /// The commit recording the change, when the connector versions the project.
     pub commit: Option<String>,
@@ -32,18 +41,35 @@ pub struct Applied {
     pub touched: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub file: Option<String>,
     pub line: Option<u32>,
     pub message: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildOutput {
     pub rom: PathBuf,
     pub symbols: Option<PathBuf>,
     pub rom_sha256: String,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestCaseOutput {
+    pub name: String,
+    pub result: String,
+    pub passed: bool,
+    pub location: Option<(String, u32)>,
+    pub output: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestOutput {
+    pub success: bool,
+    pub cases: Vec<TestCaseOutput>,
+    pub totals: BTreeMap<String, u32>,
     pub diagnostics: Vec<Diagnostic>,
 }
 

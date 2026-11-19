@@ -1,6 +1,7 @@
 [package]
 name = "tauros-app"
-description = "Layer 1: the Tauros desktop app (Tauri shell; EMU-004 runs a ROM with video, input and audio)."
+default-run = "tauros-app"
+description = "Layer 1: the Tauros desktop app (Tauri shell; ROM playback and chosen-map boot with video, input and audio)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,7 +18,9 @@ tauros-connector-gen3.workspace = true
 tauros-emu.workspace = true
 tauros-mcp.workspace = true
 tauros-agent-bridge.workspace = true
+serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "sync"] }
 
 [features]
 # Serve ui/ from the binary even in debug builds (there is no dev server).
@@ -28,3 +31,6 @@ custom-protocol = ["tauri/custom-protocol"]
 # itself, before WebKit and the input method see it.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+
+[dev-dependencies]
+serde_json = "1"

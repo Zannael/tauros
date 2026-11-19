@@ -21,7 +21,9 @@ pub mod provenance;
 pub mod validate;
 
 pub use change::{Change, ChangeSet, Severity, Violation};
-pub use connector::{Applied, BuildOutput, Connector, ConnectorError, Diagnostic};
+pub use connector::{
+    Applied, BuildOutput, Connector, ConnectorError, Diagnostic, TestCaseOutput, TestOutput,
+};
 pub use entities::*;
 pub use game::{Capabilities, GameFamily, GameInfo, ProjectSnapshot};
 pub use ids::*;

@@ -41,6 +41,8 @@ pub struct Gen3Connector {
     root: PathBuf,
     guard: GitGuard,
     toolchain: Option<Toolchain>,
+    baseline_npc_peaks: BTreeMap<MapId, usize>,
+    baseline_ids: crate::limits::IdBaseline,
 }
 
 /// Where a scene's source lives.
@@ -70,7 +72,7 @@ struct State {
     /// Every `FLAG_*` defined in any branch of flags.h (allocation must avoid all).
     all_flag_names: BTreeSet<String>,
     used_flags: BTreeSet<String>,
-    trainer_constants: BTreeSet<String>,
+    opponents_text: String,
     /// `MAP_*` enum members of maps.h that are not maps (`MAP_DYNAMIC`, `MAP_UNDEFINED`).
     pseudo_maps: Vec<MapId>,
     snapshot: ProjectSnapshot,
@@ -93,7 +95,14 @@ impl Gen3Connector {
             return Err(ConnectorError::NotFound(format!("{} is not a pokeemerald-expansion project", root.display())));
         }
         let guard = GitGuard::take_over(&root).map_err(|e| ConnectorError::Snapshot(e.to_string()))?;
-        Ok(Self { root, guard, toolchain })
+        let baseline_ids = crate::limits::IdBaseline::read(&root);
+        let mut connector = Self { root, guard, toolchain, baseline_npc_peaks: BTreeMap::new(), baseline_ids };
+        let limits = crate::limits::Limits::read(&connector.root);
+        connector.baseline_npc_peaks = connector.state()?.snapshot.maps.iter().map(|(id,map)| {
+            let peak = limits.peak(map);
+            (id.clone(), if peak > limits.npc_slots { peak } else { 0 })
+        }).collect();
+        Ok(connector)
     }
 
     pub fn root(&self) -> &Path {
@@ -263,18 +272,6 @@ impl Gen3Connector {
                 }
             }
         }
-        let trainer_constants: BTreeSet<String> = self
-            .read(OPPONENTS_HEADER)
-            .unwrap_or_default()
-            .lines()
-            .filter_map(|l| {
-                let mut w = l.split_whitespace();
-                match (w.next(), w.next()) {
-                    (Some("#define"), Some(name)) if name.starts_with("TRAINER_") => Some(name.to_owned()),
-                    _ => None,
-                }
-            })
-            .collect();
 
         let pseudo_maps: Vec<MapId> = maps_header
             .lines()
@@ -318,7 +315,7 @@ impl Gen3Connector {
             flags: flag_defs,
             all_flag_names,
             used_flags,
-            trainer_constants,
+            opponents_text: self.read(OPPONENTS_HEADER)?,
             pseudo_maps,
             snapshot,
         })
@@ -338,6 +335,14 @@ impl Gen3Connector {
             });
         }
         let mut found = validate::check(&view, changes);
+        found.extend(self.baseline_ids.check(&self.root));
+        if let Ok(final_state) = validate::simulate(&view, changes) {
+            let limits = crate::limits::Limits::read(&self.root);
+            for (id, map) in &final_state.maps {
+                if !state.snapshot.maps.contains_key(id) { continue; }
+                found.extend(limits.check(map, self.baseline_npc_peaks.get(id).copied().unwrap_or(0), None));
+            }
+        }
         let mut allocations = 0usize;
         let mut new_scenes: BTreeSet<ScriptLabel> = BTreeSet::new();
         for (index, change) in changes.changes.iter().enumerate() {
@@ -372,12 +377,21 @@ impl Gen3Connector {
                 }
             }
         }
+        let names = changes.changes.iter().filter_map(|c| match c {
+            Change::UpsertTrainer { trainer } => Some(trainer.id.0.clone()), _ => None,
+        });
+        if let Err(message) = crate::trainers::allocate(&state.opponents_text, names) {
+            found.push(Violation::error(None, "trainer.capacity", message));
+        }
         found
     }
 
     /// Computes every file edit for `changes`, in memory.
     fn plan(&self, state: &State, changes: &ChangeSet) -> Result<BTreeMap<String, Option<Vec<u8>>>, ConnectorError> {
         let mut work = state.clone();
+        work.opponents_text = crate::trainers::allocate(&state.opponents_text, changes.changes.iter().filter_map(|c| match c {
+            Change::UpsertTrainer { trainer } => Some(trainer.id.0.clone()), _ => None,
+        })).map_err(|message| format_err(OPPONENTS_HEADER, None, message))?;
         let mut new_files: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();
         for change in &changes.changes {
             match change {
@@ -443,6 +457,7 @@ impl Gen3Connector {
                 out.insert(rel.to_owned(), Some(after.into_bytes()));
             }
         };
+        put(OPPONENTS_HEADER, &state.opponents_text, work.opponents_text.clone());
         put(TRAINERS_FILE, &state.party.emit(), work.party.emit());
         for (id, (dir, file, _)) in &work.maps {
             let before = state.maps.get(id).map(|(_, f, _)| f.render()).unwrap_or_default();
@@ -503,12 +518,19 @@ impl Gen3Connector {
 
     /// Builds the ROM and symbols (incrementally) and returns structured results.
     pub fn build_report(&self) -> Result<crate::toolchain::BuildReport, ConnectorError> {
+        let state = self.state()?;
+        let violations = self.check(&state, &ChangeSet::new("pre-build validation", tauros_model::Provenance::Human));
+        if violations.iter().any(|v| v.severity == tauros_model::Severity::Error) { return Err(ConnectorError::Rejected(violations)); }
+        self.guard.snapshot("build ROM").map_err(|e| ConnectorError::Snapshot(e.to_string()))?;
         let toolchain = self.toolchain.as_ref().ok_or_else(|| ConnectorError::Build(vec![Diagnostic {
-            file: None,
-            line: None,
-            message: "no toolchain configured".into(),
+            file: None, line: None, message: "no toolchain configured".into(),
         }]))?;
-        toolchain.build_rom(&self.root).map_err(ConnectorError::Io)
+        let mut report = toolchain.build_rom(&self.root).map_err(ConnectorError::Io)?;
+        report.diagnostics.extend(violations.into_iter().map(|v| crate::toolchain::BuildDiagnostic {
+            level: Level::Warning, file: None, line: None, column: None,
+            message: format!("{}: {}", v.rule, v.message),
+        }));
+        Ok(report)
     }
 }
 
@@ -572,13 +594,6 @@ fn check_trainer(state: &State, trainer: &Trainer, i: Option<usize>) -> Vec<Viol
     let mut found = Vec::new();
     let id = &trainer.id.0;
     let exists = state.party.blocks.iter().any(|b| b.id == *id);
-    if !exists && !state.trainer_constants.contains(id) {
-        found.push(Violation::error(
-            i,
-            "trainer.constant",
-            format!("{id} is not defined in {OPPONENTS_HEADER}; creating trainer constants is not supported yet"),
-        ));
-    }
     if !exists && !trainer.extensions.contains_key("Pic") {
         found.push(Violation::error(i, "trainer.pic", format!("{id}: a new trainer needs a 'Pic' extension")));
     }
@@ -842,6 +857,64 @@ impl Connector for Gen3Connector {
             rom,
             symbols: symbols.is_file().then_some(symbols),
             rom_sha256: Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect(),
+            diagnostics,
+        })
+    }
+
+    fn run_tests(&mut self, filter: Option<&str>) -> Result<tauros_model::TestOutput, ConnectorError> {
+        let state = self.state()?;
+        let violations = self.check(
+            &state,
+            &ChangeSet::new("pre-test validation", tauros_model::Provenance::Human),
+        );
+        if violations.iter().any(|v| v.severity == tauros_model::Severity::Error) {
+            return Err(ConnectorError::Rejected(violations));
+        }
+        self.guard
+            .snapshot("run tests")
+            .map_err(|e| ConnectorError::Snapshot(e.to_string()))?;
+        let toolchain = self.toolchain.as_ref().ok_or_else(|| {
+            ConnectorError::Build(vec![Diagnostic {
+                file: None,
+                line: None,
+                message: "no toolchain configured".into(),
+            }])
+        })?;
+        let report = toolchain
+            .run_tests(&self.root, filter)
+            .map_err(ConnectorError::Io)?;
+        let mut diagnostics: Vec<Diagnostic> = report
+            .diagnostics
+            .iter()
+            .map(|d| Diagnostic {
+                file: d.file.clone(),
+                line: d.line,
+                message: format!(
+                    "{}: {}",
+                    if d.level == Level::Error { "error" } else { "warning" },
+                    d.message
+                ),
+            })
+            .collect();
+        diagnostics.extend(violations.into_iter().map(|v| Diagnostic {
+            file: None,
+            line: None,
+            message: format!("warning: {}: {}", v.rule, v.message),
+        }));
+        Ok(tauros_model::TestOutput {
+            success: report.success,
+            cases: report
+                .cases
+                .into_iter()
+                .map(|c| tauros_model::TestCaseOutput {
+                    passed: c.passed(),
+                    name: c.name,
+                    result: c.result,
+                    location: c.location,
+                    output: c.output,
+                })
+                .collect(),
+            totals: report.totals,
             diagnostics,
         })
     }

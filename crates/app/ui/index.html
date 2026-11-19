@@ -17,6 +17,14 @@
     canvas { width: 720px; max-width: 100%; aspect-ratio: 3 / 2; image-rendering: pixelated; background: #000; border-radius: 4px; }
     #help { color: var(--muted); font-size: 12px; }
     kbd { background: #2c2530; border-radius: 3px; padding: 0 4px; }
+    #history-panel { width: 720px; max-width: 100%; background: #211c24; border: 1px solid #352c3b; border-radius: 6px; padding: 10px; display: none; }
+    #history-panel.open { display: block; }
+    #history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    #history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+    .history-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #18141a; border-radius: 4px; font-size: 12px; }
+    .history-origin { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #2c2530; color: var(--accent); white-space: nowrap; }
+    .history-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-sha { color: var(--muted); font-family: monospace; }
   </style>
 </head>
 <body>
@@ -24,6 +32,7 @@
     <strong>Tauros</strong>
     <span id="status">Open a ROM to start.</span>
     <input id="file" type="file" accept=".gba" hidden>
+    <button id="toggle-history">History</button>
     <button id="open">Open ROM…</button>
   </header>
   <canvas id="screen" width="240" height="160"></canvas>
@@ -31,6 +40,13 @@
     <kbd>←↑→↓</kbd> D-pad · <kbd>X</kbd> A · <kbd>Z</kbd> B · <kbd>Enter</kbd> Start ·
     <kbd>Backspace</kbd> Select · <kbd>A</kbd> L · <kbd>S</kbd> R · click the game to enable sound
   </div>
+  <section id="history-panel" aria-label="Change history">
+    <div id="history-header">
+      <strong>Change history</strong>
+      <button id="refresh-history">Refresh</button>
+    </div>
+    <ul id="history-list"></ul>
+  </section>
   <script src="main.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 //! Layer 1: the Tauros desktop app. It wires connectors, emulator, MCP server and
-//! agent bridge together. For now (EMU-004) it is a minimal shell: one window that
+//! agent bridge together. For now it is a minimal shell: one window that
 //! runs a ROM with video, keyboard input and audio, and no editor features.
 //!
 //! The emulator runs on its own thread, paced at the GBA frame rate. Each frame is
@@ -8,138 +8,30 @@
 //! draws it on a canvas and plays the audio with the Web Audio API, so the app
 //! needs no native audio library.
 //!
-//! Usage: `tauros-app [ROM.gba]`, or open a ROM from the window.
+//! Usage: `tauros-app --help`; choose a ROM or a project boot target.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
-use tauros_emu::{Button, Buttons, Emulator, Mgba};
-
-/// GBA refresh rate: 16.78 MHz / 280896 cycles per frame.
-const FRAME_RATE: f64 = 59.7275;
-/// Frames a press stays held even if its release arrives sooner. GTK can deliver
-/// a key's press and release together when its main thread is busy streaming
-/// frames; without this the game, which samples keys once per frame, misses it.
-const MIN_HOLD_FRAMES: u32 = 4;
-
-/// Turns the requested buttons into the ones the game sees, holding every press
-/// for at least `MIN_HOLD_FRAMES` frames.
-#[derive(Default)]
-struct KeyLatch {
-    wanted: u16,
-    held: u16,
-    /// Frame at which each button (bit) was last pressed.
-    pressed_at: [u32; 10],
-}
-
-impl KeyLatch {
-    /// A new request at `frame`; returns the buttons to hold now.
-    fn request(&mut self, wanted: u16, frame: u32) -> u16 {
-        for bit in 0..10 {
-            if wanted & !self.wanted & 1 << bit != 0 {
-                self.pressed_at[bit] = frame;
-            }
-        }
-        self.wanted = wanted;
-        self.held |= wanted;
-        self.tick(frame)
-    }
-
-    /// Releases the buttons no longer wanted whose minimum hold is over.
-    fn tick(&mut self, frame: u32) -> u16 {
-        for bit in 0..10 {
-            let mask = 1 << bit;
-            if self.held & mask != 0 && self.wanted & mask == 0 && frame.wrapping_sub(self.pressed_at[bit]) >= MIN_HOLD_FRAMES {
-                self.held &= !mask;
-            }
-        }
-        self.held
-    }
-}
-
-enum Command {
-    Attach(Channel<InvokeResponseBody>),
-    Load(Vec<u8>, Sender<Result<(), String>>),
-    Buttons(Buttons),
-    Pause(bool),
-}
+use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
+use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
+use tauros_app::playback::{buttons_from_mask, emulator_thread, Command};
+use tauros_emu::Buttons;
 
 struct App {
     commands: Mutex<Sender<Command>>,
-    /// A ROM path given on the command line, loaded when the window attaches.
-    initial_rom: Option<PathBuf>,
+    /// A command-line ROM or project target, loaded when the window attaches.
+    initial_launch: Option<Launch>,
 }
 
-/// Buttons from a bit mask in `Button::ALL` order (bit 0 = A).
-fn buttons_from_mask(mask: u16) -> Buttons {
-    Button::ALL.into_iter().enumerate().filter(|(i, _)| mask & 1 << i != 0).map(|(_, b)| b).collect()
-}
-
-/// The emulator thread: applies commands, runs frames on schedule and streams
-/// them to the attached window.
-fn emulator_thread(commands: Receiver<Command>) {
-    let mut emu = match Mgba::gba() {
-        Ok(emu) => emu,
-        Err(e) => return eprintln!("tauros: {e}"),
-    };
-    let period = Duration::from_secs_f64(1.0 / FRAME_RATE);
-    let (mut channel, mut loaded, mut paused) = (None::<Channel<InvokeResponseBody>>, false, false);
-    let mut next = Instant::now();
-    let mut audio = Vec::new();
-    let log_keys = std::env::var_os("TAUROS_LOG_KEYS").is_some();
-    let mut latch = KeyLatch::default();
-    loop {
-        let running = loaded && !paused && channel.is_some();
-        let wait = if running { next.saturating_duration_since(Instant::now()) } else { Duration::from_secs(3600) };
-        match commands.recv_timeout(wait) {
-            Ok(Command::Attach(c)) => channel = Some(c),
-            Ok(Command::Load(rom, reply)) => {
-                let result = emu.load_rom(&rom).map_err(|e| e.to_string());
-                loaded |= result.is_ok();
-                next = Instant::now();
-                let _ = reply.send(result);
-            }
-            Ok(Command::Buttons(b)) => {
-                let wanted = Button::ALL.iter().enumerate().filter(|(_, &x)| b.contains(x)).fold(0u16, |m, (i, _)| m | 1 << i);
-                let held = latch.request(wanted, emu.frame_count());
-                emu.set_buttons(buttons_from_mask(held));
-                if log_keys {
-                    eprintln!("tauros: frame {} buttons {:?}", emu.frame_count(), b.iter().collect::<Vec<_>>());
-                }
-            }
-            Ok(Command::Pause(p)) => {
-                paused = p;
-                next = Instant::now();
-            }
-            Err(RecvTimeoutError::Disconnected) => return,
-            Err(RecvTimeoutError::Timeout) => {
-                if emu.run_frame().is_err() {
-                    continue;
-                }
-                let before = latch.held;
-                if latch.tick(emu.frame_count()) != before {
-                    emu.set_buttons(buttons_from_mask(latch.held));
-                }
-                audio.clear();
-                emu.drain_audio(&mut audio);
-                let frame = emu.frame();
-                let mut message = frame.rgba;
-                message.extend(audio.iter().flat_map(|s| s.to_le_bytes()));
-                if let Some(c) = &channel {
-                    if c.send(InvokeResponseBody::Raw(message)).is_err() {
-                        channel = None;
-                    }
-                }
-                next += period;
-                // After a stall (window hidden, machine busy) resume without a burst.
-                if Instant::now() > next + period * 4 {
-                    next = Instant::now();
-                }
-            }
+impl App {
+    fn project_root(&self) -> Option<PathBuf> {
+        match &self.initial_launch {
+            Some(Launch::Point { project, .. }) => Some(project.clone()),
+            _ => None,
         }
     }
 }
@@ -148,29 +40,33 @@ fn send(app: &App, command: Command) -> Result<(), String> {
     app.commands.lock().unwrap().send(command).map_err(|_| "the emulator thread stopped".to_owned())
 }
 
-fn load(app: &App, rom: Vec<u8>) -> Result<(), String> {
+fn load(app: &App, launch: PreparedLaunch) -> Result<(), String> {
     let (reply, result) = mpsc::channel();
-    send(app, Command::Load(rom, reply))?;
-    result.recv().map_err(|_| "the emulator thread stopped".to_owned())?
+    send(app, Command::Load(launch, reply))?;
+    let report = result.recv().map_err(|_| "the emulator thread stopped".to_owned())??;
+    if let Some(report) = report {
+        eprintln!("tauros: booted {report:?}");
+    }
+    Ok(())
 }
 
-/// Attaches the window's frame channel; loads the command-line ROM, if any, and
-/// returns its file name.
+/// Attaches the window's frame channel and starts the CLI-selected launch, if any.
 #[tauri::command]
 fn attach(app: tauri::State<'_, App>, on_frame: Channel<InvokeResponseBody>) -> Result<Option<String>, String> {
     eprintln!("tauros: window attached");
     send(&app, Command::Attach(on_frame))?;
-    let Some(path) = &app.initial_rom else { return Ok(None) };
-    let rom = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    load(&app, rom)?;
-    Ok(Some(path.file_name().unwrap_or_default().to_string_lossy().into_owned()))
+    let Some(launch) = &app.initial_launch else { return Ok(None) };
+    let prepared = launch.prepare()?;
+    let name = prepared.name.clone();
+    load(&app, prepared)?;
+    Ok(Some(name))
 }
 
 /// Loads a ROM sent as the raw request body.
 #[tauri::command]
 fn load_rom(app: tauri::State<'_, App>, request: Request<'_>) -> Result<(), String> {
     let InvokeBody::Raw(rom) = request.body() else { return Err("expected the ROM bytes as a binary body".into()) };
-    load(&app, rom.clone())
+    load(&app, PreparedLaunch { name: String::new(), rom: rom.clone(), boot: None })
 }
 
 /// Prints a diagnostic from the page (first frame, audio state, script errors) on
@@ -188,6 +84,32 @@ fn set_buttons(app: tauri::State<'_, App>, mask: u16) -> Result<(), String> {
 #[tauri::command]
 fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
     send(&app, Command::Pause(paused))
+}
+
+#[tauri::command]
+fn history_list(
+    app: tauri::State<'_, App>,
+    project: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<HistoryEntry>, String> {
+    let root = project
+        .map(PathBuf::from)
+        .or_else(|| app.project_root())
+        .ok_or_else(|| "no game project is open".to_owned())?;
+    list_history(&root, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+fn history_undo(
+    app: tauri::State<'_, App>,
+    target_commit: String,
+    project: Option<String>,
+) -> Result<UndoReceipt, String> {
+    let root = project
+        .map(PathBuf::from)
+        .or_else(|| app.project_root())
+        .ok_or_else(|| "no game project is open".to_owned())?;
+    undo_to(&root, &target_commit)
 }
 
 /// The button bit (in `Button::ALL` order) for a GDK key name, case-insensitive:
@@ -251,13 +173,24 @@ fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>) -> 
 }
 
 fn main() {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 1 && args[0] == "--help" {
+        println!("{USAGE}");
+        return;
+    }
+    let initial_launch = match Launch::parse(args) {
+        Ok(launch) => launch,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    };
     let (tx, rx) = mpsc::channel();
     #[cfg(target_os = "linux")]
     let keyboard = tx.clone();
     std::thread::Builder::new().name("emulator".into()).spawn(move || emulator_thread(rx)).expect("emulator thread");
-    let initial_rom = std::env::args_os().nth(1).map(PathBuf::from);
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_rom })
+        .manage(App { commands: Mutex::new(tx), initial_launch })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -269,7 +202,15 @@ fn main() {
             Ok(())
         })
         .on_page_load(|window, payload| eprintln!("tauros: page {:?} {} in {}", payload.event(), payload.url(), window.label()))
-        .invoke_handler(tauri::generate_handler![attach, load_rom, log, set_buttons, set_paused])
+        .invoke_handler(tauri::generate_handler![
+            attach,
+            load_rom,
+            log,
+            set_buttons,
+            set_paused,
+            history_list,
+            history_undo
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Tauros");
 }
@@ -277,25 +218,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn short_taps_are_held_for_the_minimum_frames() {
-        let mut latch = KeyLatch::default();
-        // Press and release arrive in the same gap between frames 100 and 101.
-        assert_eq!(latch.request(1, 100), 1);
-        assert_eq!(latch.request(0, 100), 1, "released before the game saw it");
-        assert_eq!(latch.tick(102), 1);
-        assert_eq!(latch.tick(104), 0);
-        // A long hold is released as soon as asked.
-        latch.request(1 << 3, 200);
-        assert_eq!(latch.tick(230), 1 << 3);
-        assert_eq!(latch.request(0, 230), 0);
-        // Other buttons are unaffected by one button's latch.
-        latch.request(1, 300);
-        assert_eq!(latch.request(1 | 1 << 4, 310), 1 | 1 << 4);
-        assert_eq!(latch.request(1, 310), 1 | 1 << 4);
-        assert_eq!(latch.tick(314), 1);
-    }
+    use tauros_emu::Button;
 
     #[test]
     fn gdk_key_names_map_to_buttons() {
