@@ -396,12 +396,13 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Forms for trainers, parties and Poryscript scenes through the model. Refs: plan §"Layered roadmap toward the beta" (Phase 5).
   Completion: Edits roundtrip and build; scene compiles with Poryscript.
 
-- [ ] **Not started** **APP-003** Emulator panel integrated with the editor.
+- [ ] **In progress** **APP-003** Emulator panel integrated with the editor.
   Depends on: `EMU-003`, `EMU-004`, `G3-005`.
   Responsible: Agent
-  Owner: unassigned
-  Scope: Build-and-preview from the editor in the same window, boot to the selected map or scene. Refs: plan §"Layered roadmap toward the beta" (Phase 5), plan §"Layered architecture" (layer 1).
-  Completion: From an open map, one action builds and boots there (manual check recorded).
+  Owner: Codex
+  Note: (owner: Codex, fixed map-switch bounds and added separate Preview of the existing built ROM without a ROM build. Picker remembers per-map points and uses bounded centre defaults; backend rejects bad targets before build/reload. Targeted synthetic backend test, actual UI handlers under a temporary mocked DOM, JS syntax and app Clippy passed. Real Mart boot/walkability/timing still needs Owner acceptance; no game changes, commits or paid tests. Automatic agent context and held-refresh label remain open.)
+  Scope: Build-and-preview from the editor in the same window, boot to the selected map or scene. The window's emulator is the same session the agent's MCP emulator tools drive, so what the agent builds, boots and checks appears in the window (accepted 2026-11-19, see master.md "Streaming chat panel (AGT-003)"). Owner follow-up 2026-11-20: pass structured context for the selected preview/editor map and the actual emulator map/position to the agent, keeping selection, launch target and live location distinct and marking unavailable/stale state. Show an explicit agent-held state instead of presenting the 10 Hz frame refresh as gameplay FPS. After an agent build, provide a direct preview at the selected/current target without a manual New Game sequence; keep the target and supported flags explicit. Owner map-switch follow-up 2026-11-20: prevent stale out-of-bounds coordinates when changing maps and reject invalid targets before building; add a separate preview action using the existing built ROM/symbol pair without rebuilding the ROM. Document that this is a fresh boot-to-point, not instant live-state teleportation, and that bounded defaults do not guarantee walkability. Refs: plan §"Layered roadmap toward the beta" (Phase 5), plan §"Layered architecture" (layer 1).
+  Completion: From an open map, one action builds and boots there; agent context distinguishes selected map from actual emulator location, unavailable context is explicit, and agent-held refresh is labelled clearly. An agent build can be previewed directly at the intended map without manual New Game navigation; record the Owner manual check and supported state-preservation limits. Invalid targets are rejected before build/reload, and the separate built-ROM preview does not invoke the ROM builder.
 
 - [x] **Done** **APP-004** Change history with undo.
   Depends on: `G3-001`, `EMU-004`.

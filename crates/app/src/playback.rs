@@ -1,13 +1,17 @@
 //! Paced emulator worker and binary frame transport used by the desktop window.
 use crate::launch::PreparedLaunch;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauros_connector_gen3::boot::BootReport;
-use tauros_emu::{Button, Buttons, Emulator, Mgba};
+use tauros_emu::{Button, Buttons};
+use tauros_mcp::emulator::EmuSession;
 
 /// GBA refresh rate: 16.78 MHz / 280896 cycles per frame.
 const FRAME_RATE: f64 = 59.7275;
+/// How often the window gets the current frame while the agent holds the game.
+const HELD_REFRESH: Duration = Duration::from_millis(100);
 /// Frames a press stays held even if its release arrives sooner. GTK can deliver
 /// a key's press and release together when its main thread is busy streaming
 /// frames; without this the game, which samples keys once per frame, misses it.
@@ -61,30 +65,35 @@ pub fn buttons_from_mask(mask: u16) -> Buttons {
 }
 
 /// The emulator thread: applies commands, runs frames on schedule and streams
-/// them to the attached window.
-pub fn emulator_thread(commands: Receiver<Command>) {
-    let mut emu = match Mgba::gba() {
-        Ok(emu) => emu,
-        Err(e) => return eprintln!("tauros: {e}"),
-    };
+/// them to the attached window. The session is shared with the agent's MCP tools.
+/// While `held()` is true (the agent is working) the game does not advance here:
+/// the window gets the current frame a few times a second, so it shows what the
+/// agent's tools do, and play resumes when the hold ends.
+pub fn emulator_thread(commands: Receiver<Command>, session: Arc<Mutex<EmuSession>>, held: impl Fn() -> bool) {
     let period = Duration::from_secs_f64(1.0 / FRAME_RATE);
-    let (mut channel, mut loaded, mut paused) = (None::<Channel<InvokeResponseBody>>, false, false);
+    let (mut channel, mut paused, mut was_held) = (None::<Channel<InvokeResponseBody>>, false, false);
     let mut next = Instant::now();
     let mut audio = Vec::new();
     let log_keys = std::env::var_os("TAUROS_LOG_KEYS").is_some();
     let mut latch = KeyLatch::default();
     loop {
+        let loaded = session.lock().unwrap().has_rom();
+        let holding = held();
         let running = loaded && !paused && channel.is_some();
-        let wait = if running { next.saturating_duration_since(Instant::now()) } else { Duration::from_secs(3600) };
+        let wait = match (running, holding) {
+            (false, _) => Duration::from_millis(250),
+            (true, true) => HELD_REFRESH,
+            (true, false) => next.saturating_duration_since(Instant::now()),
+        };
         match commands.recv_timeout(wait) {
             Ok(Command::Attach(c)) => channel = Some(c),
             Ok(Command::Load(launch, reply)) => {
                 latch = KeyLatch::default();
-                let result = emu
-                    .load_rom(&launch.rom)
-                    .map_err(|e| e.to_string())
-                    .and_then(|()| launch.boot.as_ref().map(|plan| plan.boot(&mut emu).map_err(|e| e.to_string())).transpose());
-                loaded = result.is_ok();
+                let mut session = session.lock().unwrap();
+                let result = session.load_rom(launch.rom).and_then(|_| {
+                    launch.boot.as_ref().map(|plan| plan.boot(session.emulator_mut()).map_err(|e| e.to_string())).transpose()
+                });
+                let emu = session.emulator_mut();
                 // Boot audio belongs to skipped screens, not to the first displayed frame.
                 audio.clear();
                 emu.drain_audio(&mut audio);
@@ -93,9 +102,13 @@ pub fn emulator_thread(commands: Receiver<Command>) {
                 let _ = reply.send(result);
             }
             Ok(Command::Buttons(b)) => {
+                let mut session = session.lock().unwrap();
+                let emu = session.emulator_mut();
                 let wanted = Button::ALL.iter().enumerate().filter(|(_, &x)| b.contains(x)).fold(0u16, |m, (i, _)| m | 1 << i);
                 let held = latch.request(wanted, emu.frame_count());
-                emu.set_buttons(buttons_from_mask(held));
+                if !holding {
+                    emu.set_buttons(buttons_from_mask(held));
+                }
                 if log_keys {
                     eprintln!("tauros: frame {} buttons {:?}", emu.frame_count(), b.iter().collect::<Vec<_>>());
                 }
@@ -105,7 +118,29 @@ pub fn emulator_thread(commands: Receiver<Command>) {
                 next = Instant::now();
             }
             Err(RecvTimeoutError::Disconnected) => return,
+            Err(RecvTimeoutError::Timeout) if !running => {}
             Err(RecvTimeoutError::Timeout) => {
+                let mut session = session.lock().unwrap();
+                let emu = session.emulator_mut();
+                if holding {
+                    // Show the agent's state; its tools own the input meanwhile.
+                    was_held = true;
+                    emu.drain_audio(&mut audio);
+                    audio.clear();
+                    let message = emu.frame().rgba;
+                    drop(session);
+                    if let Some(c) = &channel {
+                        if c.send(InvokeResponseBody::Raw(message)).is_err() {
+                            channel = None;
+                        }
+                    }
+                    continue;
+                }
+                if was_held {
+                    was_held = false;
+                    emu.set_buttons(buttons_from_mask(latch.held));
+                    next = Instant::now();
+                }
                 if emu.run_frame().is_err() {
                     continue;
                 }
@@ -115,8 +150,8 @@ pub fn emulator_thread(commands: Receiver<Command>) {
                 }
                 audio.clear();
                 emu.drain_audio(&mut audio);
-                let frame = emu.frame();
-                let mut message = frame.rgba;
+                let mut message = emu.frame().rgba;
+                drop(session);
                 message.extend(audio.iter().flat_map(|s| s.to_le_bytes()));
                 if let Some(c) = &channel {
                     if c.send(InvokeResponseBody::Raw(message)).is_err() {

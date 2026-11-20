@@ -14,7 +14,8 @@ use tauros_connector_gen3::boot::{map_numbers, BootPlan, BootTarget, GameLayout,
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
 use tauros_emu::{Emulator, Mgba};
-use tauros_mcp::emulator::{BootHook, EmuSession, SymbolTable};
+use tauros_mcp::domain;
+use tauros_mcp::emulator::{emu_boot, BootHook, BootKind, EmuBootRequest, EmuSession, SymbolTable};
 use tauros_mcp::{serve_io, TaurosServer};
 use tauros_model::{Connector, FlagId, MapId};
 use tokio::net::UnixListener;
@@ -140,47 +141,153 @@ pub fn reload_project_artifacts(
     Ok(())
 }
 
-/// Wires a full Layer 1 [`TaurosServer`] for a Gen 3 project:
-/// - `Gen3Connector` (domain tools + G3-001 snapshot guard + Docker build/test)
-/// - `EmuSession` wrapping `Mgba` with `Gen3BootHook` and optional unmodified `base_rom`
-/// - Post-build hook that automatically reloads `pokeemerald.gba` and `pokeemerald.sym`
-///   into the attached `EmuSession` whenever the MCP `build` tool succeeds.
+/// A Gen 3 project opened by Layer 1: one connector and one emulator session,
+/// shared by the app's window and by the MCP server the agent uses, so what the
+/// agent builds and boots is what the window shows.
+pub struct ProjectSession {
+    dir: PathBuf,
+    connector: Arc<Mutex<Box<dyn Connector + Send>>>,
+    emulator: Arc<Mutex<EmuSession>>,
+    operation_gate: Arc<Mutex<()>>,
+}
+
+/// Bounds and a bounded starting point for a preview destination. Walkability
+/// remains game-specific and is not inferred from the rectangle's centre.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MapPreviewInfo {
+    pub id: String,
+    pub width: u16,
+    pub height: u16,
+    pub default_x: i16,
+    pub default_y: i16,
+}
+impl MapPreviewInfo {
+    fn from_map(map: &tauros_model::Map) -> Option<Self> {
+        let tauros_model::MapGeometry::Grid { width, height, .. } = map.geometry else { return None };
+        Some(Self { id: map.id.0.clone(), width, height,
+            default_x: (width / 2) as i16, default_y: (height / 2) as i16 })
+    }
+    pub fn validate(&self, x: i16, y: i16) -> Result<(), String> {
+        if x < 0 || y < 0 || x as u16 >= self.width || y as u16 >= self.height {
+            return Err(format!("({x}, {y}) is outside {} ({}x{}); choose coordinates inside the map",
+                self.id, self.width, self.height));
+        }
+        Ok(())
+    }
+}
+
+/// What [`ProjectSession::build_and_boot`] did.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BuildAndBoot {
+    pub rom_sha256: String,
+    pub boot_frames: u32,
+}
+
+impl ProjectSession {
+    /// Opens `project_dir` with `Gen3Connector` and an `Mgba` session carrying the
+    /// Gen 3 boot hook and constants; an already built ROM and `.sym` are loaded.
+    pub fn open(project_dir: &Path, toolchain: Option<Toolchain>, base_rom: Option<Vec<u8>>) -> Result<Self, String> {
+        let connector = Gen3Connector::open(project_dir, toolchain.clone())
+            .map_err(|e| format!("failed to open Gen 3 project {}: {e}", project_dir.display()))?;
+        let connector: Arc<Mutex<Box<dyn Connector + Send>>> = Arc::new(Mutex::new(Box::new(connector)));
+        let mgba = Mgba::gba().map_err(|e| format!("failed to initialize libmgba core: {e}"))?;
+        let mut session = EmuSession::new(mgba)
+            .with_constants(load_project_constants(project_dir))
+            .with_boot_hook(Gen3BootHook::new(project_dir.to_path_buf(), Arc::clone(&connector), toolchain));
+        if let Some(base) = base_rom {
+            session = session.with_base_rom(base);
+        }
+        if project_dir.join("pokeemerald.gba").is_file() && project_dir.join("pokeemerald.sym").is_file() {
+            reload_project_artifacts(project_dir, &mut session)?;
+        }
+        Ok(Self { dir: project_dir.to_path_buf(), connector, emulator: Arc::new(Mutex::new(session)), operation_gate: Arc::new(Mutex::new(())) })
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// The emulator session shared with the MCP server.
+    pub fn emulator(&self) -> Arc<Mutex<EmuSession>> {
+        Arc::clone(&self.emulator)
+    }
+
+    pub fn operation_gate(&self) -> Arc<Mutex<()>> {
+        Arc::clone(&self.operation_gate)
+    }
+
+    /// An MCP server on this project's connector and emulator; a successful `build`
+    /// reloads the new ROM and `.sym` into the shared session.
+    pub fn mcp_server(&self) -> TaurosServer {
+        let reload_dir = self.dir.clone();
+        TaurosServer::with_shared_connector(Arc::clone(&self.connector))
+            .with_operation_gate(Arc::clone(&self.operation_gate))
+            .with_shared_emulator(self.emulator())
+            .with_post_build_hook(move |session| reload_project_artifacts(&reload_dir, session))
+    }
+
+    /// The project's map ids, sorted.
+    pub fn maps(&self) -> Result<Vec<String>, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+        Ok(snapshot.maps.keys().map(|id| id.0.clone()).collect())
+    }
+
+    /// Map bounds used by the picker; does not build or touch the emulator.
+    pub fn preview_maps(&self) -> Result<Vec<MapPreviewInfo>, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+        Ok(snapshot.maps.values().filter_map(MapPreviewInfo::from_map).collect())
+    }
+
+    // Caller owns the project operation gate. Run before build or ROM reload.
+    fn validate_preview_target(&self, map: &str, x: i16, y: i16) -> Result<(), String> {
+        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+        snapshot.maps.get(&MapId::from(map)).and_then(MapPreviewInfo::from_map)
+            .ok_or_else(|| format!("unknown or unsupported preview map {map}"))?.validate(x, y)
+    }
+
+    /// Boot a fresh preview from the existing ROM/symbol build pair. Does not
+    /// invoke the ROM builder or include pending source edits. The Gen 3 hook
+    /// can measure/cache struct offsets on its first boot at a source revision.
+    pub fn preview_built(&self, map: &str, x: i16, y: i16, flags: &[String]) -> Result<BuildAndBoot, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        self.validate_preview_target(map, x, y)?;
+        let mut session = self.emulator.lock().map_err(|_| "emulator lock poisoned")?;
+        reload_project_artifacts(&self.dir, &mut session)?;
+        let rom_sha256 = session.rom_sha256().ok_or("no built ROM loaded")?.to_owned();
+        let request = EmuBootRequest { kind: BootKind::BootTo, map: Some(map.to_owned()), x: Some(x), y: Some(y), flags: flags.to_vec(), frames: 0 };
+        let booted = emu_boot(&mut session, request).map_err(|e| format!("{}: {}", e.kind, e.message))?;
+        Ok(BuildAndBoot { rom_sha256, boot_frames: booted.frame_count })
+    }
+
+    /// Validates and builds the project (snapshot first, as every build), loads the
+    /// new ROM and `.sym` into the shared session and boots it at `map` (`x`, `y`)
+    /// with `flags` set.
+    pub fn build_and_boot(&self, map: &str, x: i16, y: i16, flags: &[String]) -> Result<BuildAndBoot, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        self.validate_preview_target(map, x, y)?;
+        let built = {
+            let mut connector = self.connector.lock().map_err(|_| "connector lock poisoned")?;
+            domain::build(connector.as_mut()).map_err(|e| format!("{}: {}", e.kind, e.message))?
+        };
+        let mut session = self.emulator.lock().map_err(|_| "emulator lock poisoned")?;
+        reload_project_artifacts(&self.dir, &mut session)?;
+        let request = EmuBootRequest { kind: BootKind::BootTo, map: Some(map.to_owned()), x: Some(x), y: Some(y), flags: flags.to_vec(), frames: 0 };
+        let booted = emu_boot(&mut session, request).map_err(|e| format!("{}: {}", e.kind, e.message))?;
+        Ok(BuildAndBoot { rom_sha256: built.rom_sha256, boot_frames: booted.frame_count })
+    }
+}
+
+/// Wires a full Layer 1 [`TaurosServer`] for a Gen 3 project (see [`ProjectSession`]):
+/// `Gen3Connector` domain tools, an `Mgba` session with the Gen 3 boot hook and an
+/// optional unmodified `base_rom`, and a ROM/`.sym` reload after every successful build.
 pub fn build_project_mcp_server(
     project_dir: &Path,
     toolchain: Option<Toolchain>,
     base_rom: Option<Vec<u8>>,
 ) -> Result<TaurosServer, String> {
-    let connector = Gen3Connector::open(project_dir, toolchain.clone())
-        .map_err(|e| format!("failed to open Gen 3 project {}: {e}", project_dir.display()))?;
-    let shared_connector: Arc<Mutex<Box<dyn Connector + Send>>> =
-        Arc::new(Mutex::new(Box::new(connector)));
-
-    let mgba = Mgba::gba().map_err(|e| format!("failed to initialize libmgba core: {e}"))?;
-    let mut session = EmuSession::new(mgba)
-        .with_constants(load_project_constants(project_dir))
-        .with_boot_hook(Gen3BootHook::new(
-            project_dir.to_path_buf(),
-            Arc::clone(&shared_connector),
-            toolchain,
-        ));
-
-    if let Some(base) = base_rom {
-        session = session.with_base_rom(base);
-    }
-
-    // If a ROM and symbol table are already built in the project directory, load them eagerly.
-    if project_dir.join("pokeemerald.gba").is_file()
-        && project_dir.join("pokeemerald.sym").is_file()
-    {
-        reload_project_artifacts(project_dir, &mut session)?;
-    }
-
-    let reload_dir = project_dir.to_path_buf();
-    Ok(TaurosServer::with_shared_connector(shared_connector)
-        .with_emulator(session)
-        .with_post_build_hook(move |emu_session| {
-            reload_project_artifacts(&reload_dir, emu_session)
-        }))
+    Ok(ProjectSession::open(project_dir, toolchain, base_rom)?.mcp_server())
 }
 
 /// Hosts an in-process [`TaurosServer`] over a private local Unix domain socket
@@ -309,5 +416,68 @@ impl Drop for InProcessMcpHost {
         }
         let _ = fs::remove_file(&self.socket_path);
         let _ = fs::remove_dir_all(&self.socket_dir);
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/fixtures/synthetic_framebuffer.rs"]
+mod preview_framebuffer;
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use serde_json::json;
+    use tauros_model::{memory::MemoryConnector, ProjectSnapshot};
+    type Calls = Arc<Mutex<Vec<(String, i16, i16, Vec<String>)>>>;
+    struct SyntheticBoot(Calls);
+    impl BootHook for SyntheticBoot {
+        fn boot_to(&mut self, _: &mut dyn tauros_emu::Emulator, map: &str, x: i16, y: i16, flags: &[String]) -> Result<u32, String> {
+            self.0.lock().unwrap().push((map.into(), x, y, flags.to_vec()));
+            Ok(42)
+        }
+    }
+
+    #[test]
+    fn preview_bounds_reject_before_build_or_reload_and_preview_never_builds() {
+        let snapshot: ProjectSnapshot = serde_json::from_value(json!({
+            "game":{"family":"gen3","engine":"synthetic","capabilities":{
+                "max_party_size":6,"max_moves":4,"min_level":1,"max_level":100,"held_items":true,"abilities":true}},
+            "trainers":{},"maps":{"MAP_TEST_MART":{
+                "id":"MAP_TEST_MART","name":"Test","geometry":{"kind":"grid","layout":"TEST","width":11,"height":8},
+                "events":[],"connections":[],"properties":{}}},
+            "scenes":{},"species":{},"flags":{}
+        })).unwrap();
+        let dir = std::env::temp_dir().join(format!("tauros-preview-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&dir).unwrap();
+        fs::write(dir.join("pokeemerald.gba"), [1, 2, 3]).unwrap();
+        fs::write(dir.join("pokeemerald.sym"), "02000000 g 00000004 Synthetic\n").unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let emu = preview_framebuffer::SyntheticFramebuffer(Arc::new(Mutex::new(preview_framebuffer::picture(false, false))));
+        let emulator = EmuSession::new(emu).with_rom(vec![9]).unwrap().with_boot_hook(SyntheticBoot(Arc::clone(&calls)));
+        let project = ProjectSession { dir: dir.clone(),
+            connector: Arc::new(Mutex::new(Box::new(MemoryConnector::new(snapshot)))),
+            emulator: Arc::new(Mutex::new(emulator)), operation_gate: Arc::new(Mutex::new(())) };
+        let bounds = project.preview_maps().unwrap();
+        assert_eq!((bounds[0].default_x, bounds[0].default_y), (5, 4));
+        let original_hash = project.emulator.lock().unwrap().rom_sha256().unwrap().to_owned();
+        // MemoryConnector::build always fails; the coordinate error must precede it.
+        assert!(project.build_and_boot("MAP_TEST_MART", 15, 10, &[]).unwrap_err().contains("outside"));
+        for (map, x, y) in [("MAP_TEST_MART", 11, 4), ("MAP_TEST_MART", 5, 8),
+                            ("MAP_TEST_MART", -1, 0), ("MAP_MISSING", 0, 0)] {
+            assert!(project.preview_built(map, x, y, &[]).is_err());
+        }
+        assert_eq!(project.emulator.lock().unwrap().rom_sha256(), Some(original_hash.as_str()));
+        assert!(calls.lock().unwrap().is_empty());
+        let report = project.preview_built("MAP_TEST_MART", 5, 4, &["FLAG_TEST".into()]).unwrap();
+        assert_eq!(report.boot_frames, 42);
+        assert_ne!(report.rom_sha256, original_hash);
+        assert_eq!(calls.lock().unwrap().as_slice(), &[("MAP_TEST_MART".into(), 5, 4, vec!["FLAG_TEST".into()])]);
+        let gate = project.operation_gate.lock().unwrap();
+        assert!(project.preview_built("MAP_TEST_MART", 5, 4, &[]).unwrap_err().contains("operation"));
+        drop(gate);
+        assert_eq!(fs::read(dir.join("pokeemerald.gba")).unwrap(), [1, 2, 3]);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

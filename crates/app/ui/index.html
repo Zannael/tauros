@@ -57,6 +57,22 @@
     #chat-input:focus { outline: 1px solid var(--accent); }
     #chat-form button { align-self: stretch; }
     button:disabled { opacity: .5; cursor: default; }
+    .select-control { position: relative; min-width: 0; }
+    .select-control::after { content: ''; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
+                            border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+                            transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+    select { -webkit-appearance: none; appearance: none; }
+    #play-bar { display: none; gap: 6px; align-items: center; width: 100%; font-size: 12px; color: var(--muted); }
+    #play-bar.open { display: flex; }
+    #play-bar .select-control { flex: 1; }
+    #play-bar select { width: 100%; padding-right: 30px; height: 30px; }
+    #play-bar select, #play-bar input { background: #18141a; color: var(--fg); border: 1px solid #44394a; border-radius: 6px;
+                                        padding: 4px 6px; font: inherit; }
+    #play-map { flex: 1; min-width: 0; }
+    #play-bar input { width: 56px; }
+    #play-status { width: 100%; font-size: 12px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere;
+                   max-height: 90px; overflow-y: auto; }
+    #play-status.error { color: #ff8f9c; }
   </style>
 </head>
 <body>
@@ -68,6 +84,14 @@
     <button id="toggle-history">History</button>
     <button id="open">Open ROM…</button>
   </header>
+  <div id="play-bar" aria-label="Build and play">
+    <div class="select-control"><select id="play-map" aria-label="Map"></select></div>
+    x <input id="play-x" type="number" min="0" max="255" aria-label="X">
+    y <input id="play-y" type="number" min="0" max="255" aria-label="Y">
+    <button id="play-preview" title="Start a fresh preview from the last built ROM without rebuilding">Preview</button>
+    <button id="play-build" title="Build the project and boot it at this map and position">Build &amp; play</button>
+  </div>
+  <div id="play-status" role="status"></div>
   <canvas id="screen" width="240" height="160"></canvas>
   <div id="help">
     <kbd>←↑→↓</kbd> D-pad · <kbd>X</kbd> A · <kbd>Z</kbd> B · <kbd>Enter</kbd> Start ·

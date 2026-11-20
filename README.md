@@ -66,7 +66,7 @@ Available in Phase 2:
 What is missing:
 
 - Creating new maps or resizing layouts (G3-010).
-- Streaming chat & voice UI (`AGT-003`/`004`), API-key/Codex/Gemini adapters (`AGT-005..007`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
+- Local voice input (`AGT-004`), API-key/Codex/Gemini adapters (`AGT-005..007`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
 
 Available in Phase 3 (complete) & Phase 4 (in progress):
 
@@ -193,6 +193,23 @@ cargo run -p tauros-app -- --project "$TAUROS_DATA/projects/my-hack" \
   --map MAP_PETALBURG_CITY --x 15 --y 10 --flag FLAG_BADGE01_GET
 ```
 
+With `--project`, the bar above the game offers two actions at the selected map
+and coordinates:
+
+- **Preview** starts a fresh boot-to-point from the existing `pokeemerald.gba`
+  and `pokeemerald.sym` build pair, without running the ROM builder. Pending
+  source changes appear only after a build. This resets gameplay rather than
+  teleporting the current player while preserving the whole current state.
+- **Build & play** validates, snapshots and builds, then boots to that point.
+
+Changing maps remembers valid points for previously selected maps and otherwise
+chooses the new map's centre. X/Y limits follow its dimensions; invalid integer
+coordinates are rejected before building or reloading the emulator. Bounds do
+not prove walkability: adjust the point if it lands on a blocked tile. The launch
+flags apply to both actions. Preview still runs the game's boot sequence and can
+measure/cache struct offsets on its first boot at a source revision; it does not
+promise instantaneous switching. Errors appear below the bar.
+
 Replace the project path with your built project's directory. Supply `--project`,
 `--map`, `--x` and `--y` together; repeat `--flag` to set several saved flags.
 `--help` prints the accepted syntax. Opening a file in the window starts a normal
@@ -216,14 +233,15 @@ Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
 sidecar/claude-agent-sdk run build`; it uses your existing Claude Code sign-in
 (`claude auth login`), and Tauros never sees or stores the credentials. With
 `--project` the agent gets the Tauros MCP tools for that project (trainers, maps,
-scenes, flags, builds and an emulator of its own, separate from the window's game);
-without it the agent has no tools. Replies stream in as they are written, and each
+scenes, flags, builds and the emulator shared with the window's game). While the
+agent is answering, the game is held and the window shows what its tools do;
+play resumes when the reply ends. Without it the agent has no tools. Replies
+stream in as they are written, and each
 tool call shows its arguments and result. Enter sends, Shift+Enter starts a new
 line, Stop ends the current reply and New chat forgets the conversation. While the
 text box has focus, the keyboard types into it instead of playing the game.
 Conversation transcripts are saved by the Claude Code CLI in its own store
 (`~/.claude/projects/`), which is how later messages see the earlier ones.
-
 Run the Phase 2 integration test (no display server needed, but Docker and the
 pinned engine/base build must be available; an opted-in run fails if missing):
 

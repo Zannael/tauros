@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -41,11 +42,14 @@ struct Live {
 pub struct Chat {
     factory: Factory,
     live: Mutex<Option<Live>>,
+    /// Turns whose events are still being forwarded, counted outside `live` so
+    /// `busy` never waits on a session that is starting.
+    streaming: Arc<AtomicUsize>,
 }
 
 impl Chat {
     pub fn new(factory: impl Fn() -> Result<ChatBackend, String> + Send + Sync + 'static) -> Self {
-        Self { factory: Box::new(factory), live: Mutex::new(None) }
+        Self { factory: Box::new(factory), live: Mutex::new(None), streaming: Arc::new(AtomicUsize::new(0)) }
     }
 
     /// Starts a turn with `text` and forwards its events to `sink` on a separate
@@ -73,8 +77,10 @@ impl Chat {
         let (turn_id, events) = turn.into_parts();
         *live.active.lock().unwrap() = Some(turn_id.clone());
         let active = Arc::clone(&live.active);
+        let streaming = Arc::clone(&self.streaming);
+        streaming.fetch_add(1, Ordering::SeqCst);
         let mut sink = sink;
-        thread::Builder::new()
+        let spawned = thread::Builder::new()
             .name("chat-turn".into())
             .spawn(move || {
                 for event in events {
@@ -85,8 +91,13 @@ impl Chat {
                     }
                 }
                 *active.lock().unwrap() = None;
-            })
-            .map_err(|e| format!("cannot start the chat thread: {e}"))?;
+                streaming.fetch_sub(1, Ordering::SeqCst);
+            });
+        if let Err(e) = spawned {
+            self.streaming.fetch_sub(1, Ordering::SeqCst);
+            *live.active.lock().unwrap() = None;
+            return Err(format!("cannot start the chat thread: {e}"));
+        }
         Ok(turn_id)
     }
 
@@ -109,9 +120,9 @@ impl Chat {
         }
     }
 
-    /// Whether a turn is still streaming.
+    /// Whether a turn is still streaming. Never blocks on a starting session.
     pub fn busy(&self) -> bool {
-        self.live.lock().unwrap().as_ref().is_some_and(|live| live.active.lock().unwrap().is_some())
+        self.streaming.load(Ordering::SeqCst) > 0
     }
 }
 

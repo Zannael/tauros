@@ -33,6 +33,7 @@ pub struct TaurosServer {
     connector: Option<SharedConnector>,
     emulator: Option<SharedEmulator>,
     post_build_hook: Option<PostBuildHook>,
+    operation_gate: Option<Arc<Mutex<()>>>,
 }
 
 impl Default for TaurosServer {
@@ -42,6 +43,7 @@ impl Default for TaurosServer {
             connector: None,
             emulator: None,
             post_build_hook: None,
+            operation_gate: None,
         }
     }
 }
@@ -59,6 +61,7 @@ impl TaurosServer {
             connector: Some(connector),
             emulator: None,
             post_build_hook: None,
+            operation_gate: None,
         }
     }
 
@@ -84,11 +87,34 @@ impl TaurosServer {
         self
     }
 
+    /// Serializes native editing with domain and emulator operations.
+    pub fn with_operation_gate(mut self, gate: Arc<Mutex<()>>) -> Self {
+        self.operation_gate = Some(gate);
+        self
+    }
+
+    pub fn operation_gate(&self) -> Option<Arc<Mutex<()>>> {
+        self.operation_gate.clone()
+    }
+
+    fn lock_operation(&self) -> Result<Option<std::sync::MutexGuard<'_, ()>>, CallToolResult> {
+        self.operation_gate.as_ref().map(|gate| gate.try_lock().map_err(|_| {
+            tool_error_json(&serde_json::json!({
+                "ok": false, "kind": "project_busy",
+                "message": "another project operation is running; retry after it finishes"
+            }))
+        })).transpose()
+    }
+
     fn with_connector_mut<T, F>(&self, op: F) -> CallToolResult
     where
         T: Serialize,
         F: FnOnce(&mut dyn Connector) -> Result<T, DomainToolError>,
     {
+        let _operation = match self.lock_operation() {
+            Ok(lock) => lock,
+            Err(error) => return error,
+        };
         let Some(shared) = &self.connector else {
             return tool_error_json(&DomainToolError::no_connector());
         };
@@ -115,6 +141,10 @@ impl TaurosServer {
         T: Serialize,
         F: FnOnce(&mut EmuSession) -> Result<T, EmuToolError>,
     {
+        let _operation = match self.lock_operation() {
+            Ok(lock) => lock,
+            Err(error) => return error,
+        };
         let Some(shared) = &self.emulator else {
             return tool_error_json(&EmuToolError::no_emulator());
         };
@@ -183,6 +213,10 @@ impl TaurosServer {
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     fn build(&self) -> CallToolResult {
+        let _operation = match self.lock_operation() {
+            Ok(lock) => lock,
+            Err(error) => return error,
+        };
         let Some(shared) = &self.connector else {
             return tool_error_json(&DomainToolError::no_connector());
         };

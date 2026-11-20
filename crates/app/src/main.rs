@@ -27,16 +27,20 @@ use tauros_agent_bridge::AgentEvent;
 use tauros_app::chat::{claude_backend, Chat};
 use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
 use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
-use tauros_app::mcp_host::build_project_mcp_server;
+use tauros_app::mcp_host::{BuildAndBoot, ProjectSession};
 use tauros_app::playback::{buttons_from_mask, emulator_thread, Command};
 use tauros_connector_gen3::toolchain::Toolchain;
-use tauros_emu::Buttons;
+use tauros_emu::{Buttons, Mgba};
+use tauros_mcp::emulator::EmuSession;
+use serde::Serialize;
 
 struct App {
     commands: Mutex<Sender<Command>>,
     /// A command-line ROM or project target, loaded when the window attaches.
     initial_launch: Option<Launch>,
-    chat: Chat,
+    /// The `--project` game project, shared by the window and the agent's tools.
+    project: Option<Arc<ProjectSession>>,
+    chat: Arc<Chat>,
     /// Set while a text field has focus: game keys then go to the field.
     typing: Arc<AtomicBool>,
 }
@@ -131,21 +135,65 @@ fn set_typing(app: tauri::State<'_, App>, typing: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// The chat for this launch: the Claude sidecar from this repository, with the
-/// Tauros MCP tools of the launch's project when there is one.
-fn project_chat(project: Option<PathBuf>) -> Chat {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+/// Chat shares the launch's project and emulator.
+fn project_chat(project: Option<Arc<ProjectSession>>) -> Chat {
+    let repo = repo_root();
     Chat::new(move || {
-        let server = match &project {
-            Some(project) => {
-                let toolchain = Toolchain::for_repository(&repo).ok();
-                Some(build_project_mcp_server(project, toolchain, None)?)
-            }
-            None => None,
-        };
-        let working_dir = project.clone().unwrap_or_else(|| repo.clone());
+        let server = project.as_ref().map(|project| project.mcp_server());
+        let working_dir = project.as_ref().map_or_else(|| repo.clone(), |project| project.dir().to_path_buf());
         claude_backend(ClaudeSidecarConfig::from_repo_root(&repo), server, working_dir, BTreeMap::new())
     })
+}
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// The open project's maps and the launch's boot point, for the build-and-play bar.
+#[derive(Serialize)]
+struct ProjectInfo {
+    maps: Vec<String>,
+    map_bounds: Vec<tauros_app::mcp_host::MapPreviewInfo>,
+    map: String,
+    x: i16,
+    y: i16,
+}
+
+#[tauri::command(async)]
+fn project_info(app: tauri::State<'_, App>) -> Result<Option<ProjectInfo>, String> {
+    let (Some(project), Some(Launch::Point { target, .. })) = (&app.project, &app.initial_launch) else { return Ok(None) };
+    let map_bounds = project.preview_maps()?;
+    Ok(Some(ProjectInfo { maps: map_bounds.iter().map(|map| map.id.clone()).collect(),
+        map_bounds, map: target.map.0.clone(), x: target.x, y: target.y }))
+}
+
+/// Builds the project and boots the shared emulator at `map` (`x`, `y`) with the
+/// launch's flags. Refused while the agent is working on the same emulator.
+#[tauri::command(async)]
+fn build_and_play(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<BuildAndBoot, String> {
+    let project = app.project.as_ref().ok_or("no game project is open")?;
+    if app.chat.busy() {
+        return Err("the agent is working; wait for it or stop it".into());
+    }
+    let flags = match &app.initial_launch {
+        Some(Launch::Point { target, .. }) => target.flags.iter().map(|f| f.0.clone()).collect(),
+        _ => Vec::new(),
+    };
+    let report = project.build_and_boot(&map, x, y, &flags)?;
+    eprintln!("tauros: built and booted {map} ({x}, {y}): {report:?}");
+    Ok(report)
+}
+
+/// Preview the last built ROM without running the ROM build.
+#[tauri::command(async)]
+fn preview_map(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<BuildAndBoot, String> {
+    let project = app.project.as_ref().ok_or("no game project is open")?;
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let flags = match &app.initial_launch {
+        Some(Launch::Point { target, .. }) => target.flags.iter().map(|f| f.0.clone()).collect(),
+        _ => Vec::new(),
+    };
+    project.preview_built(&map, x, y, &flags)
 }
 
 #[tauri::command]
@@ -172,6 +220,12 @@ fn history_undo(
     target_commit: String,
     project: Option<String>,
 ) -> Result<UndoReceipt, String> {
+    if app.chat.busy() {
+        return Err("wait for the agent to finish before undoing changes".into());
+    }
+    let gate = app.project.as_ref().map(|project| project.operation_gate());
+    let _operation = gate.as_ref().map(|gate| gate.try_lock()
+        .map_err(|_| "another project operation is running".to_owned())).transpose()?;
     let root = project
         .map(PathBuf::from)
         .or_else(|| app.project_root())
@@ -260,15 +314,39 @@ fn main() {
     };
     let (tx, rx) = mpsc::channel();
     let typing = Arc::new(AtomicBool::new(false));
-    let chat = project_chat(match &initial_launch {
-        Some(Launch::Point { project, .. }) => Some(project.clone()),
+    let project = match &initial_launch {
+        Some(Launch::Point { project, .. }) => {
+            let toolchain = Toolchain::for_repository(&repo_root()).ok();
+            match ProjectSession::open(project, toolchain, None) {
+                Ok(session) => Some(Arc::new(session)),
+                Err(error) => {
+                    eprintln!("tauros: {error}");
+                    std::process::exit(2);
+                }
+            }
+        }
         _ => None,
-    });
+    };
+    let session = match &project {
+        Some(project) => project.emulator(),
+        None => match Mgba::gba() {
+            Ok(mgba) => Arc::new(Mutex::new(EmuSession::new(mgba))),
+            Err(error) => {
+                eprintln!("tauros: {error}");
+                std::process::exit(1);
+            }
+        },
+    };
+    let chat = Arc::new(project_chat(project.clone()));
+    let chat_holds = Arc::clone(&chat);
     #[cfg(target_os = "linux")]
     let (keyboard, keyboard_typing) = (tx.clone(), typing.clone());
-    std::thread::Builder::new().name("emulator".into()).spawn(move || emulator_thread(rx)).expect("emulator thread");
+    std::thread::Builder::new()
+        .name("emulator".into())
+        .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
+        .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, chat, typing })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, typing })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -292,7 +370,10 @@ fn main() {
             chat_cancel,
             chat_reset,
             chat_info,
-            set_typing
+            set_typing,
+            project_info,
+            build_and_play,
+            preview_map
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauros");

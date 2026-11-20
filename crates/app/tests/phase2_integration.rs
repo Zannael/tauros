@@ -4,12 +4,23 @@
 #[path = "../../connector-gen3/tests/common/mod.rs"]
 mod common;
 
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauros_app::launch::Launch;
 use tauros_app::playback::{emulator_thread, Command};
 use tauros_connector_gen3::boot::Location;
+use tauros_emu::Mgba;
+use tauros_mcp::emulator::EmuSession;
+
+fn new_session() -> Arc<Mutex<EmuSession>> {
+    Arc::new(Mutex::new(EmuSession::new(Mgba::gba().unwrap())))
+}
+
+fn frame_count(session: &Arc<Mutex<EmuSession>>) -> u32 {
+    session.lock().unwrap().emulator().frame_count()
+}
 
 #[test]
 fn chosen_point_reaches_the_window_channel() {
@@ -40,7 +51,9 @@ fn chosen_point_reaches_the_window_channel() {
         let prepared = parse(map, x, flag).prepare().unwrap();
         assert!(prepared.name.contains(map));
         let (tx, rx) = mpsc::channel();
-        let worker = std::thread::spawn(move || emulator_thread(rx));
+        let (session, hold) = (new_session(), Arc::new(AtomicBool::new(false)));
+        let (worker_session, worker_hold) = (session.clone(), hold.clone());
+        let worker = std::thread::spawn(move || emulator_thread(rx, worker_session, move || worker_hold.load(Ordering::SeqCst)));
         let (frames, received) = mpsc::channel();
         let channel = Channel::new(move |body| {
             if let InvokeResponseBody::Raw(bytes) = body {
@@ -62,6 +75,19 @@ fn chosen_point_reaches_the_window_channel() {
         assert!(bytes[..VIDEO].chunks_exact(4).all(|p| p[3] == 255));
         assert!(bytes[..VIDEO].chunks_exact(4).any(|p| p != &bytes[..4]), "map is not a uniform screen");
         pictures.push(bytes[..VIDEO].to_vec());
+        // While the agent holds the game the window still gets frames (video only)
+        // but the shared session does not advance; play resumes after the hold.
+        hold.store(true, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(100));
+        while received.try_recv().is_ok() {}
+        let held_at = frame_count(&session);
+        let held_frame = received.recv_timeout(Duration::from_secs(2)).expect("frames keep coming while held");
+        assert_eq!(held_frame.len(), VIDEO, "no audio while held");
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(frame_count(&session), held_at, "the window does not run frames while held");
+        hold.store(false, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(frame_count(&session) > held_at + 5, "play resumes after the hold");
         drop(tx);
         worker.join().unwrap();
     }
@@ -71,7 +97,7 @@ fn chosen_point_reaches_the_window_channel() {
     let prepared = launch.prepare().unwrap();
     assert!(prepared.boot.is_none());
     let (tx, rx) = mpsc::channel();
-    let worker = std::thread::spawn(move || emulator_thread(rx));
+    let worker = std::thread::spawn(move || emulator_thread(rx, new_session(), || false));
     let (reply, result) = mpsc::channel();
     tx.send(Command::Load(prepared, reply)).unwrap();
     assert!(result.recv_timeout(Duration::from_secs(5)).unwrap().unwrap().is_none());

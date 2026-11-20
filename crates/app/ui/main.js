@@ -74,7 +74,7 @@ function onFrame(data) {
 }
 
 let mask = 0, rawLogs = 0;
-const isTextField = (el) => el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
+const isTextField = (el) => el && ['TEXTAREA', 'INPUT', 'SELECT'].includes(el.tagName);
 function updateKey(event, down) {
   if (isTextField(event.target)) return;
   const bit = buttonBit(event);
@@ -190,12 +190,12 @@ let chatBusy = false, chatGeneration = 0;   // a new chat ignores the old turn's
 
 invoke('chat_info').then((project) => {
   document.getElementById('chat-scope').textContent = project
-    ? `Tauros tools on ${project}`
+    ? `Project · ${project.split(/[\\/]/).filter(Boolean).pop()}`
     : 'No project open: start with --project to give the agent the Tauros tools';
 });
 
 // Text fields take the keyboard: the app stops reading game keys while one has focus.
-for (const field of [chatInput]) {
+for (const field of document.querySelectorAll('textarea, input:not([type=file]), select')) {
   field.addEventListener('focus', () => invoke('set_typing', { typing: true }));
   field.addEventListener('blur', () => invoke('set_typing', { typing: false }));
 }
@@ -226,6 +226,7 @@ function setChatBusy(busy) {
   chatBusy = busy;
   chatSend.disabled = busy;
   chatStop.hidden = !busy;
+  updatePreviewControls();
 }
 
 function startTurn(text) {
@@ -279,6 +280,8 @@ function startTurn(text) {
         const usage = event.usage ? ` · ${event.usage.input_tokens} in / ${event.usage.output_tokens} out tokens` : '';
         if (event.finish_reason !== 'completed' || usage) chatAppend('meta', `${event.finish_reason}${usage}`);
         setChatBusy(false);
+        if (historyPanel.classList.contains('open')) loadHistory();
+        refreshProjectMaps().catch((err) => log(`project refresh failed: ${err}`));
         break;
       }
       default:
@@ -314,3 +317,103 @@ document.getElementById('chat-new').addEventListener('click', async () => {
   setChatBusy(false);
   chatInput.focus();
 });
+
+// APP-003: map-specific bounds and separate built-ROM preview/build actions.
+const playBar = document.getElementById('play-bar');
+const playMap = document.getElementById('play-map');
+const playX = document.getElementById('play-x');
+const playY = document.getElementById('play-y');
+const playBuild = document.getElementById('play-build');
+const playPreview = document.getElementById('play-preview');
+const playStatus = document.getElementById('play-status');
+let mapBounds = new Map(), previewPoints = new Map(), previousMap = '', previewBusy = false;
+
+function validPreviewPoint(map, x, y) {
+  const bounds = mapBounds.get(map);
+  return bounds && Number.isInteger(x) && Number.isInteger(y) &&
+    x >= 0 && y >= 0 && x < bounds.width && y < bounds.height && x <= 32767 && y <= 32767;
+}
+function currentPreviewPointValid() {
+  return playX.value !== '' && playY.value !== '' &&
+    validPreviewPoint(playMap.value, Number(playX.value), Number(playY.value));
+}
+function updatePreviewControls() {
+  playBuild.disabled = playPreview.disabled = previewBusy || chatBusy || !currentPreviewPointValid();
+}
+function applyPreviewBounds(reset) {
+  const bounds = mapBounds.get(playMap.value);
+  playX.max = bounds ? Math.min(bounds.width - 1, 32767) : 0;
+  playY.max = bounds ? Math.min(bounds.height - 1, 32767) : 0;
+  const saved = previewPoints.get(playMap.value);
+  if (saved && validPreviewPoint(playMap.value, saved.x, saved.y)) {
+    playX.value = saved.x;
+    playY.value = saved.y;
+  } else if (bounds && (reset || !currentPreviewPointValid())) {
+    playX.value = bounds.default_x;
+    playY.value = bounds.default_y;
+  }
+  playMap.title = bounds ? `${bounds.width} × ${bounds.height} tiles; choose a walkable point` : '';
+  updatePreviewControls();
+}
+playMap.addEventListener('change', () => {
+  if (previousMap && playX.value !== '' && playY.value !== '' &&
+      validPreviewPoint(previousMap, Number(playX.value), Number(playY.value))) {
+    previewPoints.set(previousMap, { x: Number(playX.value), y: Number(playY.value) });
+  }
+  previousMap = playMap.value;
+  applyPreviewBounds(true);
+  playStatus.className = '';
+  playStatus.textContent = 'Preview uses the last build and starts fresh at this point. Coordinates are bounded; walkability is not checked.';
+});
+for (const input of [playX, playY]) input.addEventListener('input', () => {
+  previewPoints.delete(playMap.value);
+  updatePreviewControls();
+});
+
+async function refreshProjectMaps() {
+  const info = await invoke('project_info');
+  if (!info) return;
+  const selected = playMap.value || info.map;
+  const firstLoad = !playMap.options.length;
+  mapBounds = new Map((info.map_bounds || []).map(bounds => [bounds.id, bounds]));
+  playMap.replaceChildren();
+  for (const map of info.maps) playMap.add(new Option(map, map, false, map === selected));
+  if (firstLoad) {
+    playX.value = info.x;
+    playY.value = info.y;
+  }
+  previousMap = playMap.value;
+  applyPreviewBounds(false);
+  playBar.classList.add('open');
+}
+refreshProjectMaps().catch((err) => log(`project_info failed: ${err}`));
+
+async function runPreview(build) {
+  if (!currentPreviewPointValid()) {
+    playStatus.className = 'error';
+    playStatus.textContent = 'Choose integer coordinates inside this map.';
+    return;
+  }
+  const map = playMap.value, x = Number(playX.value), y = Number(playY.value);
+  previewPoints.set(map, { x, y });
+  previewBusy = true;
+  playMap.disabled = playX.disabled = playY.disabled = true;
+  updatePreviewControls();
+  playStatus.className = '';
+  playStatus.textContent = `${build ? 'Building and booting' : 'Starting last-built preview of'} ${map} (${x}, ${y})…`;
+  try {
+    const report = await invoke(build ? 'build_and_play' : 'preview_map', { map, x, y });
+    romName = `${map} (${x}, ${y})`;
+    playStatus.textContent = `${build ? 'Built' : 'Previewing last build'} ${report.rom_sha256.slice(0, 12)} at ${romName}.`;
+  } catch (err) {
+    playStatus.className = 'error';
+    playStatus.textContent = `${build ? 'Build & play' : 'Preview'} failed: ${err}`;
+  } finally {
+    previewBusy = false;
+    playMap.disabled = playX.disabled = playY.disabled = false;
+    updatePreviewControls();
+    canvas.focus();
+  }
+}
+playBuild.addEventListener('click', () => runPreview(true));
+playPreview.addEventListener('click', () => runPreview(false));

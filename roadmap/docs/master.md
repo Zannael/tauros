@@ -768,8 +768,8 @@ or no MCP server without a project). Each turn's `AgentEvent`s are forwarded on 
 Tauri channel (`chat_send`) as they arrive; one turn at a time, `chat_cancel`
 stops it, `chat_reset` closes the session. While a page text field has focus,
 `set_typing` makes the GTK keyboard handler pass keys to WebKit and releases held
-game buttons. The agent's MCP emulator is a separate `Mgba` instance from the
-window's game; sharing it is `APP-003`.
+game buttons. The agent's MCP emulator was a separate `Mgba` instance from the
+window's game until `APP-003` (see "Shared emulator and build-and-play (APP-003)").
 
 **Accepted** 2026-11-19 (agent-owned): the sidecar runs `query()` with
 `persistSession: true` (was `false` in `AGT-002`) so `resume` can reload earlier
@@ -790,6 +790,31 @@ test's second `send` was refused with `already has an active turn`.
 as done in the panel) and the reply completed. The domain MCP tools have no way
 to list or search trainers, so the agent could not answer "trainers containing
 DIRECTOR"; it also mentioned a "Trainer panel" that the app does not have yet.
+
+## Shared emulator and build-and-play (APP-003)
+
+**Accepted** 2026-11-19 (agent-owned): for a `--project` launch the app opens one
+`ProjectSession` (`crates/app/src/mcp_host.rs`): one `Gen3Connector` and one
+`EmuSession` (`Mgba`, Gen 3 boot hook and constants, built ROM and `.sym` loaded),
+shared by the window's emulator thread and by the MCP server given to the chat
+agent. While a chat turn streams (`Chat::busy`, lock-free) the window thread does
+not run frames or apply keys; it sends the current frame every 100 ms without audio,
+so the agent's tools own the emulator and their effects stay visible; play resumes
+with the held keys when the turn ends. Build & play (`build_and_play`) runs the
+connector build (validation and snapshot), reloads ROM and `.sym` into the shared
+session and boots via `emu_boot` at the chosen map and position with the launch's
+flags; it is refused while the agent is working. Without a project the window gets
+a plain session and the agent no tools.
+
+**Verified** 2026-11-19 UTC: `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test
+build_and_play` passed (96.8 s) on a git copy of the pinned base build: the agent's
+`create_trainer` over MCP on the session's server, then `build_and_boot` at
+`MAP_PETALBURG_CITY` (15, 10) produced a ROM different from the base and loaded its
+sha into the shared session; 30 frames run through MCP `emu_press_input` advanced
+the session's frame count by exactly 30. `TAUROS_DOCKER_TESTS=1 cargo test -p
+tauros-app --test phase2_integration` passed (53.7 s) including the hold: frames
+kept reaching the window channel (video only) while the frame count stayed fixed,
+and resumed after it.
 
 ## Agent reach over the whole game (Owner direction)
 
@@ -848,3 +873,60 @@ would need C or asset changes outside today's domain tools.
   confirmed `verdict: PROVEN` (`rom_sha256` `ffb0c7a6…`, `sym_sha256` `3e0ebd82…`,
   raw transcript kept locally under `$TAUROS_DATA/projects/director-scene-mcp004/build/tauros/`).
   Phase 3 is complete.
+
+
+**Owner map-switch failure / implemented bounded preview selection**
+2026-11-20 UTC: the Owner screenshot shows `MAP_PETALBURG_CITY_MART` selected
+with the city's retained `(15, 10)` coordinates. The reported boot error says
+the target is outside the Mart's 11x8 layout. This establishes the coordinate
+failure, not a slow-ROM or general map-switch failure. Source inspection confirms
+the picker previously changed only the map ID; build validation happened before
+boot validation, so an invalid point could still incur a build.
+
+APP-003 was reclaimed from its earlier waiting-for-desktop-check owner to Codex;
+accepted scope was recorded before implementation. `project_info` now includes
+grid bounds and bounded centre defaults. The UI remembers valid points per map,
+uses a new map's centre otherwise, updates X/Y maxima, and rejects empty,
+fractional or out-of-bounds input before invoking a backend operation. In the
+reported 11x8 case it proposes `(5, 4)` with maxima `(10, 7)`. Both backend actions
+also validate the target before any build or ROM reload. Rectangular bounds do
+not establish a walkable tile; no collision-aware spawn selection is claimed.
+
+**Accepted implementation / behavior:** the new **Preview** action reads the
+existing built ROM/symbol pair and boots directly to the chosen map/point with
+the launch flags, without calling `domain::build` or the connector builder.
+**Build & play** remains the action that includes source edits. Preview shares
+the existing project operation gate and emulator, and is refused during an agent
+turn. It is a fresh boot-to-point, not a live-state warp, and uses the last build;
+normal ROM/symbol pairing assumptions remain those of project opening. The Gen 3
+hook can measure/cache struct offsets on first boot at a source revision. Removing
+the ROM build does not eliminate boot time, and no real-map latency measurement
+or instantaneous-switch claim was made.
+
+Checks actually run:
+- `cargo test -p tauros-app --lib preview_bounds_reject -- --nocapture`: passed.
+  An original in-memory 11x8 map and synthetic framebuffer/boot hook prove centre
+  selection, rejection of the reported point, upper/negative bounds and unknown
+  maps before emulator reload, and rejection while another operation owns the
+  gate. A valid Preview succeeds even though its `MemoryConnector::build` always
+  fails, passes coordinates/flags to the hook and leaves the two synthetic disk
+  artifacts unchanged. No actual game or source files were used.
+- A temporary Node `vm` harness executing the actual preview UI handler block
+  passed city-to-Mart bounds/defaults, invalid-target preflight with no IPC,
+  returning to remembered city coordinates, separate Preview versus build IPC,
+  backend-error recovery and agent-busy controls. This uses a mocked DOM/IPC,
+  not native WebKitGTK or a real emulator boot.
+- `node --check crates/app/ui/main.js` and
+  `cargo clippy -p tauros-app --tests -- -D warnings` passed.
+
+README documents both actions and their state/timing limits. APP-003 remains
+In progress for real-map acceptance, selected/live context integration and an
+explicit held-refresh label. No game project was modified or reverted; no
+credentials, provider calls, paid tests, commit, push or full suite were involved.
+The Owner manual check is to choose the Mart in the rebuilt app and press Preview;
+its real walkability and boot timing remain unverified here.
+
+Final map-preview checks: `cargo build -p tauros-app` passed; the final UI handler
+harness and JavaScript syntax check passed after the empty-input guard update.
+Roadmap graph regenerated and validated: 57 activities, 9 ready unassigned.
+`git diff --check` passed. Existing uncommitted work is retained.

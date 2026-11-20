@@ -163,6 +163,21 @@ impl EmuSession {
     pub fn rom_sha256(&self) -> Option<&str> {
         self.rom_sha256.as_deref()
     }
+
+    /// Whether a ROM is loaded.
+    pub fn has_rom(&self) -> bool {
+        self.rom.is_some()
+    }
+
+    /// The emulator core, for a host that also plays the session (the app's window).
+    pub fn emulator_mut(&mut self) -> &mut (dyn Emulator + Send) {
+        self.emu.as_mut()
+    }
+
+    /// The emulator core, read-only (for example to copy the current frame).
+    pub fn emulator(&self) -> &(dyn Emulator + Send) {
+        self.emu.as_ref()
+    }
 }
 
 /// Structured error returned by emulator MCP tools.
