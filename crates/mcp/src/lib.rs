@@ -220,7 +220,7 @@ impl TaurosServer {
     }
 
     #[tool(
-        description = "Run pre-build validation and build the game project ROM through the connector.",
+        description = "Run pre-build validation and build the game project ROM through the connector. Returns the ROM hash and paths, error and warning counts, every error (up to 50) and up to 20 distinct warnings; omitted diagnostics are counted.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     fn build(&self) -> CallToolResult {
@@ -266,7 +266,7 @@ impl TaurosServer {
     }
 
     #[tool(
-        description = "Run the game project's headless test suite through the connector, optionally filtered by test name prefix or file.",
+        description = "Run the game project's headless test suite through the connector, optionally filtered by test name prefix or file. Lists failing cases first (up to 50; only failures keep shortened output) with full totals and bounded diagnostics.",
         annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     fn run_test(&self, Parameters(req): Parameters<RunTestRequest>) -> CallToolResult {

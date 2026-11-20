@@ -741,6 +741,38 @@ Limits: no real turn on a non-default model was run; the Tauri window was not
 driven; whether a listed model is usable by the account is only known at the
 next message.
 
+## Compact build and test results (MCP-006)
+
+**Verified** 2026-11-20 UTC (cause): in a Claude turn on director-scene-mcp004 the
+`build` result was 66,024 bytes: `ok: true` and 413 diagnostics, all warnings
+(for example the linker's RWX LOAD segment warning). The Agent SDK stored it under
+`~/.claude/projects/.../tool-results/`, outside the project; the agent's confined
+`head` could not open it, so it reported the build as unknown although the new
+text was visible in the emulator. The Gen 3 connector knew each diagnostic's
+level but `tauros_model::Diagnostic` had no field for it.
+
+**Accepted** 2026-11-20 (Owner request, agent-owned design): `Diagnostic` gains
+`severity` (`Severity`, deserialized as `error` when absent), set from the
+toolchain level. `domain::compact_diagnostics` keeps errors first (at most 50),
+then at most 20 distinct warnings, shortens messages to 300 characters and counts
+everything in `DiagnosticCounts { errors, warnings, omitted }`. `build` returns
+`counts`; `build_failed` errors say "build failed: E errors, W warnings (N not
+listed)"; `run_test` lists failing cases first (at most 50, `omitted_cases`),
+keeps output only for failures (1,000 characters) and full `totals`. Full logs are
+not returned to agents.
+
+**Verified** 2026-11-20 UTC: `cargo test -p tauros-mcp --test compact_results`
+passed (414 noisy warnings in under 8 KB with full counts and 20 distinct
+messages; failed build with 120 errors keeps 50 errors first; small results lose
+nothing; 400 test cases bounded under 16 KB with failures first). On the real
+director-scene-mcp004 through `tauros-mcp-project`, the same incremental build
+returned 66,024 bytes with the previous code and 4,174 bytes now (`errors: 0,
+warnings: 413, omitted: 393`, 20 listed); the project had no new commits or
+changes afterwards. `TAUROS_DOCKER_TESTS=1` `mcp_domain_gen3` and
+`toolchain_build` passed, plus clippy and the workspace crates' tests. Limits: no
+new live agent turn was run on the bounded result; full logs are not offered to
+agents.
+
 ## Open decisions
 
 Tracked as tasks, not here. The voice engine is chosen within AGT-004.

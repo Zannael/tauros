@@ -96,6 +96,7 @@ impl Connector for TestConnector {
                 file: Some("src/main.c".to_owned()),
                 line: Some(42),
                 message: "error: simulated build error".to_owned(),
+                severity: tauros_model::Severity::Error,
             }]));
         }
         Ok(BuildOutput {

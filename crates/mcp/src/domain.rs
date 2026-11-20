@@ -194,6 +194,53 @@ pub struct MutationResult {
     pub warnings: Vec<Violation>,
 }
 
+/// Bounds that keep build and test results small enough for every agent
+/// runtime to read inline (MCP-006). A full Emerald build reports hundreds of
+/// warnings; an unbounded result was spilled to a file the agent could not open.
+pub const MAX_ERRORS: usize = 50;
+pub const MAX_WARNINGS: usize = 20;
+pub const MAX_CASES: usize = 50;
+pub const MAX_MESSAGE_CHARS: usize = 300;
+pub const MAX_CASE_OUTPUT_CHARS: usize = 1000;
+
+/// Totals for the diagnostics a tool saw, including those it did not list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticCounts {
+    pub errors: usize,
+    pub warnings: usize,
+    /// Diagnostics counted but not listed (beyond the bounds or duplicates).
+    pub omitted: usize,
+}
+
+/// Shortens `text` to at most `max` characters, marking the cut.
+fn shorten(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((cut, _)) => format!("{}… [{} more chars]", &text[..cut], text[cut..].chars().count()),
+        None => text.to_owned(),
+    }
+}
+
+/// Keeps errors (up to [`MAX_ERRORS`]) and the first [`MAX_WARNINGS`] distinct
+/// warnings, in that order, with shortened messages and full counts.
+pub fn compact_diagnostics(all: Vec<Diagnostic>) -> (Vec<Diagnostic>, DiagnosticCounts) {
+    let mut counts = DiagnosticCounts::default();
+    let (mut errors, mut warnings) = (Vec::new(), Vec::new());
+    let mut seen = std::collections::BTreeSet::new();
+    for mut diagnostic in all {
+        let is_error = diagnostic.severity == Severity::Error;
+        if is_error { counts.errors += 1 } else { counts.warnings += 1 }
+        let (list, max) = if is_error { (&mut errors, MAX_ERRORS) } else { (&mut warnings, MAX_WARNINGS) };
+        diagnostic.message = shorten(&diagnostic.message, MAX_MESSAGE_CHARS);
+        if list.len() < max && (is_error || seen.insert(diagnostic.message.clone())) {
+            list.push(diagnostic);
+        } else {
+            counts.omitted += 1;
+        }
+    }
+    errors.extend(warnings);
+    (errors, counts)
+}
+
 /// Structured success result returned by the `build` domain tool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildToolResult {
@@ -201,6 +248,8 @@ pub struct BuildToolResult {
     pub rom: String,
     pub symbols: Option<String>,
     pub rom_sha256: String,
+    pub counts: DiagnosticCounts,
+    /// Errors first, then distinct warnings, both bounded (see [`compact_diagnostics`]).
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -208,8 +257,12 @@ pub struct BuildToolResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunTestToolResult {
     pub ok: bool,
+    /// Failing cases first, at most [`MAX_CASES`]; only failures keep (shortened) output.
     pub cases: Vec<TestCaseOutput>,
+    /// Cases run but not listed.
+    pub omitted_cases: usize,
     pub totals: BTreeMap<String, u32>,
+    pub counts: DiagnosticCounts,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -253,7 +306,11 @@ impl DomainToolError {
                 }
             }
             ConnectorError::Build(diagnostics) => {
-                let message = ConnectorError::Build(diagnostics.clone()).to_string();
+                let (diagnostics, counts) = compact_diagnostics(diagnostics);
+                let message = format!(
+                    "build failed: {} errors, {} warnings ({} not listed)",
+                    counts.errors, counts.warnings, counts.omitted
+                );
                 Self {
                     ok: false,
                     kind: "build_failed".to_owned(),
@@ -450,12 +507,14 @@ pub fn build(connector: &mut dyn Connector) -> Result<BuildToolResult, DomainToo
     let out = connector
         .build()
         .map_err(DomainToolError::from_connector_error)?;
+    let (diagnostics, counts) = compact_diagnostics(out.diagnostics);
     Ok(BuildToolResult {
         ok: true,
         rom: out.rom.to_string_lossy().into_owned(),
         symbols: out.symbols.map(|p| p.to_string_lossy().into_owned()),
         rom_sha256: out.rom_sha256,
-        diagnostics: out.diagnostics,
+        counts,
+        diagnostics,
     })
 }
 
@@ -467,10 +526,22 @@ pub fn run_test(
     let out = connector
         .run_tests(req.filter.as_deref())
         .map_err(DomainToolError::from_connector_error)?;
+    let (diagnostics, counts) = compact_diagnostics(out.diagnostics);
+    let mut cases = out.cases;
+    // Stable: failures first, each group in run order.
+    cases.sort_by_key(|case| case.passed);
+    let omitted_cases = cases.len().saturating_sub(MAX_CASES);
+    cases.truncate(MAX_CASES);
+    for case in &mut cases {
+        // Only failures need their output; passing output is noise for agents.
+        case.output = if case.passed { String::new() } else { shorten(&case.output, MAX_CASE_OUTPUT_CHARS) };
+    }
     Ok(RunTestToolResult {
         ok: out.success,
-        cases: out.cases,
+        cases,
+        omitted_cases,
         totals: out.totals,
-        diagnostics: out.diagnostics,
+        counts,
+        diagnostics,
     })
 }

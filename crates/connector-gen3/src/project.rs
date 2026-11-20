@@ -78,6 +78,14 @@ struct State {
     snapshot: ProjectSnapshot,
 }
 
+/// Keeps the toolchain's level when a build diagnostic enters the model (MCP-006).
+fn severity(level: &Level) -> tauros_model::Severity {
+    match level {
+        Level::Error => tauros_model::Severity::Error,
+        Level::Warning => tauros_model::Severity::Warning,
+    }
+}
+
 fn io_err(path: &str, e: impl std::fmt::Display) -> ConnectorError {
     ConnectorError::Io(format!("{path}: {e}"))
 }
@@ -499,9 +507,12 @@ impl Gen3Connector {
                     file: None,
                     line: None,
                     message: "no toolchain configured to compile Poryscript".into(),
+                    severity: tauros_model::Severity::Error,
                 }]))?;
                 let compiled = toolchain.compile_poryscript(&scene.source).map_err(|message| {
-                    ConnectorError::Build(vec![Diagnostic { file: Some(format!("{dir}/{}.pory", scene.label)), line: None, message }])
+                    ConnectorError::Build(vec![Diagnostic {
+                        file: Some(format!("{dir}/{}.pory", scene.label)), line: None, message, severity: tauros_model::Severity::Error,
+                    }])
                 })?;
                 let inc = format!("{dir}/{}.inc", scene.label);
                 files.insert(format!("{dir}/{}.pory", scene.label), Some(scene.source.clone().into_bytes()));
@@ -523,7 +534,7 @@ impl Gen3Connector {
         if violations.iter().any(|v| v.severity == tauros_model::Severity::Error) { return Err(ConnectorError::Rejected(violations)); }
         self.guard.snapshot("build ROM").map_err(|e| ConnectorError::Snapshot(e.to_string()))?;
         let toolchain = self.toolchain.as_ref().ok_or_else(|| ConnectorError::Build(vec![Diagnostic {
-            file: None, line: None, message: "no toolchain configured".into(),
+            file: None, line: None, message: "no toolchain configured".into(), severity: tauros_model::Severity::Error,
         }]))?;
         let mut report = toolchain.build_rom(&self.root).map_err(ConnectorError::Io)?;
         report.diagnostics.extend(violations.into_iter().map(|v| crate::toolchain::BuildDiagnostic {
@@ -845,6 +856,7 @@ impl Connector for Gen3Connector {
                 file: d.file.clone(),
                 line: d.line,
                 message: format!("{}: {}", if d.level == Level::Error { "error" } else { "warning" }, d.message),
+                severity: severity(&d.level),
             })
             .collect();
         if !report.success {
@@ -878,6 +890,7 @@ impl Connector for Gen3Connector {
                 file: None,
                 line: None,
                 message: "no toolchain configured".into(),
+                severity: tauros_model::Severity::Error,
             }])
         })?;
         let report = toolchain
@@ -894,12 +907,14 @@ impl Connector for Gen3Connector {
                     if d.level == Level::Error { "error" } else { "warning" },
                     d.message
                 ),
+                severity: severity(&d.level),
             })
             .collect();
         diagnostics.extend(violations.into_iter().map(|v| Diagnostic {
             file: None,
             line: None,
             message: format!("warning: {}: {}", v.rule, v.message),
+            severity: tauros_model::Severity::Warning,
         }));
         Ok(tauros_model::TestOutput {
             success: report.success,

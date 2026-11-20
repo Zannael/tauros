@@ -76,7 +76,11 @@ Available in Phase 3 (complete) & Phase 4 (in progress):
   `emu_load_state`, `emu_assert_ram` and `run_verification` (`VER-001` inert specs
   with `shift`/`wrong_value`/`cold_boot`/`base_rom` counterfactuals). `tauros-mcp-project`
   wires a real Gen 3 project and libmgba emulator over stdio with automatic ROM/`.sym`
-  reload after `build`.
+  reload after `build`. `build` and `run_test` return bounded results so every
+  agent can read them inline: outcome, ROM hash and paths, error and warning
+  counts, every error (up to 50) and up to 20 distinct warnings, and for tests the
+  failing cases first (up to 50, only failures keep shortened output) with full
+  totals. A real Emerald build result went from 66 KB (413 warnings) to about 4 KB.
 - **Phase 3 director's scene end-to-end test** (`crates/app/tests/phase3_director_scene.rs`):
   creates a 3-Pokémon trainer, Poryscript scene with atomic flag allocation and
   no-whiteout battle (`B_FLAG_NO_WHITEOUT = FLAG_TEMP_1`), places the NPC, builds

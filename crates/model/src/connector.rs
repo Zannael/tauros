@@ -46,6 +46,14 @@ pub struct Diagnostic {
     pub file: Option<String>,
     pub line: Option<u32>,
     pub message: String,
+    /// Whether the toolchain reported an error or a warning. Older payloads
+    /// without it are read as errors.
+    #[serde(default = "error_severity")]
+    pub severity: Severity,
+}
+
+fn error_severity() -> Severity {
+    Severity::Error
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

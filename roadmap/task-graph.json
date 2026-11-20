@@ -695,7 +695,8 @@
         "AGT-002",
         "AGT-006",
         "AGT-007",
-        "MCP-005"
+        "MCP-005",
+        "MCP-006"
       ],
       "id": "MCP-002",
       "incomplete_prerequisites": [],
@@ -1132,6 +1133,24 @@
       "verification": null
     },
     {
+      "completion": "Tests show severity preserved from the connector, a build with hundreds of warnings yielding a result of a few KB with counts and every error kept, and failed builds and test runs bounded the same way; the real project build result is measured before and after on director-scene-mcp004; master.md and README record the format.",
+      "dependents": [],
+      "id": "MCP-006",
+      "incomplete_prerequisites": [],
+      "note": "Full build logs are not returned to agents; offering them would be a separate task.",
+      "owner": "Claude Code",
+      "prerequisites": [
+        "MCP-002"
+      ],
+      "responsible": "Agent",
+      "scope": "Requested by the Owner on 2026-11-20 after a Claude turn could not read a successful build result: `build` returned 413 warning diagnostics (66 KB), the Agent SDK spilled it to a file outside the project, and the confined native shell could not open it. Keep the severity of each diagnostic in the model (lost when the Gen 3 connector converts its build report), and make `build`, `run_test` and `build_failed` errors return a bounded summary: outcome, ROM hash and paths, error and warning counts, every error, at most 20 distinct warnings and the number omitted, with long messages shortened. Full logs stay out of agent results. Refs: plan §\"Layered architecture\" (layer 3), plan §\"Rules for the agents writing the code\" (Targeted tests).",
+      "section": "Tauros roadmap / Phase 5 — Full app (beta)",
+      "source_line": 469,
+      "status": "Done",
+      "title": "Compact build and test results for agents.",
+      "verification": "2026-11-20 UTC: cause confirmed from the Claude transcript (66,024-byte `build` result with 413 warnings spilled outside the project; confined `head` failed). Implemented `Diagnostic::severity` set from the Gen 3 toolchain level, `domain::compact_diagnostics`/`DiagnosticCounts`, bounded `build`, `run_test` and `build_failed` payloads and updated tool descriptions. `cargo test -p tauros-mcp --test compact_results` passed (4 tests: noisy build under 8 KB with full counts, 50 errors first on failure, small results unchanged, 400 cases under 16 KB with failures first). Real director-scene-mcp004 build through `tauros-mcp-project`: 66,024 bytes with the previous code, 4,174 bytes now (`errors 0, warnings 413, omitted 393`); project unchanged afterwards. `TAUROS_DOCKER_TESTS=1` `mcp_domain_gen3` (3) and `toolchain_build` (2, 1 ignored) passed; `cargo clippy --workspace --tests -- -D warnings`, tests of model, mcp, connector-gen3, agent-bridge and app (40 suites) and 56 Python tests passed. Limits: no new live agent turn on the bounded result; no commit."
+    },
+    {
       "completion": "Tests show labels follow the definitions (an AI change becomes AI-Assisted after a human edit, never back to AI-Generated); the export lists every labelled entity with its label and commit.",
       "dependents": [],
       "id": "PROV-001",
@@ -1145,7 +1164,7 @@
       "responsible": "Agent",
       "scope": "Display the AI-Generated / AI-Assisted / Human label of every changed entity in the change history and editors, let the human promote a label when they intervene, and export a per-project provenance report suitable for a release note. Per master.md \"Provenance labels (DEC-003)\". Refs: plan §\"Risks and community notes\" (Positioning).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 469,
+      "source_line": 478,
       "status": "Not started",
       "title": "Show and export provenance labels in the app.",
       "verification": null
@@ -1168,7 +1187,7 @@
       "responsible": "Agent",
       "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 478,
+      "source_line": 487,
       "status": "Not started",
       "title": "Asset pipeline with palette and VRAM validator.",
       "verification": null
@@ -1189,7 +1208,7 @@
       "responsible": "Agent",
       "scope": "Palette-aware pixel editing of sprites and tiles with validator feedback and build-and-preview. Refs: plan §\"Graphics assets and visual enhancements\" (step 4), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 485,
+      "source_line": 494,
       "status": "Not started",
       "title": "Pixel panel in the app.",
       "verification": null
@@ -1210,7 +1229,7 @@
       "responsible": "Agent",
       "scope": "Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §\"Young projects to take ideas from\" (Aseprite MCPs), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 492,
+      "source_line": 501,
       "status": "Not started",
       "title": "Aseprite MCP integration for agent sketches.",
       "verification": null
@@ -1230,7 +1249,7 @@
       "responsible": "Agent",
       "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 499,
+      "source_line": 508,
       "status": "Not started",
       "title": "Catalog of graphical upgrades.",
       "verification": null
@@ -1250,7 +1269,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 508,
+      "source_line": 517,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1271,7 +1290,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 515,
+      "source_line": 524,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1290,14 +1309,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 522,
+      "source_line": 531,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "210b202f65cfe899386bf0554cf566c5a4e1ba7efea05afde31eaa317236402f",
+  "todo_sha256": "577ac1198402e2ad3db2b44581f07ba9f2e60891f45d8972153e546f54113835",
   "topological_layers": [
     [
       "G3-010",
