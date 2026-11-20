@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use tauros_agent_bridge::claude_sidecar::{ClaudeSidecarAdapter, ClaudeSidecarConfig};
-use tauros_agent_bridge::{AgentBridge, AgentEvent, AuthMode, SessionConfig, SessionId, TurnId, UserMessage};
+use tauros_agent_bridge::{AgentBridge, AgentEvent, AuthMode, ModelOption, SessionConfig, SessionId, TurnId, UserMessage};
 use tauros_mcp::TaurosServer;
 
 use crate::mcp_host::InProcessMcpHost;
@@ -56,11 +56,52 @@ pub struct Chat {
     /// Turns whose events are still being forwarded, counted outside `live` so
     /// `busy` never waits on a session that is starting.
     streaming: Arc<AtomicUsize>,
+    /// Model chosen by the user, applied to every session this chat starts.
+    model: Mutex<Option<String>>,
 }
 
 impl Chat {
     pub fn new(factory: impl Fn() -> Result<ChatBackend, String> + Send + Sync + 'static) -> Self {
-        Self { factory: Box::new(factory), live: Mutex::new(None), streaming: Arc::new(AtomicUsize::new(0)) }
+        Self { factory: Box::new(factory), live: Mutex::new(None), streaming: Arc::new(AtomicUsize::new(0)), model: Mutex::new(None) }
+    }
+
+    /// Starts the session if there is none, applying the selected model.
+    fn ensure_live<'a>(&self, guard: &'a mut Option<Live>) -> Result<&'a mut Live, String> {
+        if guard.is_none() {
+            let mut backend = (self.factory)()?;
+            if let Some(model) = self.model.lock().unwrap().clone() {
+                backend.bridge.set_model(&backend.session, &model).map_err(|e| e.message)?;
+            }
+            *guard = Some(Live { backend, active: Arc::new(Mutex::new(None)) });
+        }
+        Ok(guard.as_mut().unwrap())
+    }
+
+    /// Models offered for this conversation, marking the one in use. Starts
+    /// the session if needed, which runs no model turn (`AGT-011`).
+    pub fn models(&self) -> Result<Vec<ModelOption>, String> {
+        let mut guard = self.live.lock().unwrap();
+        let live = self.ensure_live(&mut guard)?;
+        live.backend.bridge.list_models(&live.backend.session).map_err(|e| e.message)
+    }
+
+    /// Uses `model` for the following turns, keeping the conversation, and for
+    /// any new conversation. Refused while a reply is streaming.
+    pub fn set_model(&self, model: &str) -> Result<(), String> {
+        if self.busy() {
+            return Err("wait for the current reply or stop it before changing model".to_owned());
+        }
+        let mut guard = self.live.lock().unwrap();
+        if let Some(live) = guard.as_mut() {
+            live.backend.bridge.set_model(&live.backend.session, model).map_err(|e| e.message)?;
+        }
+        *self.model.lock().unwrap() = Some(model.to_owned());
+        Ok(())
+    }
+
+    /// Replaces the stored choice without contacting a runtime (provider switch).
+    pub fn preset_model(&self, model: Option<String>) {
+        *self.model.lock().unwrap() = model;
     }
 
     /// Starts a turn with `text` and forwards its events to `sink` on a separate
@@ -72,11 +113,7 @@ impl Chat {
             return Err("the message is empty".to_owned());
         }
         let mut guard = self.live.lock().unwrap();
-        if guard.is_none() {
-            let backend = (self.factory)()?;
-            *guard = Some(Live { backend, active: Arc::new(Mutex::new(None)) });
-        }
-        let live = guard.as_mut().unwrap();
+        let live = self.ensure_live(&mut guard)?;
         if live.active.lock().unwrap().is_some() {
             return Err("the agent is still answering; stop it or wait".to_owned());
         }

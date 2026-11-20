@@ -42,6 +42,8 @@ struct App {
     project: Option<Arc<ProjectSession>>,
     chat: Arc<Chat>,
     chat_provider: Arc<Mutex<String>>,
+    /// Model chosen per provider in this run, restored when switching back.
+    chat_models: Mutex<std::collections::HashMap<String, String>>,
     codex_login: Mutex<tauros_app::codex_login::CodexLogin>,
     antigravity_login: Mutex<tauros_app::antigravity_login::AntigravityLogin>,
     /// Set while a text field has focus: game keys then go to the field.
@@ -151,7 +153,28 @@ fn chat_select(app: tauri::State<'_, App>, provider: String) -> Result<(), Strin
     if app.codex_login.lock().unwrap().pending() { return Err("finish or cancel ChatGPT sign-in before switching agents".into()); }
     if app.antigravity_login.lock().unwrap().pending() { return Err("finish or cancel Google sign-in before switching agents".into()); }
     app.chat.reset();
+    app.chat.preset_model(app.chat_models.lock().unwrap().get(&provider).cloned());
     *app.chat_provider.lock().unwrap() = provider;
+    Ok(())
+}
+
+/// Models of the selected provider, marking the one in use. Starts the agent
+/// session if needed; no model turn runs.
+#[tauri::command(async)]
+fn chat_models(app: tauri::State<'_, App>) -> Result<Vec<tauros_agent_bridge::ModelOption>, String> {
+    if app.codex_login.lock().unwrap().pending() || app.antigravity_login.lock().unwrap().pending() {
+        return Err("finish or cancel sign-in first".into());
+    }
+    app.chat.models()
+}
+
+/// Applies `model` to the following turns and to new conversations of this provider.
+#[tauri::command(async)]
+fn chat_set_model(app: tauri::State<'_, App>, model: String) -> Result<(), String> {
+    if model.trim().is_empty() || model.len() > 200 { return Err("invalid model".into()); }
+    app.chat.set_model(&model)?;
+    let provider = app.chat_provider.lock().unwrap().clone();
+    app.chat_models.lock().unwrap().insert(provider, model);
     Ok(())
 }
 
@@ -444,7 +467,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -475,6 +498,8 @@ fn main() {
             antigravity_login_cancel,
             chat_reset,
             chat_select,
+            chat_models,
+            chat_set_model,
             chat_info,
             set_typing,
             project_info,

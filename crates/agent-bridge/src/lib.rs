@@ -473,4 +473,33 @@ pub trait AgentBridge: Send {
 
     /// Closes an open session and releases its resources.
     fn close_session(&mut self, session_id: &SessionId) -> Result<(), BridgeError>;
+
+    /// Lists the models the runtime offers for an open session (`AGT-011`).
+    /// Must not start a model turn or return account details.
+    fn list_models(&mut self, session_id: &SessionId) -> Result<Vec<ModelOption>, BridgeError> {
+        let _ = session_id;
+        Err(BridgeError::new(ErrorCode::InvalidConfig, "this agent does not list models"))
+    }
+
+    /// Selects `model` (an id from [`AgentBridge::list_models`]) for the
+    /// following turns of an open session, keeping its conversation.
+    fn set_model(&mut self, session_id: &SessionId, model: &str) -> Result<(), BridgeError> {
+        let _ = (session_id, model);
+        Err(BridgeError::new(ErrorCode::InvalidConfig, "this agent does not support model selection"))
+    }
+}
+
+/// A model offered by an agent runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelOption {
+    /// Identifier passed back to [`AgentBridge::set_model`].
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Optional short description from the runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Whether the session currently uses this model (initially the runtime default).
+    #[serde(default)]
+    pub current: bool,
 }

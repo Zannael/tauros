@@ -187,6 +187,8 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatStop = document.getElementById('chat-stop');
 let authBusy = false;
+const chatModel = document.getElementById('chat-model');
+let modelsReady = false, modelGeneration = 0, currentModel = '';
 let chatBusy = false, chatGeneration = 0;   // a new chat ignores the old turn's late events
 
 invoke('chat_info').then((project) => {
@@ -229,6 +231,7 @@ function setChatBusy(busy) {
   document.getElementById('chat-provider').disabled = busy || authBusy;
   document.getElementById('chat-new').disabled = authBusy;
   document.getElementById('auth-login').disabled = busy || authBusy;
+  chatModel.disabled = busy || authBusy || !modelsReady;
   chatStop.hidden = !busy;
   updatePreviewControls();
 }
@@ -433,13 +436,56 @@ document.getElementById('chat-provider').addEventListener('change', async (event
     selectedProvider = provider;
     chatGeneration++;
     chatLog.innerHTML = '';
-    showAuthPanel(provider);
+    showAuthPanel(provider).then(() => {
+      if (provider !== 'antigravity' || authPanel.dataset.state === 'signed_in') loadModels();
+      else modelPlaceholder('Sign in to choose');
+    });
   } catch (error) {
     event.target.value = selectedProvider;
     chatAppend('error', `${error}`);
   }
 });
 
+
+// AGT-011: the runtime's own model list; a change applies to the next message
+// and keeps the conversation. Loading starts the agent session but no turn.
+function modelPlaceholder(text) {
+  modelsReady = false;
+  chatModel.replaceChildren(new Option(text, ''));
+  setChatBusy(chatBusy);
+}
+async function loadModels() {
+  const generation = ++modelGeneration;
+  modelPlaceholder('Loading…');
+  try {
+    const models = await invoke('chat_models');
+    if (generation !== modelGeneration) return;
+    if (!models.length) { modelPlaceholder('Default'); return; }
+    chatModel.replaceChildren(...models.map((m) => {
+      const option = new Option(m.name, m.id, false, m.current);
+      if (m.description) option.title = m.description;
+      return option;
+    }));
+    currentModel = chatModel.value;
+    modelsReady = true;
+    setChatBusy(chatBusy);
+  } catch (error) {
+    if (generation !== modelGeneration) return;
+    modelPlaceholder(handleAuthRequired(error) || /sign-in|sign in|auth/i.test(`${error}`) ? 'Sign in to choose' : 'Unavailable');
+    chatModel.title = `${error}`;
+  }
+}
+chatModel.addEventListener('change', async () => {
+  const model = chatModel.value;
+  try {
+    await invoke('chat_set_model', { model });
+    currentModel = model;
+    chatAppend('meta', `Model: ${chatModel.selectedOptions[0].text} (from the next message)`);
+  } catch (error) {
+    chatModel.value = currentModel;
+    chatAppend('error', `${error}`);
+  }
+});
 
 // The runtime owns the browser callback and credential store. Only a status
 // enum crosses IPC: OAuth URLs, login IDs and tokens stay out of the chat log.
@@ -474,6 +520,7 @@ const authFor = () => authProviders[selectedProvider];
 function showLoginStatus(state) {
   const auth = authFor();
   if (!auth) return;
+  if (state === 'signed_in' && authPanel.dataset.state === 'pending') setTimeout(loadModels, 0);
   authBusy = state === 'pending';
   authPanel.dataset.state = state;
   authLogin.textContent = state === 'signed_in' ? 'Check connection' : 'Sign in';
@@ -544,3 +591,5 @@ function handleAuthRequired(error) {
   showLoginStatus('signed_out');
   return true;
 }
+
+loadModels();

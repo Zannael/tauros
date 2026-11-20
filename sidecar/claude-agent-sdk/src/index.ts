@@ -11,6 +11,7 @@ import type {
   AgentEvent,
   ErrorCode,
   McpServerConfig,
+  ModelOption,
   SessionConfig,
   SidecarCommand,
   SidecarMessage,
@@ -37,8 +38,8 @@ function emit(msg: SidecarMessage): void {
   process.stdout.write(`${JSON.stringify(msg)}\n`);
 }
 
-function ackOk(id: string): void {
-  emit({ type: 'ack', id, ok: true });
+function ackOk(id: string, data?: unknown): void {
+  emit(data === undefined ? { type: 'ack', id, ok: true } : { type: 'ack', id, ok: true, data });
 }
 
 function ackErr(id: string, code: ErrorCode, message: string): void {
@@ -380,6 +381,8 @@ async function runDirectMcpTestTurn(
   const { turnId, abortController } = turn;
 
   emitEvent(sessionId, { type: 'turn_started', turn_id: turnId });
+  // Lets tests observe which model the next SDK turn would be given (AGT-011).
+  emitEvent(sessionId, { type: 'status', turn_id: turnId, message: `model:${config.model ?? 'default'}` });
 
   const serverEntry = Object.entries(config.mcp_servers ?? {}).find(
     ([, cfg]) => cfg.transport === 'stdio',
@@ -587,6 +590,47 @@ async function runDirectMcpTestTurn(
   }
 }
 
+/** Deterministic list for the `direct_mcp` test driver; never a real model. */
+const TEST_MODELS = [
+  { value: 'default', displayName: 'Default (fixture)', description: 'fixture default' },
+  { value: 'fixture-large', displayName: 'Fixture Large', description: 'fixture alternative' },
+];
+
+/**
+ * Lists models via `supportedModels()` on a query whose prompt never yields:
+ * the CLI initializes with the host sign-in but no message, so no model turn
+ * runs. Only ids, names and descriptions are returned (AGT-011).
+ */
+async function listModels(session: SessionState): Promise<ModelOption[]> {
+  const selected = session.config.model ?? 'default';
+  let infos: { value: string; displayName: string; description: string }[];
+  if (session.config.extra?.test_driver === 'direct_mcp') {
+    infos = TEST_MODELS;
+  } else {
+    const abortController = new AbortController();
+    let release: () => void = () => {};
+    const idle = new Promise<void>((resolve) => { release = resolve; });
+    async function* noMessages(): AsyncGenerator<never> { await idle; }
+    const q = query({
+      prompt: noMessages(),
+      options: { abortController, cwd: session.config.working_dir, tools: [], settingSources: [], persistSession: false },
+    });
+    try {
+      infos = await q.supportedModels();
+    } finally {
+      release();
+      abortController.abort();
+      q.close?.();
+    }
+  }
+  return infos.map((m) => ({
+    id: m.value,
+    name: m.displayName || m.value,
+    description: m.description || undefined,
+    current: m.value === selected,
+  }));
+}
+
 function handleCommand(cmd: SidecarCommand): void {
   switch (cmd.type) {
     case 'start_session': {
@@ -659,6 +703,42 @@ function handleCommand(cmd: SidecarCommand): void {
         session.activeTurn.abortController.abort();
       }
       sessions.delete(cmd.session_id);
+      ackOk(cmd.id);
+      return;
+    }
+
+    case 'list_models': {
+      const session = sessions.get(cmd.session_id);
+      if (!session) {
+        ackErr(cmd.id, 'session_not_found', `unknown session ${cmd.session_id}`);
+        return;
+      }
+      listModels(session).then(
+        (models) => ackOk(cmd.id, models),
+        (err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          ackErr(cmd.id, isAuthErrorMessage(message) ? 'auth_required' : 'provider', 'cannot list Claude models; check the Claude Code sign-in');
+        },
+      );
+      return;
+    }
+
+    case 'set_model': {
+      const session = sessions.get(cmd.session_id);
+      if (!session) {
+        ackErr(cmd.id, 'session_not_found', `unknown session ${cmd.session_id}`);
+        return;
+      }
+      if (session.activeTurn) {
+        ackErr(cmd.id, 'busy', 'Claude is still answering');
+        return;
+      }
+      if (!cmd.model) {
+        ackErr(cmd.id, 'invalid_config', 'empty model');
+        return;
+      }
+      // Applied to the next resumed turn; the conversation is kept.
+      session.config = { ...session.config, model: cmd.model === 'default' ? undefined : cmd.model };
       ackOk(cmd.id);
       return;
     }

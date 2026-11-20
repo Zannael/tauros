@@ -120,7 +120,26 @@ export type SidecarCommand =
       id: string;
       session_id: string;
     }
+  | {
+      type: 'list_models';
+      id: string;
+      session_id: string;
+    }
+  | {
+      type: 'set_model';
+      id: string;
+      session_id: string;
+      model: string;
+    }
   | { type: 'shutdown' };
+
+/** A model offered by the runtime (AGT-011); mirrors the Rust `ModelOption`. */
+export interface ModelOption {
+  id: string;
+  name: string;
+  description?: string;
+  current: boolean;
+}
 
 export type SidecarMessage =
   | { type: 'ready'; version: string; sdk: string }
@@ -128,6 +147,7 @@ export type SidecarMessage =
       type: 'ack';
       id: string;
       ok: true;
+      data?: unknown;
     }
   | {
       type: 'ack';

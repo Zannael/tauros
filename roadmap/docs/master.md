@@ -701,6 +701,46 @@ unchanged and the panel hidden for Claude. Limits: a real completed Google
 sign-in from Tauros, failure after a browser error and token renewal were not
 exercised; the Tauri window itself was not driven.
 
+## Model selector (AGT-011)
+
+**Verified** 2026-11-20 UTC (installed runtimes, no inference):
+- Claude Agent SDK 0.3.328: `Query.supportedModels()` answers on a query whose
+  streaming prompt never yields; the list holds aliases (`default`, `opus`,
+  `sonnet`, `fable`, `haiku`) and full ids. The `model` option is per `query()`,
+  so each resumed turn can use a different model.
+- Codex app-server 0.162.0-alpha.2 (generated JSON schema): `model/list` takes
+  `cursor`, `includeHidden`, `limit` and returns `data` (`model`, `displayName`,
+  `description`, `hidden`, `isDefault`, ...) with `nextCursor`; `turn/start`
+  `model` is documented as "Override the model for this turn and subsequent turns".
+- Antigravity CLI 1.5.11: `session/new` returns `models.availableModels`
+  (`modelId`, `name`) and `currentModelId`; `session/set_model` changes it. The
+  list also contains Claude and GPT-OSS models for this account and client.
+
+**Accepted** 2026-11-20 (Owner request, agent-owned design): `AgentBridge` gains
+default-unsupported `list_models` and `set_model` returning `ModelOption { id,
+name, description, current }`. Claude: sidecar commands `list_models` (ack
+`data`) and `set_model` (updates the session's `model`; `default` clears it).
+Codex: visible `model/list` pages (at most 10) and a per-session override sent
+with every following `turn/start`. Antigravity: the `session/new` list and
+`session/set_model`, refusing ids it did not offer. `Chat` keeps the choice and
+applies it to every session it starts; the app remembers it per provider for the
+run. Selection is refused while a reply streams. The choice is not persisted
+across app restarts.
+
+**Verified** 2026-11-20 UTC: `cargo test -p tauros-app --test model_selection`
+passed: for each adapter against its deterministic peer, the listed ids and the
+current flag, the model the peer reports for the next turn after a change, the
+same conversation continuing (Antigravity turn 2), the choice reapplied after
+`reset`, Codex hidden models excluded across two pages, an unoffered Antigravity
+id refused. `TAUROS_LIVE_MODELS=1 ... live_runtimes_list_models_without_inference
+-- --ignored` passed (3.7 s): Claude 14, Codex 8 and Antigravity 23 models, each
+with exactly one current. The selector was checked in the built-in browser with
+mocked IPC (loading, lists per provider, change notice, refusal while busy,
+signed-out placeholder, choice restored when switching back, full-width row).
+Limits: no real turn on a non-default model was run; the Tauri window was not
+driven; whether a listed model is usable by the account is only known at the
+next message.
+
 ## Open decisions
 
 Tracked as tasks, not here. The voice engine is chosen within AGT-004.

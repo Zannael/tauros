@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     event_channel, AgentBridge, AgentEvent, AuthMode, BridgeCapabilities, BridgeError, ErrorCode,
-    EventSender, FinishReason, SessionConfig, SessionId, TurnId, TurnStream, UserMessage,
+    EventSender, FinishReason, ModelOption, SessionConfig, SessionId, TurnId, TurnStream, UserMessage,
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -93,6 +93,15 @@ enum OutboundCommand<'a> {
         id: &'a str,
         session_id: &'a SessionId,
     },
+    ListModels {
+        id: &'a str,
+        session_id: &'a SessionId,
+    },
+    SetModel {
+        id: &'a str,
+        session_id: &'a SessionId,
+        model: &'a str,
+    },
     Shutdown,
 }
 
@@ -112,6 +121,8 @@ enum InboundMessage {
         code: Option<ErrorCode>,
         #[serde(default)]
         message: Option<String>,
+        #[serde(default)]
+        data: serde_json::Value,
     },
     Event {
         session_id: SessionId,
@@ -121,7 +132,7 @@ enum InboundMessage {
 
 #[derive(Default)]
 struct SharedState {
-    pending_acks: HashMap<String, Sender<Result<(), BridgeError>>>,
+    pending_acks: HashMap<String, Sender<Result<serde_json::Value, BridgeError>>>,
     active_turns: HashMap<(SessionId, TurnId), EventSender>,
     stderr_tail: VecDeque<String>,
 }
@@ -216,9 +227,10 @@ impl ClaudeSidecarAdapter {
                         ok,
                         code,
                         message,
+                        data,
                     }) => {
                         let result = if ok {
-                            Ok(())
+                            Ok(data)
                         } else {
                             Err(BridgeError::new(
                                 code.unwrap_or(ErrorCode::Internal),
@@ -325,6 +337,15 @@ impl ClaudeSidecarAdapter {
         req_id: &str,
         cmd: &OutboundCommand<'_>,
     ) -> Result<(), BridgeError> {
+        self.send_command_with_data(req_id, cmd).map(|_| ())
+    }
+
+    /// Like [`Self::send_command_with_ack`], returning the ack's `data` payload.
+    fn send_command_with_data(
+        &mut self,
+        req_id: &str,
+        cmd: &OutboundCommand<'_>,
+    ) -> Result<serde_json::Value, BridgeError> {
         let (tx, rx) = mpsc::channel();
         {
             let mut guard = self
@@ -482,6 +503,18 @@ impl AgentBridge for ClaudeSidecarAdapter {
             guard.active_turns.retain(|(sid, _), _| sid != session_id);
         }
         res
+    }
+
+    fn list_models(&mut self, session_id: &SessionId) -> Result<Vec<ModelOption>, BridgeError> {
+        let req_id = self.next_req_id();
+        let data = self.send_command_with_data(&req_id, &OutboundCommand::ListModels { id: &req_id, session_id })?;
+        serde_json::from_value(data)
+            .map_err(|_| BridgeError::new(ErrorCode::Transport, "sidecar returned an invalid model list"))
+    }
+
+    fn set_model(&mut self, session_id: &SessionId, model: &str) -> Result<(), BridgeError> {
+        let req_id = self.next_req_id();
+        self.send_command_with_ack(&req_id, &OutboundCommand::SetModel { id: &req_id, session_id, model })
     }
 }
 

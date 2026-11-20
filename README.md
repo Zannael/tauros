@@ -427,6 +427,24 @@ or the Owner's manual verification in the Tauri window; browser-only inspection
 is not evidence that Tauri commands or Stop/history work.
 
 
+Below **Agent**, the **Model** selector lists the models the selected runtime
+offers: the Claude Agent SDK's `supportedModels()`, Codex app-server `model/list`
+(hidden models excluded) and the models Antigravity reports for its ACP session.
+The runtime's default is preselected. A change applies from the next message and
+keeps the conversation; it is remembered per provider for new chats until Tauros
+exits. Loading the list starts the agent session but sends no message. While a
+reply or a sign-in is in progress the selector is disabled; when a provider is
+signed out it shows **Sign in to choose**. `TAUROS_CODEX_MODEL` and
+`TAUROS_AGY_MODEL` still set the initial model.
+
+```bash
+cargo test -p tauros-app --test model_selection
+TAUROS_LIVE_MODELS=1 TAUROS_AGY_BIN=/path/to/agy cargo test -p tauros-app --test model_selection live_ -- --ignored --nocapture
+```
+
+The second command reads each real runtime's list without inference; it needs
+the Claude Code sign-in, the signed-in Codex home and Antigravity CLI.
+
 **Antigravity** uses the official Agent Client Protocol server of Antigravity CLI
 (`agy acp`), the route Google documents for "any ACP client"
 ([ACP guide](https://antigravity.google/docs/ide/extensions/acp)). It reuses the

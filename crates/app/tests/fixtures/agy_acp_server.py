@@ -137,6 +137,8 @@ def run_turn(ident, session, text):
             allowed, _ = mcp_call(session, "tauros", "tauros_status", {})
             if allowed:
                 os._exit(3)  # A cancelled turn ends without an error report.
+        elif text == "model?":
+            update(session, sessionUpdate="agent_message_chunk", content=dict(type="text", text=f"model {state['model']} "))
         elif text == "continue":
             assert number == 2, "session continuity lost"
         elif text == "crash":
@@ -171,8 +173,9 @@ for line in sys.stdin:
             continue
         assert params["cwd"] == os.getcwd()
         session = f"session-{len(sessions) + 1}"
-        sessions[session] = dict(mcp={s["name"]: Mcp(s) for s in params["mcpServers"]}, mode=None)
-        result = dict(sessionId=session)
+        sessions[session] = dict(mcp={s["name"]: Mcp(s) for s in params["mcpServers"]}, mode=None, model="fixture-flash")
+        result = dict(sessionId=session, models=dict(currentModelId="fixture-flash", availableModels=[
+            dict(modelId="fixture-flash", name="Fixture Flash"), dict(modelId="fixture-pro", name="Fixture Pro")]))
     elif method == "authenticate":
         # The real runtime opens the browser itself; no URL is ever sent to the client.
         assert params == dict(methodId="oauth-personal"), params
@@ -183,6 +186,9 @@ for line in sys.stdin:
         elif login_mode == "failure":
             emit(dict(id=ident, error=dict(code=-32603, message="PRIVATE_failure detail")))
         continue  # "pending": never answers until terminated
+    elif method == "session/set_model":
+        assert params["modelId"] in ("fixture-flash", "fixture-pro"), params
+        sessions[params["sessionId"]]["model"] = params["modelId"]
     elif method == "session/set_mode":
         assert params["modeId"] == "default"
         sessions[params["sessionId"]]["mode"] = params["modeId"]

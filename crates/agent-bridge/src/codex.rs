@@ -75,6 +75,8 @@ struct State {
     replies: HashMap<u64, mpsc::Sender<Result<Value, BridgeError>>>,
     active: HashMap<String, Active>,
     sessions: HashMap<String, String>,
+    /// Model chosen by the user; sent with each following `turn/start`.
+    model_overrides: HashMap<String, String>,
     login_completed: Option<(String, bool)>,
 }
 fn transport(message: impl Into<String>) -> BridgeError {
@@ -655,7 +657,11 @@ impl AgentBridge for CodexAdapter {
                 serde_json::to_string(&message.attachments).unwrap()
             ));
         }
-        let started = self.rpc("turn/start", json!({"threadId":session,"input":[{"type":"text","text":text}],"sandboxPolicy":{"type":"readOnly","networkAccess":false}}));
+        let mut params = json!({"threadId":session,"input":[{"type":"text","text":text}],"sandboxPolicy":{"type":"readOnly","networkAccess":false}});
+        if let Some(model) = self.state.lock().unwrap().model_overrides.get(session.as_str()) {
+            params["model"] = json!(model);
+        }
+        let started = self.rpc("turn/start", params);
         if let Err(error) = &started {
             // A timeout can race with a running host tool. Keep its stream alive
             // and terminate the runtime; EOF cleanup records edits before the
@@ -698,6 +704,46 @@ impl AgentBridge for CodexAdapter {
         )?;
         Ok(())
     }
+    fn list_models(&mut self, session: &SessionId) -> Result<Vec<ModelOption>, BridgeError> {
+        let current = self.session_model(session)
+            .ok_or_else(|| BridgeError::new(ErrorCode::SessionNotFound, "unknown Codex session"))?;
+        let mut models = Vec::new();
+        let mut cursor = Value::Null;
+        // Bounded pagination; the runtime returns account-visible models only.
+        for _ in 0..10 {
+            let page = self.rpc("model/list", json!({"includeHidden": false, "cursor": cursor}))?;
+            for model in page["data"].as_array().into_iter().flatten() {
+                let Some(id) = model["model"].as_str().filter(|id| !id.is_empty()) else { continue };
+                if model["hidden"] == true { continue; }
+                models.push(ModelOption {
+                    id: id.to_owned(),
+                    name: model["displayName"].as_str().unwrap_or(id).to_owned(),
+                    description: model["description"].as_str().filter(|d| !d.is_empty()).map(str::to_owned),
+                    current: id == current,
+                });
+            }
+            cursor = page["nextCursor"].clone();
+            if cursor.is_null() { break; }
+        }
+        Ok(models)
+    }
+
+    fn set_model(&mut self, session: &SessionId, model: &str) -> Result<(), BridgeError> {
+        if model.is_empty() {
+            return Err(BridgeError::new(ErrorCode::InvalidConfig, "empty Codex model"));
+        }
+        let mut state = self.state.lock().unwrap();
+        if !state.sessions.contains_key(session.as_str()) {
+            return Err(BridgeError::new(ErrorCode::SessionNotFound, "unknown Codex session"));
+        }
+        if state.active.contains_key(session.as_str()) {
+            return Err(BridgeError::new(ErrorCode::Busy, "Codex is still answering"));
+        }
+        state.model_overrides.insert(session.to_string(), model.to_owned());
+        state.sessions.insert(session.to_string(), model.to_owned());
+        Ok(())
+    }
+
     fn close_session(&mut self, session: &SessionId) -> Result<(), BridgeError> {
         let turn = self
             .state

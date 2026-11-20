@@ -145,6 +145,21 @@ struct State {
 struct Session {
     servers: HashSet<String>,
     preamble: Option<String>,
+    models: Vec<ModelOption>,
+}
+
+/// Models from the `session/new` reply, marking the one the session uses.
+fn session_models(result: &Value) -> Vec<ModelOption> {
+    let current = result["models"]["currentModelId"].as_str().unwrap_or("");
+    result["models"]["availableModels"].as_array().into_iter().flatten().filter_map(|model| {
+        let id = model["modelId"].as_str().filter(|id| !id.is_empty())?;
+        Some(ModelOption {
+            id: id.to_owned(),
+            name: model["name"].as_str().unwrap_or(id).to_owned(),
+            description: model["description"].as_str().map(str::to_owned),
+            current: id == current,
+        })
+    }).collect()
 }
 
 /// One supervised `agy acp` process; sessions remain open across chat turns.
@@ -476,7 +491,8 @@ impl AgentBridge for AntigravityAdapter {
         if let Some(model) = &config.model {
             self.rpc("session/set_model", json!({"sessionId": id, "modelId": model}))?;
         }
-        self.state.lock().unwrap().sessions.insert(id, Session { servers, preamble: config.system_prompt });
+        let models = session_models(&result);
+        self.state.lock().unwrap().sessions.insert(id, Session { servers, preamble: config.system_prompt, models });
         Ok(session)
     }
 
@@ -533,6 +549,35 @@ impl AgentBridge for AntigravityAdapter {
         }
         // The prompt response then ends the turn with stopReason `cancelled`.
         write(&self.stdin, json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId": session}}))
+    }
+
+    fn list_models(&mut self, session: &SessionId) -> Result<Vec<ModelOption>, BridgeError> {
+        let state = self.state.lock().unwrap();
+        let session = state.sessions.get(session.as_str())
+            .ok_or_else(|| BridgeError::new(ErrorCode::SessionNotFound, "unknown Antigravity session"))?;
+        Ok(session.models.clone())
+    }
+
+    fn set_model(&mut self, session: &SessionId, model: &str) -> Result<(), BridgeError> {
+        {
+            let state = self.state.lock().unwrap();
+            let entry = state.sessions.get(session.as_str())
+                .ok_or_else(|| BridgeError::new(ErrorCode::SessionNotFound, "unknown Antigravity session"))?;
+            if state.active.contains_key(session.as_str()) {
+                return Err(BridgeError::new(ErrorCode::Busy, "Antigravity is still answering"));
+            }
+            if !entry.models.iter().any(|m| m.id == model) {
+                return Err(BridgeError::new(ErrorCode::InvalidConfig, "model not offered by Antigravity"));
+            }
+        }
+        self.rpc("session/set_model", json!({"sessionId": session, "modelId": model}))?;
+        let mut state = self.state.lock().unwrap();
+        if let Some(entry) = state.sessions.get_mut(session.as_str()) {
+            for option in &mut entry.models {
+                option.current = option.id == model;
+            }
+        }
+        Ok(())
     }
 
     fn close_session(&mut self, session: &SessionId) -> Result<(), BridgeError> {

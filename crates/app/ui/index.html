@@ -32,16 +32,19 @@
     .history-sha { color: var(--muted); font-family: monospace; }
     #chat { width: 400px; height: 100%; display: flex; flex-direction: column; background: #211c24;
             border: 1px solid #352c3b; border-radius: 6px; min-height: 0; }
-    #chat-header { display: flex; align-items: center; gap: 12px; padding: 14px; }
+    #chat-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 14px; }
     #chat-provider-control { flex: 1; min-width: 0; }
-    #chat-provider-control label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    #chat-model-control { flex: 1 1 100%; order: 3; min-width: 0; }
+    #chat-provider-control label, #chat-model-control label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
     .select-control { position: relative; min-width: 0; }
     .select-control::after { content: ''; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
                             border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
                             transform: translateY(-70%) rotate(45deg); pointer-events: none; }
     select { -webkit-appearance: none; appearance: none; }
-    #chat-provider { display: block; width: 100%; height: 36px; background: var(--bg); color: var(--fg);
+    #chat-provider, #chat-model { display: block; width: 100%; height: 36px; background: var(--bg); color: var(--fg);
                      border: 1px solid #584b60; border-radius: 5px; padding: 0 32px 0 10px; font: inherit; font-weight: 600; }
+    #chat-model { font-weight: 400; text-overflow: ellipsis; }
+    #chat-model:disabled { color: var(--muted); }
     select option { background: #211c24; color: var(--fg); }
     #chat-new { align-self: flex-end; height: 36px; color: var(--muted); background: transparent; }
     button:hover:not(:disabled) { background: #3a303f; }
@@ -132,6 +135,14 @@
             <option value="claude">Claude</option>
             <option value="codex_chatgpt">Codex</option>
             <option value="antigravity">Antigravity</option>
+          </select>
+        </div>
+      </div>
+      <div id="chat-model-control">
+        <label for="chat-model">Model</label>
+        <div class="select-control">
+          <select id="chat-model" aria-label="Model for the next messages" disabled>
+            <option value="">Loading…</option>
           </select>
         </div>
       </div>

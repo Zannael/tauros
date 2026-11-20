@@ -16,6 +16,7 @@ interrupted = threading.Event()
 turn_count = 0
 servers = {}
 api_mode = False
+turn_model = None
 
 
 def emit(value):
@@ -91,6 +92,8 @@ def run_turn(text, number):
                 child.wait(timeout=5)
         elif text == "wait":
             interrupted.wait(15)
+        elif text == "model?":
+            note("item/agentMessage/delta", delta=f"model {turn_model} ")
         elif text == "continue":
             assert number == 2, "session continuity lost"
         elif text == "crash":
@@ -132,8 +135,20 @@ for line in sys.stdin:
         assert params["serverName"] == "tauros"
         result = dict(data=[dict(name="tauros", runtimeStatus="connected",
                                 tools={"tauros_status": dict(name="tauros_status")}, toolsError=None)])
+    elif method == "model/list":
+        # Two pages; hidden models must not be offered.
+        if params.get("cursor") is None:
+            result = dict(data=[dict(id="p1", model="synthetic-code-mode-model", displayName="Synthetic", description="fixture default",
+                                     hidden=False, isDefault=True),
+                                dict(id="p2", model="hidden-model", displayName="Hidden", description="", hidden=True, isDefault=False)],
+                          nextCursor="page-2")
+        else:
+            assert params["cursor"] == "page-2"
+            result = dict(data=[dict(id="p3", model="synthetic-large", displayName="Synthetic Large", description="fixture alternative",
+                                     hidden=False, isDefault=False)], nextCursor=None)
     elif method == "turn/start":
         assert params["threadId"] == "fixture-thread"
+        turn_model = params.get("model") or turn_model
         assert params["sandboxPolicy"] == dict(type="readOnly", networkAccess=False)
         turn_count += 1
         interrupted.clear()
