@@ -204,11 +204,7 @@ pub fn codex_backend(
     let host = server.map(InProcessMcpHost::start).transpose()?;
     let script = std::fs::canonicalize(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../sidecar/codex/mcp-bridge.mjs")).map_err(|e| e.to_string())?;
-    let node = if host.is_some() {
-        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-            .map(|dir| dir.join("node")).find(|path| path.is_file())
-            .and_then(|path| std::fs::canonicalize(path).ok()).ok_or("Node.js is required for the Codex MCP bridge")?
-    } else { PathBuf::from("node") };
+    let node = if host.is_some() { find_node()? } else { PathBuf::from("node") };
     let mcp_servers = host.iter().map(|host| {
         config.mcp_mounts.push(node.clone());
         config.mcp_mounts.push(script.clone());
@@ -221,6 +217,47 @@ pub fn codex_backend(
         mcp_servers, auth_mode, model, ..SessionConfig::default()
     }).map_err(|e| e.message)?;
     Ok(ChatBackend { bridge: Box::new(bridge), session, keep_alive: Box::new((host, native)) })
+}
+
+fn find_node() -> Result<PathBuf, String> {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|dir| dir.join("node")).find(|path| path.is_file())
+        .and_then(|path| std::fs::canonicalize(path).ok()).ok_or_else(|| "Node.js is required for the MCP socket bridge".to_owned())
+}
+
+/// Antigravity over ACP with the subscription sign-in cached by `agy`. Domain
+/// tools come from the shared Tauros MCP host; native source tools from the
+/// snapshot-guarded `project` MCP server. All built-in Antigravity tools are denied.
+pub fn antigravity_backend(
+    config: tauros_agent_bridge::antigravity::AntigravityConfig,
+    server: Option<TaurosServer>,
+    working_dir: PathBuf,
+    model: Option<String>,
+) -> Result<ChatBackend, String> {
+    use tauros_agent_bridge::antigravity::AntigravityAdapter;
+    validate_codex_home(&config.home, &working_dir)?;
+    let working_dir = std::fs::canonicalize(working_dir).map_err(|e| e.to_string())?;
+    let native = server.as_ref().and_then(TaurosServer::operation_gate)
+        .map(|gate| crate::native_edit::NativeEditHost::start(&working_dir, gate)).transpose()?;
+    let tools = Arc::new(crate::codex_tools::ProjectCodexTools::new(working_dir.clone(),
+        native.as_ref().map(|native| native.socket_path().to_owned())));
+    let project = native.as_ref().map(|_| crate::native_mcp::NativeMcpHost::start(tools)).transpose()?;
+    let host = server.map(InProcessMcpHost::start).transpose()?;
+    let script = std::fs::canonicalize(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../sidecar/codex/mcp-bridge.mjs")).map_err(|e| e.to_string())?;
+    let node = if host.is_some() { find_node()? } else { PathBuf::from("node") };
+    let mut mcp_servers = BTreeMap::new();
+    if let Some(host) = &host { mcp_servers.insert("tauros".to_owned(), host.mcp_server_config(&node, &script)); }
+    if let Some(project) = &project { mcp_servers.insert("project".to_owned(), project.mcp_server_config(&node, &script)); }
+    let mut bridge = AntigravityAdapter::spawn(config).map_err(|e| e.message)?;
+    let system_prompt = format!("{SYSTEM_PROMPT} Native project tools are the `project` MCP server \
+(tauros_read_file, tauros_write_file, tauros_shell; paths relative to {}). Built-in file, command and browser \
+tools are denied by Tauros; do not retry them.", working_dir.display());
+    let session = bridge.start_session(SessionConfig {
+        working_dir: Some(working_dir), system_prompt: Some(system_prompt),
+        mcp_servers, auth_mode: AuthMode::HostSignIn, model, ..SessionConfig::default()
+    }).map_err(|e| e.message)?;
+    Ok(ChatBackend { bridge: Box::new(bridge), session, keep_alive: Box::new((host, project, native)) })
 }
 
 /// Validate the dedicated runtime store before either sign-in or a model turn.
@@ -244,7 +281,7 @@ pub fn validate_codex_home(home: &std::path::Path, project: &std::path::Path) ->
     let runtime_home = destination(&home)?;
     let project_root = std::fs::canonicalize(project).map_err(|e| e.to_string())?;
     if runtime_home.starts_with(&project_root) || project_root.starts_with(&runtime_home) {
-        return Err("Codex home and game project must be separate directories".into());
+        return Err("agent runtime home and game project must be separate directories".into());
     }
     std::fs::create_dir_all(&runtime_home).map_err(|e| e.to_string())?;
     Ok(())

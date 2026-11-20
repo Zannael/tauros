@@ -66,7 +66,7 @@ Available in Phase 2:
 What is missing:
 
 - Creating new maps or resizing layouts (G3-010).
-- Local voice input (`AGT-004`), API-key/Codex/Gemini adapters (`AGT-005..007`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
+- Local voice input (`AGT-004`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
 
 Available in Phase 3 (complete) & Phase 4 (in progress):
 
@@ -228,7 +228,7 @@ not resume a save. Coordinates are checked against map bounds, not walkability.
 Only the pinned Emerald expansion and Linux desktop have been checked; there is
 no gamepad or keyboard remapping UI yet.
 
-The panel on the right offers Claude and Codex with ChatGPT in the agent selector. Switching providers starts a new conversation. Claude uses the Agent SDK sidecar.
+The panel on the right offers Claude, Codex with ChatGPT and Antigravity (Gemini) in the agent selector. Switching providers starts a new conversation. Claude uses the Agent SDK sidecar.
 Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
 sidecar/claude-agent-sdk run build`; it uses your existing Claude Code sign-in
 (`claude auth login`), and Tauros never sees or stores the credentials. With
@@ -426,6 +426,41 @@ control disabled. These desktop checks require an enabled native desktop surface
 or the Owner's manual verification in the Tauri window; browser-only inspection
 is not evidence that Tauri commands or Stop/history work.
 
+
+**Antigravity** uses the official Agent Client Protocol server of Antigravity CLI
+(`agy acp`), the route Google documents for "any ACP client"
+([ACP guide](https://antigravity.google/docs/ide/extensions/acp)). It reuses the
+Google subscription sign-in cached by the CLI: sign in once with an interactive
+`agy` session or `agy acp --login`. Tauros never reads or stores the credentials,
+removes `GEMINI_API_KEY` and Google Cloud credential variables from the runtime's
+environment so no paid route is chosen, and offers no API-key option (AGT-009).
+Install the CLI from the official release (the version checked is pinned in
+`toolchain/mcp-clients.json`); Tauros searches absolute `PATH` entries for `agy`,
+or uses `TAUROS_AGY_BIN`. `TAUROS_AGY_MODEL` selects a model id listed by the
+server. Runtime state lives in `$TAUROS_DATA/antigravity`, with its own settings
+directory, so your personal Antigravity MCP servers and permission rules are not
+loaded; its workspace is an empty directory, never the game project.
+
+Antigravity asks the client before every tool call. Tauros allows only the tools
+of the two MCP servers it attaches: `tauros` (domain and emulator tools) and
+`project`, which serves the same snapshot-guarded `tauros_read_file`,
+`tauros_write_file` and confined `tauros_shell` tools as Codex. Built-in file
+reads and edits, commands, browser and other tools are denied, and Tauros
+advertises no client filesystem or terminal capability. Tool calls, thinking and
+text stream to the chat; **Stop** sends an ACP cancel and answers any pending
+permission request as cancelled. Unlike Codex, the runtime process is not placed
+in a separate mount namespace (its sign-in lives in the OS credential store);
+the permission boundary and the empty workspace are what keep it away from the
+game sources. Check with:
+
+```bash
+cargo test -p tauros-app --test antigravity_adapter
+TAUROS_LIVE_AGY=1 cargo test -p tauros-app --test antigravity_adapter live_ -- --ignored
+```
+
+The first command uses an original deterministic ACP peer that launches the real
+MCP servers. The second sends original synthetic text to Gemini through your
+subscription and checks a native edit, a Tauros domain tool, History and undo.
 
 Native `Edit`, `Write` and every `Bash` call acquire a project transaction and
 snapshot pending work before executing. Changes are committed as AI-Generated

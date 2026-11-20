@@ -7,6 +7,7 @@
 //! sidecars or async clients internally while pushing [`AgentEvent`]s onto an
 //! [`EventStream`].
 
+pub mod antigravity;
 pub mod claude_sidecar;
 pub mod codex;
 pub mod fake;

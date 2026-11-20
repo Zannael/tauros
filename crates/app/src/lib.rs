@@ -7,3 +7,4 @@ pub mod native_edit;
 pub mod playback;
 pub mod codex_tools;
 pub mod codex_login;
+pub mod native_mcp;

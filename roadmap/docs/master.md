@@ -597,6 +597,74 @@ behavior still require implementation and tests. The Claude hook implementation
 is not evidence that equivalent hooks exist in either other runtime. No change to
 the recorded authentication decisions is made by this documentation check.
 
+## Antigravity ACP adapter (AGT-007)
+
+**Verified** 2026-11-20 UTC (official documentation, read that day):
+- [Antigravity CLI ACP](https://antigravity.google/docs/cli/acp) and
+  [Other editors (ACP)](https://antigravity.google/docs/ide/extensions/acp):
+  `agy acp` is an ACP (protocol version 1) stdio server; "Any ACP client can
+  launch Antigravity CLI" with the project directory as working directory. It
+  reuses the credentials cached by an interactive `agy` session or
+  `agy acp --login`; auth methods offered are `oauth-personal`, `oauth-business`,
+  `gemini-api-key`, `agent-platform` and `terminal-login`. Permission requests
+  pause the turn until the client allows or denies; cancelling abandons pending
+  requests. `--process-per-session` is required only for HTTP MCP servers.
+- [Antigravity authentication](https://antigravity.google/docs/install/): one
+  sign-in shared by app, CLI, IDE extensions and SDK for personal Free, Pro and
+  Ultra plans.
+- **Unofficial but provider-staff source:** a Google forum reply of 2026-09-16
+  ([thread](https://discuss.ai.google.dev/t/clarification-request-is-local-ipc-pty-wrapping-of-agy-cli-for-open-standard-editor-bridges-e-g-acp-tos-compliant/175905))
+  states that spawning the unmodified official binary locally, single-user,
+  under the user's own session and without extracting or forwarding credentials
+  is compliant, and recommends the official ACP server for ACP-based editors.
+  Forum replies are not terms; the documented ACP route is the basis.
+- This supersedes the RES-003 "consumer plans treated as not usable from Tauros"
+  row for personal use: the documented ACP client route uses the user's own
+  unmodified CLI and sign-in. Public-release suitability is not established.
+
+**Verified** 2026-11-20 UTC (run on the dev machine, Antigravity CLI 1.5.11 at
+the pinned `toolchain/mcp-clients.json` checksum): `agy acp` answered
+`initialize` (`Antigravity ACP Server` 1.5.11, `promptCapabilities.image`,
+`session` load/resume/list/close) and `session/new` with the Owner's cached
+subscription sign-in, also with a dedicated `--gemini-dir`. Every tool call,
+including MCP tools (`mcp_<server>_<tool>`), built-in `read_file` outside the
+workspace and edits, produced `session/request_permission` with `allow_once` and
+`reject_once` options in mode `default`; a rejected call ended `failed`.
+
+**Accepted** 2026-11-20 (agent-owned, within the Owner's AGT-007 direction):
+`tauros_agent_bridge::antigravity::AntigravityAdapter` is an ACP client of
+`agy acp --gemini-dir <dedicated> --disable-telemetry`, run in an empty dedicated
+workspace under `$TAUROS_DATA/antigravity` with Google API-key and Cloud
+credential variables removed and only `AuthMode::HostSignIn`. It advertises no
+client filesystem or terminal capability, sets mode `default`, and allows a
+permission request only when the tool is `mcp_<server>_<tool>` for a server it
+attached (names restricted to `[a-z0-9-]` so prefixes cannot overlap); everything
+else is rejected, and requests during a cancelled turn are answered `cancelled`.
+Native editing uses the Codex host tools served by the in-process `project` MCP
+server (`crates/app/src/native_mcp.rs`) on the AGT-008 transaction socket. ACP has
+no portable system prompt, so instructions lead the session's first turn. Unlike
+Codex there is no mount-namespace confinement, because the sign-in lives in the
+OS credential store; the permission boundary and empty workspace are the guard.
+
+**Verified** 2026-11-20 UTC: `cargo test -p tauros-app --test
+antigravity_adapter` passed with an original deterministic ACP peer that
+launches the real MCP servers: built-in write/command/read and foreign MCP calls
+denied; project read/write and Tauros `create_trainer` allowed and streamed;
+traversal write rejected; AI-Generated history, session continuity and undo;
+a failing snapshot hook rejected the write and kept the human change; cancel
+answered a late permission prompt `cancelled` and ended Cancelled; crash ended
+Failed then Transport; non-host auth refused; `-32000` mapped to AuthRequired
+without forwarding provider text; a runtime home inside the project refused.
+Temporarily making the policy permissive failed both tests. `TAUROS_LIVE_AGY=1
+... live_antigravity_mixed_turn_on_original_synthetic_data -- --ignored` passed
+(23 s) with the real CLI and the Owner's subscription on original synthetic
+data: `tauros_read_file`, `tauros_write_file` and `create_trainer` completed,
+text streamed, history AI-Generated, undo restored the file. Limits: no desktop
+check in the Tauri window yet; only the default model; image delivery from
+`emu_screenshot` to Gemini and sign-in from inside Tauros (ACP `authenticate`)
+are not exercised; the CLI's permission prompts are runtime behaviour that a
+future version could change, so the policy test must be rerun on upgrades.
+
 ## Open decisions
 
 Tracked as tasks, not here. The voice engine is chosen within AGT-004.

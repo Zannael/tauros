@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
 use tauros_agent_bridge::claude_sidecar::ClaudeSidecarConfig;
 use tauros_agent_bridge::AgentEvent;
-use tauros_app::chat::{claude_backend, codex_backend, Chat};
+use tauros_app::chat::{antigravity_backend, claude_backend, codex_backend, Chat};
 use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
 use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
 use tauros_app::mcp_host::{BuildAndBoot, ProjectSession};
@@ -142,7 +142,7 @@ fn set_typing(app: tauri::State<'_, App>, typing: bool) -> Result<(), String> {
 /// Select a provider for the next conversation; switching closes the old session.
 #[tauri::command]
 fn chat_select(app: tauri::State<'_, App>, provider: String) -> Result<(), String> {
-    if !["claude", "codex_chatgpt"].contains(&provider.as_str()) {
+    if !["claude", "codex_chatgpt", "antigravity"].contains(&provider.as_str()) {
         return Err("unknown agent provider".into());
     }
     if app.chat.busy() { return Err("wait for the current reply or stop it before switching agents".into()); }
@@ -183,7 +183,17 @@ fn codex_config() -> tauros_agent_bridge::codex::CodexConfig {
     config
 }
 
-/// Both providers share the launch's project, native guard and emulator.
+/// Dedicated Antigravity runtime state; the subscription sign-in stays in agy's own store.
+fn antigravity_config() -> tauros_agent_bridge::antigravity::AntigravityConfig {
+    let data = std::env::var_os("TAUROS_DATA").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/tauros")
+    });
+    let mut config = tauros_agent_bridge::antigravity::AntigravityConfig::new(data.join("antigravity"));
+    if let Some(binary) = std::env::var_os("TAUROS_AGY_BIN") { config.binary = binary.into(); }
+    config
+}
+
+/// All providers share the launch's project, native guard and emulator.
 fn project_chat(project: Option<Arc<ProjectSession>>, provider: Arc<Mutex<String>>) -> Chat {
     let repo = repo_root();
     Chat::new(move || {
@@ -192,6 +202,9 @@ fn project_chat(project: Option<Arc<ProjectSession>>, provider: Arc<Mutex<String
         let provider = provider.lock().unwrap().clone();
         if provider == "claude" {
             return claude_backend(ClaudeSidecarConfig::from_repo_root(&repo), server, working_dir, BTreeMap::new());
+        }
+        if provider == "antigravity" {
+            return antigravity_backend(antigravity_config(), server, working_dir, std::env::var("TAUROS_AGY_MODEL").ok());
         }
         codex_backend(codex_config(), server, working_dir, tauros_agent_bridge::AuthMode::HostSignIn, std::env::var("TAUROS_CODEX_MODEL").ok())
     })
