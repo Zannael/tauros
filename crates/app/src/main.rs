@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
 use tauros_agent_bridge::claude_sidecar::ClaudeSidecarConfig;
 use tauros_agent_bridge::AgentEvent;
-use tauros_app::chat::{claude_backend, Chat};
+use tauros_app::chat::{claude_backend, codex_backend, Chat};
 use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
 use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
 use tauros_app::mcp_host::{BuildAndBoot, ProjectSession};
@@ -41,6 +41,8 @@ struct App {
     /// The `--project` game project, shared by the window and the agent's tools.
     project: Option<Arc<ProjectSession>>,
     chat: Arc<Chat>,
+    chat_provider: Arc<Mutex<String>>,
+    codex_login: Mutex<tauros_app::codex_login::CodexLogin>,
     /// Set while a text field has focus: game keys then go to the field.
     typing: Arc<AtomicBool>,
 }
@@ -108,6 +110,8 @@ fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
 /// Runs off the main thread: the first message starts the sidecar and MCP server.
 #[tauri::command(async)]
 fn chat_send(app: tauri::State<'_, App>, text: String, on_event: Channel<AgentEvent>) -> Result<String, String> {
+    let login = app.codex_login.lock().unwrap();
+    if login.pending() { return Err("finish or cancel ChatGPT sign-in before sending".into()); }
     let turn = app.chat.send(&text, move |event| {
         let _ = on_event.send(event);
     })?;
@@ -135,13 +139,61 @@ fn set_typing(app: tauri::State<'_, App>, typing: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Chat shares the launch's project and emulator.
-fn project_chat(project: Option<Arc<ProjectSession>>) -> Chat {
+/// Select a provider for the next conversation; switching closes the old session.
+#[tauri::command]
+fn chat_select(app: tauri::State<'_, App>, provider: String) -> Result<(), String> {
+    if !["claude", "codex_chatgpt"].contains(&provider.as_str()) {
+        return Err("unknown agent provider".into());
+    }
+    if app.chat.busy() { return Err("wait for the current reply or stop it before switching agents".into()); }
+    if app.codex_login.lock().unwrap().pending() { return Err("finish or cancel ChatGPT sign-in before switching agents".into()); }
+    app.chat.reset();
+    *app.chat_provider.lock().unwrap() = provider;
+    Ok(())
+}
+
+/// Start the official browser ceremony without mounting game sources or tools.
+#[tauri::command(async)]
+fn codex_login_start(app: tauri::State<'_, App>) -> Result<tauros_app::codex_login::LoginStatus, String> {
+    if *app.chat_provider.lock().unwrap() != "codex_chatgpt" { return Err("select Codex · ChatGPT first".into()); }
+    let mut login = app.codex_login.lock().unwrap();
+    if app.chat.busy() { return Err("stop the current reply before signing in".into()); }
+    app.chat.reset();
+    let project = app.project_root().unwrap_or_else(repo_root);
+    login.start(codex_config(), &project, tauros_app::codex_login::open_browser)
+}
+
+#[tauri::command(async)]
+fn codex_login_status(app: tauri::State<'_, App>) -> Result<tauros_app::codex_login::LoginStatus, String> {
+    app.codex_login.lock().unwrap().poll()
+}
+
+#[tauri::command(async)]
+fn codex_login_cancel(app: tauri::State<'_, App>) -> Result<tauros_app::codex_login::LoginStatus, String> {
+    app.codex_login.lock().unwrap().cancel()
+}
+
+fn codex_config() -> tauros_agent_bridge::codex::CodexConfig {
+    let data = std::env::var_os("TAUROS_DATA").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/tauros")
+    });
+    let home = std::env::var_os("TAUROS_CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| data.join("codex"));
+    let mut config = tauros_agent_bridge::codex::CodexConfig::new(home);
+    if let Some(binary) = std::env::var_os("TAUROS_CODEX_BIN") { config.binary = binary.into(); }
+    config
+}
+
+/// Both providers share the launch's project, native guard and emulator.
+fn project_chat(project: Option<Arc<ProjectSession>>, provider: Arc<Mutex<String>>) -> Chat {
     let repo = repo_root();
     Chat::new(move || {
         let server = project.as_ref().map(|project| project.mcp_server());
         let working_dir = project.as_ref().map_or_else(|| repo.clone(), |project| project.dir().to_path_buf());
-        claude_backend(ClaudeSidecarConfig::from_repo_root(&repo), server, working_dir, BTreeMap::new())
+        let provider = provider.lock().unwrap().clone();
+        if provider == "claude" {
+            return claude_backend(ClaudeSidecarConfig::from_repo_root(&repo), server, working_dir, BTreeMap::new());
+        }
+        codex_backend(codex_config(), server, working_dir, tauros_agent_bridge::AuthMode::HostSignIn, std::env::var("TAUROS_CODEX_MODEL").ok())
     })
 }
 
@@ -337,7 +389,8 @@ fn main() {
             }
         },
     };
-    let chat = Arc::new(project_chat(project.clone()));
+    let chat_provider = Arc::new(Mutex::new("claude".to_owned()));
+    let chat = Arc::new(project_chat(project.clone(), Arc::clone(&chat_provider)));
     let chat_holds = Arc::clone(&chat);
     #[cfg(target_os = "linux")]
     let (keyboard, keyboard_typing) = (tx.clone(), typing.clone());
@@ -346,7 +399,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, typing })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), typing })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -368,7 +421,11 @@ fn main() {
             history_undo,
             chat_send,
             chat_cancel,
+            codex_login_start,
+            codex_login_status,
+            codex_login_cancel,
             chat_reset,
+            chat_select,
             chat_info,
             set_typing,
             project_info,

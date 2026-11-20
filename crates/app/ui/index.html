@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tauros</title>
   <style>
-    :root { --bg: #18141a; --fg: #ece6ee; --muted: #9a90a0; --accent: #f0aa28; }
+    :root { color-scheme: dark; --bg: #18141a; --fg: #ece6ee; --muted: #b3a8b9; --accent: #f0aa28; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif;
            display: flex; gap: 14px; justify-content: center; align-items: flex-start; padding: 12px;
@@ -32,9 +32,31 @@
     .history-sha { color: var(--muted); font-family: monospace; }
     #chat { width: 400px; height: 100%; display: flex; flex-direction: column; background: #211c24;
             border: 1px solid #352c3b; border-radius: 6px; min-height: 0; }
-    #chat-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #352c3b; }
-    #chat-header strong { flex: 1; }
-    #chat-scope { color: var(--muted); font-size: 11px; padding: 0 10px 6px; border-bottom: 1px solid #352c3b;
+    #chat-header { display: flex; align-items: center; gap: 12px; padding: 14px; }
+    #chat-provider-control { flex: 1; min-width: 0; }
+    #chat-provider-control label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    .select-control { position: relative; min-width: 0; }
+    .select-control::after { content: ''; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
+                            border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+                            transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+    select { -webkit-appearance: none; appearance: none; }
+    #chat-provider { display: block; width: 100%; height: 36px; background: var(--bg); color: var(--fg);
+                     border: 1px solid #584b60; border-radius: 5px; padding: 0 32px 0 10px; font: inherit; font-weight: 600; }
+    select option { background: #211c24; color: var(--fg); }
+    #chat-new { align-self: flex-end; height: 36px; color: var(--muted); background: transparent; }
+    button:hover:not(:disabled) { background: #3a303f; }
+    button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #codex-auth { margin: 0 14px 12px; padding: 12px; background: #29222d; border: 1px solid #44394a; border-radius: 5px; }
+    .auth-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .auth-heading strong { font-size: 13px; font-weight: 600; }
+    .auth-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    #codex-login { background: #e9d9b6; border-color: #e9d9b6; color: #302515; font-weight: 600; }
+    #codex-login:hover:not(:disabled) { background: #f5e8cc; }
+    #codex-login-status { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    #codex-auth[data-state="failed"] #codex-login-status { color: #ffb3bd; }
+    #codex-auth[data-state="signed_in"] #codex-login-status { color: #a9d8ab; }
+    #codex-auth[data-state="pending"] #codex-login-status { color: #eed3a0; }
+    #chat-scope { color: var(--muted); font-size: 11px; padding: 9px 14px; border-top: 1px solid #352c3b; border-bottom: 1px solid #352c3b;
                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #chat-log { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
     .msg { padding: 7px 9px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
@@ -57,11 +79,6 @@
     #chat-input:focus { outline: 1px solid var(--accent); }
     #chat-form button { align-self: stretch; }
     button:disabled { opacity: .5; cursor: default; }
-    .select-control { position: relative; min-width: 0; }
-    .select-control::after { content: ''; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
-                            border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
-                            transform: translateY(-70%) rotate(45deg); pointer-events: none; }
-    select { -webkit-appearance: none; appearance: none; }
     #play-bar { display: none; gap: 6px; align-items: center; width: 100%; font-size: 12px; color: var(--muted); }
     #play-bar.open { display: flex; }
     #play-bar .select-control { flex: 1; }
@@ -107,8 +124,26 @@
   </main>
   <aside id="chat" aria-label="Agent chat">
     <div id="chat-header">
-      <strong>Agent</strong>
+      <div id="chat-provider-control">
+        <label for="chat-provider">Agent</label>
+        <div class="select-control">
+          <select id="chat-provider" aria-label="Agent and authentication">
+            <option value="claude">Claude</option>
+            <option value="codex_chatgpt">Codex</option>
+          </select>
+        </div>
+      </div>
       <button id="chat-new" title="Start a new conversation">New chat</button>
+    </div>
+    <div id="codex-auth" data-state="idle" hidden>
+      <div class="auth-heading">
+        <strong>ChatGPT plan</strong>
+        <div class="auth-actions">
+          <button id="codex-login" type="button" aria-label="Sign in with ChatGPT">Sign in</button>
+          <button id="codex-login-cancel" type="button" hidden>Cancel sign-in</button>
+        </div>
+      </div>
+      <span id="codex-login-status" role="status" aria-live="polite">Connect with your ChatGPT account. No API key needed.</span>
     </div>
     <div id="chat-scope"></div>
     <div id="chat-log" aria-live="polite"></div>

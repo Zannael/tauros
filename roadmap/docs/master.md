@@ -583,6 +583,20 @@ Consequences, as verified facts rather than decisions:
   | OpenAI | via Sign in with ChatGPT (preview; Plus/Pro; local or open-source apps) or an API key | open-source eligible for SIWC; otherwise API key |
   | Google | API key or Vertex only; consumer plans treated as not usable from Tauros | API key per user |
 
+**Verified** 2026-11-20 UTC (documentation only): the official
+[Codex app-server reference](https://learn.chatgpt.com/docs/app-server) describes
+native `commandExecution`, `fileChange` and `mcpToolCall` items in the same agent
+protocol, with command/file approval requests. The official Antigravity SDK
+[tools reference](https://antigravity.google/docs/sdk/tools/) lists native file
+read/create/edit and shell tools; its
+[MCP guide](https://antigravity.google/docs/sdk/mcp/) documents MCP in the same
+execution pipeline as built-in tools. These establish runtime capabilities, not
+working Tauros adapters. `AGT-006` and `AGT-007` now explicitly include the hybrid
+contract from `AGT-008`; provider-specific interception and fail-before-write
+behavior still require implementation and tests. The Claude hook implementation
+is not evidence that equivalent hooks exist in either other runtime. No change to
+the recorded authentication decisions is made by this documentation check.
+
 ## Open decisions
 
 Tracked as tasks, not here. The voice engine is chosen within AGT-004.
@@ -965,6 +979,503 @@ SDK hook contracts were checked against the installed 0.3.328 declarations and
   raw transcript kept locally under `$TAUROS_DATA/projects/director-scene-mcp004/build/tauros/`).
   Phase 3 is complete.
 
+## Codex in-app adapter (AGT-006)
+
+**Accepted implementation decision** 2026-11-20 UTC, within the Owner's AGT-006
+request: use the local Codex app-server, not the SDK's bounded exec wrapper.
+The official [app-server reference](https://learn.chatgpt.com/docs/app-server)
+documents streaming turns, interruption, persistent threads, MCP and experimental
+host-executed dynamic tools. Its approval requests are not Claude lifecycle
+hooks and do not constitute a snapshot-before-every-write mechanism. The
+[authentication](https://learn.chatgpt.com/docs/auth) and
+[configuration](https://learn.chatgpt.com/docs/config-file/config-reference)
+references were also read on 2026-11-20. No third-party source was copied or
+installed. The pre-existing runtime checked was `codex-cli 0.162.0-alpha.2`.
+
+The app selector offers Claude, Codex with ChatGPT, and Codex with an API key.
+`CodexAdapter` implements `AgentBridge` directly over stdio JSON-RPC, mapping
+text/reasoning deltas and native/MCP tool lifecycle events. Messages reuse one
+Codex thread; Stop uses `turn/interrupt`. EOF fails active streams after host
+transactions settle and rejects subsequent sends until a new chat is started.
+Persistent Codex transcripts remain in the runtime's own store; reopening them
+after a Tauros restart has no UI yet.
+
+**Implemented safeguards**, verified at the boundaries described below:
+
+- Host-executed dynamic `tauros_read_file`, `tauros_write_file` and `tauros_shell`
+  tools provide native source work alongside the actual Tauros MCP connection.
+  The private `NativeEditHost` transaction socket is reused unchanged from
+  AGT-008. It owns snapshots, AI-Generated provenance, pending-change recovery,
+  and the gate shared with MCP, undo and build-and-play. Source tools use the
+  same host path checks; shell commands use the offline minimal bubblewrap
+  policy with read-only Git, no host credentials, and a 50-second bound.
+- A separate bubblewrap namespace runs app-server outside the game tree. It
+  mounts runtime system files, dedicated Codex state, the trusted Node binary,
+  MCP bridge script and private MCP socket directory, rather than the game or
+  the host home contents. Runtime networking remains available for inference;
+  development commands have their own offline namespace. Built-in shell,
+  plugins, apps and agents are disabled and file/command/permission approvals
+  are refused. There is no unsandboxed fallback. The game cannot inject Codex
+  config, instructions or hooks into this runtime.
+- A dynamic call returns only after its transaction records partial edits,
+  including failed/cancelled commands. Recording errors retain changes and
+  fail subsequent native operations until a new chat retries recovery. Terminal
+  turn events and EOF wait for host workers to settle before releasing the UI.
+- ChatGPT uses Codex's own login and file credential store in
+  `$TAUROS_CODEX_HOME` (default `$TAUROS_DATA/codex`). API keys come only from
+  `OPENAI_API_KEY` and go to `account/login/start`; the app backend gives this
+  mode an `api-key/` child home to avoid replacing the ChatGPT login. Tokens are
+  never copied from another app or CLI cache. Login, token renewal and entitlement
+  remain the official runtime's responsibility; no custom SIWC token exchange
+  is implemented. Codex home and the game project must be separate trees.
+
+**Verified** 2026-11-20 UTC:
+`TAUROS_NATIVE_SANDBOX_TESTS=1 cargo test -p tauros-app --test codex_adapter --
+--nocapture` passed four tests (the live and dummy-key opt-ins were excluded).
+The deterministic original Python app-server peer ran inside the production
+namespace. One turn read/wrote an original synthetic `scene.c`, then executed
+`create_trainer` through the actual Node bridge, private MCP socket and a
+`MemoryConnector`. Events streamed, the source commit was labelled AI-Generated,
+undo restored its baseline, and a second turn retained the same thread. A failing
+pre-commit hook rejected the native write while preserving dirty human content.
+Traversal and built-in execution/permission approvals were rejected. Cancellation,
+EOF terminal behavior and real runtime refusal with an empty auth store passed.
+The shell test verified that outside-project and Git writes fail while partial
+failed/cancelled edits are retained, committed and recoverable through undo.
+
+`OPENAI_API_KEY=tauros-local-protocol-fixture-key cargo test -p tauros-app --test
+codex_adapter api_key_login_protocol -- --ignored --nocapture` passed separately:
+the public dummy value reached only the deterministic local peer via the documented
+login RPC and did not appear in turn events. This verifies protocol handling,
+not API-key validity or paid inference. The installed real runtime's no-login
+check used a disposable empty Codex home and did not perform inference.
+
+`TAUROS_NATIVE_SANDBOX_TESTS=1 cargo test --workspace`,
+`cargo clippy --workspace --tests -- -D warnings`, the 56 stdlib Python tests,
+TypeScript sidecar build, and JavaScript syntax checks passed. A worktree privacy
+scan (tracked plus untracked non-ignored files) found zero problems in 123 files;
+`git diff --check` and the regenerated roadmap graph also passed. The Claude policy
+script is exercised by the Rust native-host integration test with its required
+fixture and socket arguments; it is not a standalone `node --test` suite. Docker
+and live-provider checks remain opt-in; their skipped branches are not new build,
+preview or authenticated-model evidence for Codex.
+
+**Limits / outstanding checks:** no `OPENAI_API_KEY` was supplied and the dedicated
+Codex home/auth cache did not exist when checked. No authenticated ChatGPT or paid
+API model turn, browser login/refresh, Codex workflow on the pinned decomp, or
+Owner desktop selection/Stop/history workflow has been verified. The ignored
+`live_codex_mixed_turn_on_original_synthetic_data` test is ready for a dedicated
+signed-in home and sends only original synthetic text. Dynamic tools are an
+experimental protocol surface, so another runtime version requires validation.
+AGT-006 remains In progress; the existing open AGT-008/APP-003 manual checks are
+unchanged. These limits do not authorize copying credentials or weakening guards.
+
+
+**Verified resumption / blockers** 2026-11-20 UTC: roadmap validation and
+`--ready` both passed (56 activities, 11 ready unassigned; graph current).
+Environment-presence and filesystem-metadata checks found `OPENAI_API_KEY`,
+`TAUROS_CODEX_HOME` and `TAUROS_DATA` unset, and no default dedicated Codex home
+or `auth.json` (including the API-key child store). No credential contents were
+read, copied or printed. The default pinned-engine directory exists; this is
+not evidence of a verified game project or build. Native app control is disabled
+for this session; the computer-use inventory exposed browsers only and no Tauros
+surface. Consequently no desktop selection/Stop/history check was performed.
+The official Codex authentication page was reread; the existing dedicated-home
+login instructions remain the supported path.
+
+The Owner was asked to supply a dedicated official login, identify the game
+project and explicitly authorize sending the necessary project sources to the
+provider before the real-project turn. No source-upload authorization was
+established during this resumption. The authenticated synthetic turn and real
+project workflow were not attempted without these prerequisites. Previously
+passed adapter, MCP, snapshot, history/undo and confinement checks were not rerun;
+no implementation change was justified by these prerequisite checks. AGT-006
+remains In progress. README now describes the pending manual acceptance steps;
+those steps are instructions, not verification evidence.
+After these documentation updates, `python3 scripts/check_roadmap.py
+--write-graph`, `python3 scripts/check_roadmap.py` and `git diff --check` passed.
+All pre-existing uncommitted changes were retained; no commit or push was made.
+
+
+**Accepted Owner decision** 2026-11-20 UTC: prioritize subscription login.
+AGT-006 now includes starting the official runtime-managed ChatGPT browser login
+inside Tauros, with status, cancellation and no token handling by Tauros. API-key
+UI and real paid checks are deferred to AGT-009; the existing low-level protocol
+code and earlier evidence are preserved. AGT-005 is also deferred. Complete the
+OpenAI acceptance checks before starting Antigravity (AGT-007). Claude's existing
+personal subscription integration and live evidence stand; this does not close
+unrelated hybrid/desktop acceptance checks. Investigate Google's officially
+supported subscription/editor integration before selecting its adapter; installed
+consumer clients alone do not establish permission for a headless wrapper.
+
+
+**Implemented / verified** 2026-11-20 UTC (browser-login follow-up): the app now
+provides **Sign in with ChatGPT**, **Cancel sign-in** and status feedback. A
+separate supervised `CodexAdapter` with no tools/MCP/project mounts uses
+`account/read`, `account/login/start` with `type: chatgpt`, the matching
+`account/login/completed` notification and `account/login/cancel`. The runtime
+hosts the browser callback and owns credentials/renewal. The host opens only
+HTTPS `auth.openai.com` or `chatgpt.com` URLs without userinfo or custom ports;
+OAuth URLs, login IDs, account details and provider login error payloads are not
+sent through Tauri IPC or the chat log. No model thread starts during login.
+Pending login disables chat, provider switching and New chat, supports cancel
+and retry, and expires after ten minutes. The API selector is removed; existing
+low-level API handling is retained for deferred AGT-009. Home/project overlap is
+rejected before creating directories, shared by login and the model backend.
+
+Actual checks:
+- `cargo test -p tauros-app --test codex_login -- --nocapture`: two passed, one
+  real-runtime opt-in ignored. The original synthetic peer runs in the production
+  namespace and covers early notification before RPC response, success/failure,
+  wrong login ID, cancel/retry, already signed in, failed opener, unsafe URL,
+  EOF and rejection of an overlapping home without creating it. Test output and
+  serialized statuses contain none of the synthetic private sentinels.
+- `TAUROS_CODEX_LOGIN_PROTOCOL=1 cargo test -p tauros-app --test codex_login
+  installed_codex_browser_login_start_and_cancel_without_signing_in -- --ignored
+  --nocapture`: passed with the installed `codex-cli 0.162.0-alpha.2`, an empty
+  disposable home, no browser opened and no inference. The first restricted run
+  failed because the host execution sandbox prohibited binding the localhost
+  callback (`Operation not permitted`); the authorized rerun allowed that host
+  capability while retaining the production bubblewrap namespace. No auth cache
+  was created by this start/cancel check.
+- `cargo test -p tauros-app --lib codex_login::tests -- --nocapture`: passed the
+  official-HTTPS destination validation check.
+- The existing `mixed_native_edit_real_mcp_history_undo_continuity_and_snapshot_rejection`
+  test was rerun because shared adapter notification/home validation changed;
+  it passed with local sockets allowed. Its first restricted run was blocked by
+  the host sandbox, not a failed assertion of the guarded workflow.
+- `cargo clippy -p tauros-app -p tauros-agent-bridge --tests -- -D warnings` and
+  `python3 -m unittest discover -s tests -v` passed (56 Python tests).
+- Browser preview using the actual HTML/JS with explicitly mocked Tauri IPC:
+  Codex selection reveals login; pending disables Send, selector and New chat;
+  cancel restores controls; retry can show success or failure with controls
+  restored. The selector contains only Claude and Codex ChatGPT. This checks the
+  frontend, not native Tauri IPC, the browser opener or a personal login.
+
+**Outstanding:** no authenticated ChatGPT model turn or real-project Codex turn
+was performed. Native desktop control is unavailable to this automation session;
+real selection/Stop/history and browser sign-in still need the Owner's desktop
+acceptance. Source-upload authorization and project selection must be established
+before the real-project turn. The ten-minute expiry branch and token renewal
+were not exercised. These limitations keep AGT-006 In progress; deferred paid API
+verification does not block its closure. No API costs, credential copying,
+commit or push occurred.
+Final documentation checks: roadmap graph regenerated and validated (57
+activities, 9 ready unassigned); `git diff --check` and JavaScript syntax check
+passed. A worktree scan including tracked and non-ignored untracked files found
+zero privacy problems across 126 files. Pre-existing uncommitted work remains.
+
+
+**Owner desktop evidence / verified fix** 2026-11-20 UTC: the Owner's screenshot
+shows the real Tauri window booted in Petalburg City, Codex selected and the login
+failure `Codex binary not found in PATH`. This establishes a failed desktop login
+attempt and successful selector display, not authenticated access. The terminal
+launch environment did not expose the desktop's bundled CLI on PATH.
+
+Executable resolution now checks executable files in absolute PATH entries and
+then the existing official Linux desktop bundle at
+`/usr/lib/chatgpt/resources/codex`. Explicit executable paths remain authoritative;
+a missing or non-executable custom path is rejected without fallback. Relative
+PATH entries are excluded to avoid game-local executable discovery. Successful
+paths are canonicalized before the unchanged bubblewrap launch; no runtime or
+credential file is copied, and no login protection is weakened. Missing-runtime
+errors explain installation or the `TAUROS_CODEX_BIN` override.
+
+The agent panel now has a legible custom-styled select (native appearance removed),
+a compact ChatGPT plan/sign-in area, state-colored feedback and no duplicate
+sign-in instruction in chat. Dark select styling also covers the map picker.
+Project scope displays only the directory name instead of an absolute home path.
+The option is now **Codex**; the panel's **Sign in** button retains the accessible
+name **Sign in with ChatGPT**.
+
+Checks actually run: the bridge executable-discovery test passed (PATH precedence,
+desktop fallback, explicit valid/missing paths and non-executable rejection).
+`cargo build -p tauros-app` and `cargo clippy -p tauros-agent-bridge -p tauros-app
+--tests -- -D warnings` passed. The rebuilt ignored installed-runtime browser
+start/cancel test passed with `PATH=/usr/bin:/bin`, `TAUROS_CODEX_BIN` removed and
+`TAUROS_CODEX_LOGIN_PROTOCOL=1`; localhost callbacks were allowed by the host
+execution permission while the runtime retained bubblewrap confinement. This
+reproduces the reported PATH condition using the installed real runtime, without
+signing in, creating credentials or running inference. The test executable was
+rebuilt with `cargo test -p tauros-app --test codex_login --no-run` before that run.
+A browser preview of the actual revised HTML/JS with mocked IPC confirmed the
+initial layout visually, readable Codex selection, pending/disabled controls and
+cancel restoring controls. This is not a WebKitGTK desktop rendering check.
+README was updated for discovery and the revised labels. AGT-006 remains open
+for the Owner's authenticated turn, authorized project workflow and Stop/history
+acceptance. No API calls, commit or push were made.
+
+
+**Owner login evidence / verified DNS fix** 2026-11-20 UTC: the next screenshot
+shows the official browser flow reaching `token_exchange_failed` with an error
+sending the token request to `https://auth.openai.com/oauth/token`. It does not
+establish a completed login or an entitlement problem. Metadata checks found
+that this host's `/etc/resolv.conf` is a symlink to
+`/run/resolvconf/resolv.conf`. A probe reproducing the pre-fix namespace reported
+that `/etc/resolv.conf` did not exist there: only systemd-resolved's different
+`/run/systemd/resolve` location had been mounted. This is a verified DNS defect
+in the namespace, consistent with the observed transport failure; a successful
+personal token exchange still needs a fresh browser login after the fix.
+
+The app-server launcher now resolves `/etc/resolv.conf` and mounts only its
+canonical system file read-only when it resides under `/run`. System files
+already under `/etc` or `/usr` are covered by existing mounts; other locations
+are rejected. The broader optional systemd-resolved directory mount was removed.
+The game, host home, unrelated runtime sockets and credentials remain absent;
+no proxy is introduced and certificate verification is unchanged. No credentials
+or auth cache contents were inspected during this diagnosis.
+
+Checks: an offline probe confirmed the resolver was absent before the fix and
+available with the exact-file mount. `cargo test -p tauros-app --test codex_login
+-- --nocapture` passed three tests, with the two real opt-ins ignored; the new
+resolver regression runs inside the production namespace. The explicit
+`TAUROS_CODEX_NETWORK_TESTS=1 ... runtime_can_resolve_and_reach_official_auth_with_tls
+-- --ignored --nocapture` test passed with network allowed by host execution
+permissions: DNS resolution succeeded and verified HTTPS returned HTTP 405 from
+the public OAuth endpoint. The GET sent no authorization headers, cookies,
+OAuth codes, keys, source data or model requests and read no response body.
+HTTP 405 confirms reachability/TLS, not an authenticated token exchange. The
+network probe uses original Python stdlib code through the production launcher;
+it is not a claim that a real Codex model or personal OAuth session succeeded.
+README now documents this opt-in and resolver handling. AGT-006 remains open.
+The rebuilt desktop app (`cargo build -p tauros-app`), targeted app/bridge
+Clippy with `-D warnings`, regenerated roadmap validation and `git diff --check`
+also passed after the resolver fix. No commit or push was made.
+
+
+**Owner evidence and verified real-runtime MCP fix** 2026-11-20 UTC:
+the Owner confirmed completed ChatGPT browser sign-in and a first Codex turn in
+the native Tauri window on `director-scene-mcp004`. A request to move a sign in
+Petalburg City then produced a missing-tools answer with no visible tool calls.
+This supersedes the earlier outstanding personal-login/first-turn limitations;
+it does not establish a successful edit, Stop or history acceptance.
+
+The investigation used only the existing dedicated home through the official
+runtime, production bubblewrap confinement, the original synthetic
+`MemoryConnector`, and the read-only `tauros_status` MCP tool. No game project was
+opened, no real sources were sent, and no credentials were read, printed or
+copied by Tauros or this investigation. The new acceptance test uses an empty
+temporary project directory and performs no Git operations or native edits.
+
+Protocol evidence and diagnosis:
+- Before the fix, thread-scoped `mcpServerStatus/list` reported `tauros` as
+  `connected`, no discovery error, and 13 tools including `tauros_status`.
+  The explicit status-only prompt completed without any tool lifecycle events.
+  Thus the server was configured and initialized; the model's inability claim
+  was not evidence of an MCP startup failure. Catalog discovery alone cannot
+  prove that tools reach the model-visible inference surface.
+- The launcher explicitly set `features.code_mode_host=false`. The installed
+  runtime's bundled model catalog, queried with an empty disposable home and
+  `debug models --bundled`, declares `code_mode_only` for its current named
+  model families. Enabling only the official local Code Mode host restored the
+  successful tool call for the same synthetic request. This controlled before/
+  after result identifies the adapter's Code Mode host suppression as the
+  practical cause; no inference request bodies or credentials were captured.
+- After the fix, the runtime selected `gpt-6.1-terra`, reported the same connected
+  13-tool catalog, emitted matching `ToolCallStarted` and `ToolCallCompleted`
+  events for `mcp__tauros__tauros_status` with `{}`, `is_error=false`, and returned
+  the actual MCP content `Tauros 0.1.0 ready`. The turn ended `Completed`.
+  The final-code run repeated this result and asserted exactly one successful
+  MCP call, the returned content and an unchanged empty synthetic directory.
+  Model text alone is never counted as tool execution evidence.
+
+The official local Code Mode host is enabled while built-in shell, unified exec,
+apps/plugins and agent execution remain disabled, and command/file/permission
+approvals are still refused. Native mutations continue through the existing
+host transaction boundary. No game or extra host directories were mounted.
+`start_session` now checks each configured server's actual thread catalog before
+inference: absent server, failed startup/discovery and empty catalog yield
+separate sanitized errors. Provider discovery payloads are not included in errors.
+A successful catalog check is readiness evidence, not a guarantee that the model
+will use a tool; acceptance still requires lifecycle events and a real result.
+The runtime model name is available as non-account diagnostic metadata.
+
+Checks actually run:
+- `cargo test -p tauros-agent-bridge mcp_readiness_distinguishes -- --nocapture`:
+  one passed, covering missing/failed/empty/ready catalogs and sanitized errors.
+- `cargo test -p tauros-app --test codex_adapter
+  mcp_readiness_uses_thread_catalog_with_code_mode_host_enabled -- --nocapture`:
+  one passed. The synthetic peer asserts Code Mode host enabled, built-in shell
+  and unified exec disabled, and the thread-scoped catalog request. No commits.
+- `TAUROS_LIVE_CODEX=1 TAUROS_CODEX_HOME=<dedicated-home> cargo test -p tauros-app
+  --test codex_adapter live_codex_mcp_status_on_synthetic_data -- --ignored
+  --nocapture`: baseline failed with zero tool calls; corrected run and final-code
+  run passed with the concrete protocol evidence above. The initial restricted
+  attempt was blocked by host Unix-socket permissions before any model turn;
+  authorized runs allowed sockets/network while retaining production bubblewrap.
+- `cargo clippy -p tauros-agent-bridge -p tauros-app --tests -- -D warnings` passed.
+  An initial new-code Clippy suggestion was corrected before that successful run.
+
+The official [app-server reference](https://learn.chatgpt.com/docs/app-server)
+was fetched again for catalog/tool lifecycle semantics; installed experimental
+protocol schemas were generated into a disposable directory without auth.
+README documents the fix, status-only opt-in and diagnostic limits. No third-party
+code was downloaded or copied. No commit, push, paid API test, login/UI repeat,
+full test suite, or modification of the real game occurred.
+
+**Still outstanding:** a real-model mixed native edit/domain mutation with
+history/undo and snapshot-failure rejection; authorized pinned-decomp workflow;
+Owner desktop Stop/history acceptance; token renewal and ten-minute login expiry.
+Existing synthetic-peer evidence remains valid but does not substitute for those
+real-runtime/desktop checks. AGT-006 stays In progress. Paid API acceptance remains
+in AGT-009 and is not required for AGT-006 closure.
+
+Final checks for this resumption: `cargo build -p tauros-app` passed; roadmap graph
+regenerated and validated with 57 activities and 9 ready unassigned;
+`git diff --check` passed. All pre-existing uncommitted files remain in place.
+Restart the rebuilt Tauros process to pick up the launcher change; existing
+app-server processes retain their original feature configuration.
+
+
+**Owner desktop follow-up / verified code facts** 2026-11-20 UTC:
+the Owner supplied two screenshots of the Codex turn on `director-scene-mcp004`.
+They show native `tauros_shell` and `tauros_read_file` rows, a running then
+completed `build` row, and a model reply claiming the gym sign and interaction
+were moved. The reply explicitly says emulator verification was not performed.
+These are desktop tool-activity/build-status evidence, not verification of the
+source diff, sign placement, interaction, provenance or undo. AGT-006 stays open.
+The Owner intends to inspect the result before reverting; no game mutation or
+revert was performed by this investigation.
+
+Code inspection confirms the displayed approximately 10 FPS during an active
+agent turn is intentional: `playback.rs` holds normal gameplay and sends the
+current framebuffer every 100 ms, while MCP tools can advance the shared emulator.
+The UI counts incoming frame messages as FPS. It therefore labels a held preview
+refresh rate as if it were gameplay performance. Normal playback targets 59.7275
+FPS; the second screenshot shows 59.7. This is not a measured CPU-performance
+regression. `Chat::send` currently sends user text without selected/live map
+context. The map selector is a preview destination, and the status header is a
+launch label rather than a live RAM location report; the screenshot's selected
+`MAP_PETALBURG_CITY_HOUSE1` must not be mistaken for the player's actual map.
+
+The MCP post-build hook reloads the ROM/symbol pair but does not boot to a map,
+which explains the title/New Game screen after the agent's `build`.
+The existing **Build & play** action builds and boots to its chosen map/coordinates
+with the launch flags, so the current sign check can use
+`MAP_PETALBURG_CITY` at `(15, 10)` directly. No manual New Game sequence is needed;
+it is a fresh boot-to-point, not preservation of arbitrary current gameplay state.
+
+**Accepted requirements**, recorded in APP-003 before implementation: supply the
+agent with distinct structured selected-map and live-emulator location context;
+label held preview refresh clearly; make an agent build directly previewable at
+the intended location without manual New Game navigation. Do not claim an
+arbitrary gameplay state survives rebuilding. APP-001 remains the map editor work;
+APP-003 owns its connection to shared preview/chat. No implementation of these
+follow-ups was attempted in this turn. The Owner's next manual check is the
+single Build & play action at Petalburg City, followed by visual/interaction
+confirmation before any revert or AGT-006 closure.
+
+
+**Verified screenshot transport gap / Owner visual-check requirement**
+2026-11-20 UTC: the next Owner screenshot shows a sign left of the gym path and
+what appears to be a remaining sign fragment at its former location to the
+right. This is visual evidence of an incomplete result; the precise metatile,
+layer, collision and interaction edits have not been inspected. The image alone
+does not establish which source mistake caused the artifact. No game was changed
+or reverted during this inspection.
+
+Code inspection found a separate concrete gap: `emu_screenshot` returns
+`EmuScreenshotResult` through the generic `with_emulator_mut` / `tool_ok` path,
+which serializes the PNG base64 and metadata into a text content block. It does
+not emit a native MCP image block. The Codex launcher also disables the separate
+built-in `view_image` tool. The available screenshot command therefore is not
+proof of working model vision; no end-to-end native image-delivery acceptance
+has been performed. The preceding agent reply explicitly reported no emulator
+verification, and the supplied tool rows do not show `emu_screenshot`. Whether
+other unseen calls occurred cannot be established from those screenshots.
+
+Accepted follow-up is recorded in AGT-006 before implementation: native screenshot
+image delivery needs verification, and visual map edits need before/after visual
+checks together with semantic consistency and interaction checks. A successful
+build does not establish visual correctness. This gap remains open; this turn
+performed only source inspection and roadmap updates, without provider calls,
+credential access, game source upload or mutation.
+
+
+**Verified native image delivery and real Codex visual comparison**
+2026-11-20 UTC: authorized by the Owner's request to test vision. The new ignored
+`live_codex_screenshot_before_after_on_synthetic_pixels` acceptance uses the
+production `codex_backend`, namespace, official runtime and dedicated ChatGPT
+home. It attaches an original in-memory `SyntheticFramebuffer` through the real
+`EmuSession` and Tauros MCP. Its one-byte synthetic loaded-session marker is not
+a game cartridge. The test uses an empty project directory, has no native file
+or shell tools, and performs no Git operations. No game data or credentials were
+inspected, copied or uploaded.
+
+The first 240x160 image has one large red square and a blue circle. The second
+moves the square to the opposite side and intentionally leaves a smaller red
+fragment at its old location. Initial horizontal orientation varies per run;
+neither prompts nor tool metadata disclose the pixel arrangement or answers.
+The two turns request actual screenshots and structured visual observations,
+forbid manual PNG decoding and source/file/shell inspection, and stay in the
+same conversation for the before/after comparison.
+
+Baseline with the old MCP text/base64 response: both `emu_screenshot` calls
+completed but their protocol results contained zero native image blocks. The
+first observation returned nulls; the second reported some shape attributes but
+left `fragment_remaining` null. The test failed. This establishes an incomplete
+comparison and the native-image transport gap, not proof that the model could
+never extract any visual information from a text payload.
+
+Implemented change: the screenshot MCP handler emits small JSON text metadata
+plus `ContentBlock::image(png, "image/png")`. It removes `png_base64` from the text
+metadata rather than duplicating the image payload. The internal screenshot Rust
+API still returns its original optional base64 field; at the MCP boundary,
+`include_base64=false` keeps the metadata-only behavior. Existing MCP clients
+reading JSON `png_base64` must consume the native image block instead. Existing
+error shapes and shared operation gate are preserved. The generic emulator
+operation wrapper now accepts a result renderer for this one specialized tool.
+No built-in image viewer, extra project mount or permission escalation is enabled.
+
+Corrected real-runtime result: one successful
+`mcp__tauros__emu_screenshot` call per turn, each with exactly one native image.
+The model reported a large red square on the right, one red shape, and a blue
+circle at the top before; then a large red square on the left, two red shapes,
+the same top blue circle, and `fragment_remaining=true` after. Both turns ended
+Completed. Assertions matched the privately held fixture arrangement, the real
+image-block counts and the unchanged empty project directory. No base64 payloads
+or raw authentication/protocol objects were printed. The observed scene content,
+not the model's claimed capabilities, supplies the visual evidence.
+
+Shared agent instructions now require screenshots before/after visible map edits,
+checking the vacated area as well as the destination, booting the intended map
+after building, and separate collision/interaction verification or explicit
+unverified status. This is guidance, not enforcement that every future turn will
+comply. Automatic selected/live-map context remains APP-003 work.
+
+Checks actually run:
+- `cargo test -p tauros-mcp --test emulator_tools
+  screenshot_native_image_metadata_opt_out_and_errors -- --nocapture`: passed.
+  Covers native PNG content, separate metadata without duplicated base64,
+  metadata-only opt-out, missing ROM and missing emulator errors. An initial
+  test setup mistakenly used an already-loaded fixture for the no-ROM branch;
+  the test was corrected to use an empty session before the passing run.
+- `cargo test -p tauros-mcp --test emulator_tools
+  emulator_tools_detect_known_state_and_negation_via_mcp -- --nocapture`: passed,
+  including the existing screenshot/RAM/state integration with the new image
+  contract. The optional real-game screenshot test was updated for the contract
+  but was not run.
+- `TAUROS_LIVE_CODEX=1 TAUROS_CODEX_HOME=<dedicated-home> cargo test -p tauros-app
+  --test codex_adapter live_codex_screenshot_before_after_on_synthetic_pixels
+  -- --ignored --nocapture`: baseline failed as described; corrected run passed
+  in 14.15 seconds. Restricted attempts failed at local socket binding before
+  inference; authorized socket/network runs retained production bubblewrap.
+- `cargo clippy -p tauros-mcp -p tauros-agent-bridge -p tauros-app --tests --
+  -D warnings`: passed. No full suite, paid API test, login/UI repeat, game
+  mutation/revert, commit or push was performed.
+
+README documents the native image contract and synthetic live opt-in. This test
+verifies Codex only; no new real Claude vision acceptance was performed.
+AGT-006 remains In progress: the actual game sign edit and interaction are still
+unverified/visually defective, and the prior mixed-mutation, history/undo,
+Stop and other outstanding acceptance limits are unchanged. The Owner's real
+game still needs a deliberate inspection/revert; this synthetic test changes none
+of its files or emulator state.
+
+Final vision-change checks: `cargo build -p tauros-app` passed; roadmap graph
+regenerated and validated with 57 activities and 9 ready unassigned;
+`git diff --check` passed. Pre-existing uncommitted changes were preserved.
+
 
 **Owner map-switch failure / implemented bounded preview selection**
 2026-11-20 UTC: the Owner screenshot shows `MAP_PETALBURG_CITY_MART` selected
@@ -1021,3 +1532,49 @@ Final map-preview checks: `cargo build -p tauros-app` passed; the final UI handl
 harness and JavaScript syntax check passed after the empty-input guard update.
 Roadmap graph regenerated and validated: 57 activities, 9 ready unassigned.
 `git diff --check` passed. Existing uncommitted work is retained.
+
+
+**Owner acceptance / AGT-006 completed** 2026-11-20 UTC:
+the Owner explicitly requested closure of AGT-006 and deferred interface/UI/UX
+refinements. This is the current accepted status, superseding earlier historical
+statements in this section that the adapter remained open.
+
+The Owner's later native Tauri screenshot shows Codex selected on
+`director-scene-mcp004`, completed `tauros_shell`, `build`, `emu_boot`,
+`emu_press_input` and `emu_screenshot` rows, and a whole sign on the right of the
+gym path with the earlier left-hand position visually cleared. The agent reply
+reports interaction checked and collision not checked separately. The screenshot
+and Owner acceptance establish a working desktop native-edit/build/preview
+workflow and accepted visual result, not an independent assertion of source
+provenance, interaction or collision. The screenshot's sign-in panel also is not
+new evidence about authentication renewal or expiry.
+
+Closure combines that explicit Owner acceptance with already recorded evidence:
+official browser login and real authenticated turns; actual Tauros MCP call
+lifecycle/results; real synthetic native-image before/after vision acceptance;
+and the deterministic hybrid/native transaction checks with real MCP, snapshot
+failure rejection, provenance/history, undo, continuation and cancellation.
+No tests, model turns or login flow were repeated for this documentation-only
+closure, and no additional game sources or credentials were accessed.
+
+Remaining work is explicitly retained rather than counted as verified:
+- APP-003: selected-map/live-emulator context, held-refresh labeling, preview
+  interface and real-map bounds/walkability/timing acceptance.
+- AGT-008: further explicit desktop mixed native/domain provenance/history/undo
+  verification, beyond the accepted Codex edit/build/preview and prior tests.
+- APP-005: beta desktop chat Stop/retry, provider-switching and partial-edit
+  history acceptance. The existing adapter cancellation tests remain protocol
+  evidence rather than a claim that the Owner pressed Stop successfully.
+- AGT-009: deferred API authentication/paid acceptance, still unauthorized.
+
+Token renewal and the ten-minute browser-login expiry branch remain documented
+untested limitations; the Owner's acceptance is not evidence that they passed.
+The AGT-006 Scope/Completion is accepted on the implementation, executed bridge
+and safety-boundary checks, real runtime evidence and Owner desktop acceptance.
+Its prior generic requirement for a verified mixed edit/MCP turn is supported by
+the recorded deterministic integration; stronger desktop history/undo checks stay
+with AGT-008. No requirement was silently marked as a passed manual check.
+
+TODO and README now reflect Done with dated Verification and remaining work.
+No implementation change, commit, push, paid API call or game revert occurred;
+all existing uncommitted work was preserved.

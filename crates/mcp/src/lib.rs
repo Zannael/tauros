@@ -141,6 +141,17 @@ impl TaurosServer {
         T: Serialize,
         F: FnOnce(&mut EmuSession) -> Result<T, EmuToolError>,
     {
+        self.with_emulator_content(op, |value| tool_ok(&value))
+    }
+
+    fn with_emulator_content<T, F>(
+        &self,
+        op: F,
+        render: impl FnOnce(T) -> CallToolResult,
+    ) -> CallToolResult
+    where
+        F: FnOnce(&mut EmuSession) -> Result<T, EmuToolError>,
+    {
         let _operation = match self.lock_operation() {
             Ok(lock) => lock,
             Err(error) => return error,
@@ -158,7 +169,7 @@ impl TaurosServer {
             }
         };
         match op(&mut guard) {
-            Ok(value) => tool_ok(&value),
+            Ok(value) => render(value),
             Err(err) => tool_error_json(&err),
         }
     }
@@ -279,11 +290,20 @@ impl TaurosServer {
     }
 
     #[tool(
-        description = "Capture the emulator's current framebuffer as a PNG (base64 and/or saved to disk).",
+        description = "Capture the current emulator framebuffer as a native PNG image for visual inspection, with frame/hash metadata. Use before and after visual edits; a screenshot alone does not verify collision or interaction. include_base64=false returns metadata only.",
         annotations(read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     fn emu_screenshot(&self, Parameters(req): Parameters<EmuScreenshotRequest>) -> CallToolResult {
-        self.with_emulator_mut(|session| emulator::emu_screenshot(session, req))
+        self.with_emulator_content(|session| emulator::emu_screenshot(session, req), |mut screenshot| {
+            // Base64 inside JSON text is not an image input. Keep pixels in the
+            // MCP image block and metadata small; never duplicate the payload.
+            let png = screenshot.png_base64.take();
+            let mut result = tool_ok(&screenshot);
+            if let Some(png) = png {
+                result.content.push(ContentBlock::image(png, "image/png"));
+            }
+            result
+        })
     }
 
     #[tool(

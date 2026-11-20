@@ -228,7 +228,7 @@ not resume a save. Coordinates are checked against map bounds, not walkability.
 Only the pinned Emerald expansion and Linux desktop have been checked; there is
 no gamepad or keyboard remapping UI yet.
 
-The panel on the right chats with the agent through the Claude Agent SDK sidecar.
+The panel on the right offers Claude and Codex with ChatGPT in the agent selector. Switching providers starts a new conversation. Claude uses the Agent SDK sidecar.
 Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
 sidecar/claude-agent-sdk run build`; it uses your existing Claude Code sign-in
 (`claude auth login`), and Tauros never sees or stores the credentials. With
@@ -244,6 +244,189 @@ line, Stop ends the current reply and New chat forgets the conversation. While t
 text box has focus, the keyboard types into it instead of playing the game.
 Conversation transcripts are saved by the Claude Code CLI in its own store
 (`~/.claude/projects/`), which is how later messages see the earlier ones.
+
+
+Codex uses the official local `codex app-server` protocol with streamed text,
+reasoning summaries and tool results, Stop (`turn/interrupt`) and one persistent
+thread across messages. It needs Node.js on `PATH`, Linux bubblewrap and an
+installed Codex executable. Tauros searches absolute `PATH` entries, then the
+existing Linux desktop bundle at `/usr/lib/chatgpt/resources/codex`.
+`TAUROS_CODEX_BIN` can select an explicit executable path; an invalid explicit
+path fails without silently using another runtime. No
+Codex package is installed or downloaded by Tauros. The runtime checked here was
+`codex-cli 0.162.0-alpha.2`; dynamic tools are an experimental app-server API.
+Follow the External sources policy if installing another runtime or version.
+
+Select **Codex**, then **Sign in** in its **ChatGPT plan** panel. Tauros opens the
+official runtime's authorization URL in your default browser. Complete sign-in
+there and return to Tauros; the panel reports connection, failure or expiration.
+**Cancel sign-in** cancels the pending runtime flow and permits retry. No API key
+is needed. Signing in starts no model turn and sends no project sources; the next
+chat message checks actual model access under your plan.
+
+Codex manages its callback, credential cache and renewal in a dedicated home,
+`$TAUROS_CODEX_HOME` (default `$TAUROS_DATA/codex`). Tauros never reads or copies
+tokens from another app or CLI home. The directory must be separate from the
+game project; rejected overlapping homes are checked before directory creation.
+The login runtime uses the same confinement as chat, with no project mounts or
+tools. Only official HTTPS authorization destinations are opened. Login URLs,
+account details and provider login error payloads are not returned to the UI or
+chat log. Pending login disables chat/provider changes; attempts expire after ten
+minutes. Linux needs a configured default browser and permission for the runtime
+to bind its localhost callback. The namespace exposes the canonical system DNS
+resolver file read-only, including when `/etc/resolv.conf` points into `/run`;
+it does not mount the rest of `/run`. There is no unsandboxed fallback.
+
+Optional official CLI setup (use the same environment when launching Tauros):
+
+```sh
+export TAUROS_DATA="${TAUROS_DATA:-$HOME/.local/share/tauros}"
+export TAUROS_CODEX_HOME="$TAUROS_DATA/codex"
+mkdir -p "$TAUROS_CODEX_HOME"
+CODEX_HOME="$TAUROS_CODEX_HOME" "${TAUROS_CODEX_BIN:-codex}" -c 'cli_auth_credentials_store="file"' login
+```
+
+For this optional CLI command, set `TAUROS_CODEX_BIN` to the installed executable
+if `codex` is absent from the terminal PATH; the app discovers the desktop bundle
+automatically. Nothing is copied or installed by runtime discovery.
+
+Use `TAUROS_CODEX_MODEL` to select a model available to your account; otherwise the
+runtime chooses its default. Successful login alone does not prove model access.
+API-key connections and paid acceptance checks are deferred: Anthropic release
+authentication is AGT-005, Codex/Gemini API integration is AGT-009. The Codex API
+option is absent from the app selector. The existing low-level API protocol code
+and dummy-key evidence are retained, without running paid tests.
+
+Codex combines Tauros MCP with host-executed `tauros_read_file`,
+`tauros_write_file` and `tauros_shell` tools. Writes and all development commands
+use the AGT-008 native transaction socket and its snapshot, AI provenance,
+serialization and recovery rules. Commands have the same offline bubblewrap
+policy and 50-second limit as Claude. The app-server has a separate namespace:
+the game directory and host home contents are not mounted. Its application mounts
+expose only dedicated state and the trusted MCP bridge/socket. Built-in shell, plugins, apps and agents
+are disabled; file-change, command and permission approvals are rejected. There
+is no unsandboxed fallback. This is provider-specific dynamic-tool execution,
+not a port of Claude hooks. Terminal events wait for host transactions to settle.
+Conversation continuation works within the current chat; restoring a Codex chat
+after restarting Tauros is not exposed in the UI.
+
+AGT-006 evidence (2026-11-20): the Owner confirmed successful browser sign-in
+and a first Codex turn in Tauri on `director-scene-mcp004`. A subsequent request
+reported missing tools. A real subscription-runtime check reproduced a connected
+Tauros server with 13 discovered tools but no tool call. The adapter had disabled
+`features.code_mode_host`; enabling the official local Code Mode host restored
+actual MCP execution. The corrected synthetic-only turn emitted matching
+`ToolCallStarted` / `ToolCallCompleted` events for `mcp__tauros__tauros_status`,
+returned `Tauros 0.1.0 ready`, and completed successfully. No game sources, edits,
+commits or paid API requests were involved. Shell and native writes still use the
+existing host guards; built-in shell and permission escalation remain disabled.
+
+Before inference, session startup now checks the thread-scoped MCP catalog and
+reports a missing server, startup/discovery failure, or empty tool catalog as
+separate errors. A connected catalog alone does not prove model use: acceptance
+requires actual tool events and the tool result, never the model's description
+of its capabilities. The new opt-in status check performs no Git operations or
+source reads and uses only the existing dedicated official-runtime login:
+
+```sh
+TAUROS_LIVE_CODEX=1 TAUROS_CODEX_HOME="${TAUROS_CODEX_HOME:-${TAUROS_DATA:-$HOME/.local/share/tauros}/codex}" cargo test -p tauros-app --test codex_adapter live_codex_mcp_status_on_synthetic_data -- --ignored --nocapture
+```
+
+Vision acceptance (2026-11-20): `emu_screenshot` now returns PNG pixels as a
+native MCP `image` block, alongside small JSON text metadata (dimensions, frame,
+hash and optional saved path). The base64 payload is no longer duplicated inside
+JSON text. The existing `include_base64=false` option returns metadata only;
+clients that need pixels must read the `image/png` block instead of a JSON
+`png_base64` field. The internal Rust screenshot result is unchanged.
+
+A real Codex subscription test inspected two original synthetic framebuffers,
+correctly identified a square moving right-to-left, counted one then two red
+shapes, and detected a deliberately retained fragment at the old location.
+Both actual screenshot calls returned one native image and completed successfully.
+The baseline text/base64 path returned zero image blocks and an inconclusive
+before/after comparison. Prompts and metadata did not disclose the arrangement;
+no game images, sources or credentials were sent, and no game was changed.
+This verifies image delivery and visual reasoning on the fixture, not autonomous
+correctness of a game edit or collision/interaction behavior. Shared agent
+instructions now require before/after screenshots for visible map edits, a boot
+to the intended map after building, and explicit reporting of unchecked results.
+Built-in Codex `view_image` remains disabled; MCP image delivery works through
+the existing official runtime without exposing project files.
+
+```sh
+TAUROS_LIVE_CODEX=1 TAUROS_CODEX_HOME="${TAUROS_CODEX_HOME:-${TAUROS_DATA:-$HOME/.local/share/tauros}/codex}" cargo test -p tauros-app --test codex_adapter live_codex_screenshot_before_after_on_synthetic_pixels -- --ignored --nocapture
+```
+
+The earlier deterministic app-server peer also verified a guarded synthetic
+source read/write plus `create_trainer`, history/undo, snapshot rejection,
+continuity, cancellation and EOF handling. The Owner subsequently demonstrated
+real-game native editing, build, boot, input and screenshot activity with a
+repaired sign in the preview, and accepted **AGT-006 as Done on 2026-11-20**.
+That acceptance does not turn model claims into independently verified collision
+or history/undo results: further desktop mixed-history checks remain in AGT-008,
+chat Stop/history integration in APP-005, and interface/map-context refinements
+in APP-003. Token renewal and login expiry remain unverified limitations. Paid
+API validation stays deferred in AGT-009. Additional explicit opt-ins:
+
+```sh
+cargo test -p tauros-app --test codex_login -- --nocapture
+TAUROS_CODEX_LOGIN_PROTOCOL=1 cargo test -p tauros-app --test codex_login installed_codex_browser_login_start_and_cancel_without_signing_in -- --ignored --nocapture
+TAUROS_CODEX_NETWORK_TESTS=1 cargo test -p tauros-app --test codex_login runtime_can_resolve_and_reach_official_auth_with_tls -- --ignored --nocapture
+TAUROS_NATIVE_SANDBOX_TESTS=1 cargo test -p tauros-app --test codex_adapter -- --nocapture
+OPENAI_API_KEY=tauros-local-protocol-fixture-key cargo test -p tauros-app --test codex_adapter api_key_login_protocol -- --ignored --nocapture
+TAUROS_LIVE_CODEX=1 cargo test -p tauros-app --test codex_adapter live_codex_mixed_turn -- --ignored --nocapture
+```
+
+The login tests use an original synthetic peer. The installed-runtime login
+opt-in starts and cancels the real browser flow in an empty temporary home,
+without opening a browser, signing in or calling a model. It requires localhost
+callback access. The network opt-in checks DNS and verified TLS with a public,
+unauthenticated GET to the OAuth token endpoint; it sends no login code, token,
+cookie, API key or source data. An HTTP 405 is expected for GET and proves only
+reachability, not successful token exchange. Both checks retain the production
+runtime namespace. The dummy-key command uses only the local protocol peer and a
+public dummy value; the live mixed-turn command requires the dedicated signed-in
+`TAUROS_CODEX_HOME`. No game sources
+are sent by these checks. Integration choice and authentication follow the
+[official app-server reference](https://learn.chatgpt.com/docs/app-server),
+[Codex authentication](https://learn.chatgpt.com/docs/auth) and
+[configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+
+Browser-login checks on 2026-11-20 passed against both the confined original
+synthetic peer and the installed real Codex runtime's start/cancel protocol.
+The latter used an empty temporary home, opened no browser and performed no
+inference. The new login UI states were also checked in a browser with mocked
+Tauri IPC. Those earlier checks alone did not establish a completed personal
+sign-in, model entitlement or native desktop acceptance. The later Owner evidence
+and live MCP check above establish sign-in and a model turn; token renewal remains
+unverified. The execution environment must allow the official runtime's localhost callback; a restricted host sandbox
+can reject login startup even though the protocol itself is supported.
+
+Follow-up hybrid/beta checks (AGT-008 / APP-005; not AGT-006 closure blockers):
+
+1. Before using a real project, identify the intended game project under
+   `$TAUROS_DATA/projects` and obtain the Owner's authorization to send its
+   necessary sources to OpenAI. The synthetic opt-in does not send game sources
+   and does not establish real-project acceptance. Use the project's normal
+   guarded workflow; leave the pinned engine untouched.
+2. Launch Tauros with the authenticated environment and the built project using
+   the `--project` example above. Select **Codex**. Request one small, reviewable native source change and
+   a Tauros domain operation in the same turn. Observe streamed text and both
+   tools' arguments/results, inspect the actual source diff and **History**
+   provenance, and use **Restore** on the baseline snapshot to verify reversal.
+3. Send a follow-up that depends on the preceding conversation. During an active
+   reply check that the selector is disabled, press **Stop**, and confirm the
+   turn settles and accepts another message. Inspect History for any partial
+   changes. Once idle, switch providers and confirm the chat clears; **New chat**
+   must also start a fresh conversation. Record actual outcomes and any failures.
+
+The current automation session exposes browser control only, with native app
+control disabled. These desktop checks require an enabled native desktop surface
+or the Owner's manual verification in the Tauri window; browser-only inspection
+is not evidence that Tauri commands or Stop/history work.
+
+
 Native `Edit`, `Write` and every `Bash` call acquire a project transaction and
 snapshot pending work before executing. Changes are committed as AI-Generated
 and appear in History & Undo, including partial changes left by failed tools.

@@ -8,6 +8,7 @@
 //! [`EventStream`].
 
 pub mod claude_sidecar;
+pub mod codex;
 pub mod fake;
 
 use std::collections::BTreeMap;

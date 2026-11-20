@@ -391,14 +391,19 @@ async fn emulator_tools_detect_known_state_and_negation_via_mcp() {
     assert_eq!(body["frame_count"], 11);
 
     // 5. Screenshot produces a valid PNG
-    let (is_err, body) = client
-        .call_tool("emu_screenshot", json!({ "include_base64": true }))
-        .await;
-    assert!(!is_err, "emu_screenshot failed: {body}");
+    let response = client.request("tools/call", json!({
+        "name":"emu_screenshot", "arguments":{"include_base64":true}
+    })).await;
+    let result = &response["result"];
+    assert_ne!(result["isError"], true);
+    let body: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(body.get("png_base64").is_none());
+    assert_eq!(result["content"][1]["type"], "image");
+    assert_eq!(result["content"][1]["mimeType"], "image/png");
     assert_eq!(body["width"], 4);
     assert_eq!(body["height"], 4);
     let png_bytes = base64::engine::general_purpose::STANDARD
-        .decode(body["png_base64"].as_str().unwrap())
+        .decode(result["content"][1]["data"].as_str().unwrap())
         .unwrap();
     assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
 
@@ -693,14 +698,19 @@ async fn real_mgba_emerald_ram_checks_and_screenshot_via_mcp() {
     assert_eq!(body["frame_count"], 120);
 
     // Screenshot from real libmgba is a valid 240x160 PNG
-    let (is_err, body) = client
-        .call_tool("emu_screenshot", json!({ "include_base64": true }))
-        .await;
-    assert!(!is_err, "emu_screenshot failed: {body}");
+    let response = client.request("tools/call", json!({
+        "name":"emu_screenshot", "arguments":{"include_base64":true}
+    })).await;
+    let result = &response["result"];
+    assert_ne!(result["isError"], true);
+    let body: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(body.get("png_base64").is_none());
+    assert_eq!(result["content"][1]["type"], "image");
+    assert_eq!(result["content"][1]["mimeType"], "image/png");
     assert_eq!(body["width"], 240);
     assert_eq!(body["height"], 160);
     let png_bytes = base64::engine::general_purpose::STANDARD
-        .decode(body["png_base64"].as_str().unwrap())
+        .decode(result["content"][1]["data"].as_str().unwrap())
         .unwrap();
     assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
 
@@ -755,5 +765,39 @@ async fn real_mgba_emerald_ram_checks_and_screenshot_via_mcp() {
     assert!(!is_err);
     assert_eq!(body["passed"], false);
 
+    client.close().await;
+}
+
+
+#[tokio::test]
+async fn screenshot_native_image_metadata_opt_out_and_errors() {
+    let mut empty = McpClient::start(TaurosServer::default()
+        .with_emulator(EmuSession::new(MockEmulator::new()))).await;
+    // A missing loaded ROM remains a normal tool error, with no image block.
+    let missing = empty.request("tools/call", json!({"name":"emu_screenshot", "arguments":{}})).await;
+    assert_eq!(missing["result"]["isError"], true);
+    assert_eq!(missing["result"]["content"].as_array().unwrap().len(), 1);
+    empty.close().await;
+    let mut client = McpClient::start(TaurosServer::default().with_emulator(mock_session())).await;
+    let image = client.request("tools/call", json!({"name":"emu_screenshot", "arguments":{}})).await;
+    assert_ne!(image["result"]["isError"], true);
+    let blocks = image["result"]["content"].as_array().unwrap();
+    assert_eq!(blocks.len(), 2);
+    let metadata: Value = serde_json::from_str(blocks[0]["text"].as_str().unwrap()).unwrap();
+    assert!(metadata.get("png_base64").is_none());
+    assert_eq!(metadata["width"], 4);
+    assert_eq!(blocks[1]["type"], "image");
+    assert_eq!(blocks[1]["mimeType"], "image/png");
+    let png = base64::engine::general_purpose::STANDARD.decode(blocks[1]["data"].as_str().unwrap()).unwrap();
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let metadata_only = client.request("tools/call", json!({
+        "name":"emu_screenshot", "arguments":{"include_base64":false}
+    })).await;
+    assert_ne!(metadata_only["result"]["isError"], true);
+    assert_eq!(metadata_only["result"]["content"].as_array().unwrap().len(), 1);
+    let mut absent = McpClient::start(TaurosServer::default()).await;
+    let no_emulator = absent.request("tools/call", json!({"name":"emu_screenshot", "arguments":{}})).await;
+    assert_eq!(no_emulator["result"]["isError"], true);
+    absent.close().await;
     client.close().await;
 }

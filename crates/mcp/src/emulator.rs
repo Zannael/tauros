@@ -315,7 +315,8 @@ pub struct EmuScreenshotRequest {
     /// Optional filesystem path where the PNG should also be written.
     #[serde(default)]
     pub save_path: Option<String>,
-    /// Whether to include the base64-encoded PNG in the response (default true).
+    /// Include PNG pixels (default true). The MCP surface emits a native image
+    /// block; this internal result retains base64 for serialization/storage.
     #[serde(default = "default_true")]
     pub include_base64: bool,
 }

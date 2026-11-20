@@ -360,25 +360,29 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Completion: Spoken request transcribed offline and delivered to the chat (manual check recorded); engine decision in master.md.
 
 - [ ] **Not started** **AGT-005** API-key authentication path for a public release.
-  Depends on: `AGT-002`.
+  Depends on: `AGT-002`, `AGT-006`.
   Responsible: Agent
   Owner: unassigned
+  Note: Deferred by the Owner on 2026-11-20; no paid API checks until explicitly requested. Personal Claude subscription integration already has live evidence.
   Scope: Per master.md "Agent SDK authentication (RES-002)", let each user supply their own Anthropic API key or cloud-provider credential (stored locally, never sent elsewhere), with no claude.ai login offered by the app and no "Claude Code" branding. Refs: plan §"Decisions made" (Agent row: each user needs their own credentials; User row: possible open-source release). Excludes any shared or bundled key.
   Completion: Tests show the sidecar authenticates with a user-provided API key and refuses to start without one in release mode; the key is absent from logs and from the repository; master.md records the release auth model.
 
-- [ ] **Not started** **AGT-006** Codex adapter for the agent bridge.
+- [x] **Done** **AGT-006** Codex adapter for the agent bridge.
   Depends on: `AGT-001`, `MCP-002`.
   Responsible: Agent
-  Owner: unassigned
-  Scope: Implement the agent-bridge interface over the Codex SDK or app-server, connected to the Tauros MCP, authenticating per master.md RES-003: Sign in with ChatGPT plan usage (preview; Plus/Pro; local or open-source app) or a user-supplied API key; the app never stores tokens outside the documented flow. Refs: plan §"Decisions made" (Swappable agent row, Agent row).
-  Completion: A prompt sent through the bridge reaches Codex, a Tauros domain tool call executes and streams back; both auth paths tested or the untested one recorded as a limit.
+  Owner: Codex
+  Note: Owner accepted the working Codex adapter and requested closure on 2026-11-20. UI/UX refinements remain APP-003; further desktop mixed-edit/history/undo checks remain AGT-008 and beta chat Stop/history acceptance remains APP-005. API work stays deferred in AGT-009. Known untested auth renewal/expiry behavior is a documented limit, not a passed check.
+  Scope: Implement the agent-bridge interface over the Codex SDK or app-server, connected to the Tauros MCP, authenticating through the official runtime-managed ChatGPT browser flow from Tauros, with pending/success/failure/cancel states and the dedicated credential home; API-key UI and paid validation are deferred to AGT-009 per the Owner on 2026-11-20; the app never stores tokens outside the documented flow. Include the hybrid workflow defined by `AGT-008`: combine native source inspection/editing/development commands and Tauros MCP in one request, reusing the host-owned snapshot/provenance/recovery/serialization contract and project confinement; implement the provider-specific execution interception rather than assuming Claude hooks are portable. Owner follow-up 2026-11-20: verify real image delivery from emulator screenshots to the model; native MCP image delivery is implemented and has synthetic real-runtime acceptance; the Owner subsequently supplied the real-game repaired-sign preview with native tool, build, boot, input and screenshot activity and accepted this implementation for closure. For visual map edits, support a before/after visual check alongside semantic and interaction checks, and report unverified results explicitly. Refs: plan §"Decisions made" (Swappable agent row, Agent row).
+  Completion: A prompt sent through the bridge reaches Codex, a Tauros domain tool call executes and streams back; ChatGPT browser login can be started and cancelled in the app and its result is shown without exposing credentials. API auth is explicitly deferred to AGT-009 and is not required for closure. A mixed native-edit/domain-tool turn is verified with source changes in history and reversible through undo; snapshot failure prevents native writes.
+  Verification: 2026-11-20 UTC: Owner explicitly accepted the working implementation and requested AGT-006 closure after successful browser login, real desktop Codex turns and the repaired-sign preview on director-scene-mcp004. Earlier checks actually run and recorded in master.md: deterministic mixed native edit plus real Tauros MCP create_trainer with history/undo and snapshot-failure rejection; login pending/success/failure/cancel protocol and installed-runtime start/cancel; real authenticated tauros_status with matching tool events/result after enabling Code Mode host; real before/after synthetic screenshot test with native images and correct retained-fragment detection. Targeted MCP/bridge/app tests, Clippy and app builds passed as recorded; no new runtime checks were run for this documentation-only closure. Owner screenshots show native edits, build, boot, input and screenshot rows and the repaired sign, but are not independent collision or provenance/undo assertions. Limits: token renewal and login expiry unexercised; further desktop mixed-history/undo and Stop checks retained in AGT-008/APP-005; selected/live map context and interface refinements retained in APP-003. No paid API test, credential inspection, commit or push.
 
 - [ ] **Not started** **AGT-007** Gemini adapter for the agent bridge.
-  Depends on: `AGT-001`, `MCP-002`.
+  Depends on: `AGT-001`, `MCP-002`, `AGT-006`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Implement the agent-bridge interface over a Gemini runtime (Antigravity SDK, Gemini API or Vertex AI, chosen and recorded) using only a user-supplied Gemini API key or Vertex credentials, never a consumer Google AI subscription, per master.md RES-003. Refs: plan §"Decisions made" (Swappable agent row).
-  Completion: A prompt sent through the bridge reaches Gemini, a Tauros domain tool call executes and streams back; refusal without an API key or Vertex credentials is tested.
+  Note: Owner sequencing 2026-11-20: start only after AGT-006 is complete. Investigate an officially supported subscription integration first, including ACP; do not wrap consumer headless login contrary to provider restrictions. API connections and paid checks are deferred to AGT-009; revise the implementation choice with evidence before starting.
+  Scope: Select and implement an officially supported Antigravity subscription integration for the agent-bridge, investigating the editor/ACP route and recording current official evidence before implementation. Do not wrap consumer headless login contrary to provider restrictions; if no supported route satisfies Tauros safeguards, record the blocker. Gemini API/Vertex connections and paid checks are deferred to AGT-009 by the Owner on 2026-11-20, superseding the earlier API-only implementation choice in RES-003. Include the hybrid workflow defined by `AGT-008`: combine native source inspection/editing/development commands and Tauros MCP in one request, reusing the host-owned snapshot/provenance/recovery/serialization contract and project confinement; implement the provider-specific execution interception rather than assuming Claude hooks are portable. Refs: plan §"Decisions made" (Swappable agent row).
+  Completion: An officially supported subscription route is documented and a prompt sent through the bridge reaches Gemini, a Tauros domain tool call executes and streams back; no API spending or unsupported consumer credential reuse. If no supported route exists, keep the task open with evidence of the blocker. A mixed native-edit/domain-tool turn is verified with source changes in history and reversible through undo; snapshot failure prevents native writes.
 
 - [ ] **In progress** **AGT-008** Hybrid agent workflow with native source editing and MCP tools.
   Depends on: `AGT-003`, `G3-001`.
@@ -387,6 +391,14 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Note: (owner: Codex, implemented; local hybrid build-preview and real Claude decomp hybrid turn passed; Owner accepted Codex native editing/build/preview at AGT-006 closure on 2026-11-20, while explicit desktop provenance/history/undo verification remains open)
   Scope: Accepted by the Owner on 2026-11-20: let the integrated agent combine Tauros MCP/domain tools with native project source inspection, editing and development commands in the same request, choosing the most suitable path without requiring a domain tool for every game capability. Cover scripts, C and project configuration; retain snapshot-before-write, AI provenance, reviewable diffs and non-destructive undo for native edits, including writes performed by commands. Keep operations within the game project and the external-sources policy, prevent unguarded mutations, refresh or invalidate connector/editor state after native edits, and reuse Tauros build, emulator and verification tools. A native-edit failure must leave recoverable changes and a usable session. Per master.md "Agent reach over the whole game (Owner direction)"; supersedes the MCP-only writing restriction for this workflow once implemented. Refs: plan §"Decisions made" (Agent row, Swappable agent row), plan §"Layered architecture" (layers 1-4), plan §"Rules for the agents writing the code" (Never destructive, Compatible formats).
   Completion: An integration check demonstrates one agent request combining a domain change with a native source edit, followed by build and shared-emulator preview; checks demonstrate snapshot failure prevents native mutations, source edits appear in provenance/history and can be undone, and subsequent connector reads/writes use refreshed state without overwriting native changes. The Owner confirms the mixed workflow in the app; README and master.md record capabilities and limits.
+
+- [ ] **Not started** **AGT-009** Deferred Codex and Gemini API authentication and paid acceptance checks.
+  Depends on: `AGT-006`.
+  Responsible: Agent
+  Owner: unassigned
+  Note: Owner decision 2026-11-20: prioritize subscription sign-in, finish OpenAI before Antigravity, and defer all API connections and spending. Do not run paid checks until explicitly authorized. Anthropic release authentication remains AGT-005.
+  Scope: Enable the Codex API-key choice and implement the selected Gemini API or Vertex authentication path with user-owned credentials; validate real paid turns only after the Owner authorizes costs. Preserve runtime-managed credential storage, secret-free logs and the same protected native/MCP boundaries as subscription sessions. Refs: plan §"Decisions made" (Agent row, Swappable agent row).
+  Completion: Each enabled API path has an authorized real turn with a streamed Tauros tool result and protected mixed native/domain operation, or an explicitly recorded provider-specific blocker; no credentials in logs or repository. Document costs authorization and actual verification, with no claims based solely on dummy-key protocol tests.
 
 
 ## Phase 5 — Full app (beta)
@@ -425,6 +437,7 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: `APP-001`, `APP-002`, `APP-003`, `APP-004`, `AGT-003`, `AGT-004`, `MCP-004`, `MCP-005`.
   Responsible: Agent
   Owner: unassigned
+  Note: Owner accepted AGT-006 on 2026-11-20 and deferred interface polish. Retain explicit desktop Codex Stop/retry, provider switching and history/partial-edit checks here as beta integration acceptance; the adapter closure does not claim these manual checks passed.
   Scope: One end-to-end check covering map, trainer/scene editing, chat, voice, preview and undo, including a narrated request (a sequence of story events told in the chat, per master.md "Agent reach over the whole game (Owner direction)") that the agent turns into a built, verified and previewed scene; README documents beta capabilities and gaps. Refs: plan §"Layered roadmap toward the beta" (Phase 5 beta), plan §"Rules for the agents writing the code" (End of phase).
   Completion: Integration test passes; Owner narrates a sequence of events in the chat and confirms the resulting scene in the preview, with its verification verdict recorded; Owner confirms the beta flow; README updated.
 
@@ -500,10 +513,10 @@ contracts live in [docs/master.md](docs/master.md). The derived
 Each H2 section of the plan maps to the tasks that satisfy it.
 
 - plan §"Summary": `FND-002`, `RES-001`, `MOD-001`, `MCP-002`, `AGT-002`, `APP-005`.
-- plan §"Layered architecture": `AGT-008`, `FND-001`, `MOD-001`, `MCP-002`, `MCP-005`, `EMU-001`, `APP-003`.
-- plan §"Decisions made": `AGT-008`, `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
-- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`, `G3-011`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`, `AGT-008`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`, `MCP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
-- plan §"Rules for the agents writing the code": `AGT-008`, `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
+- plan §"Layered architecture": `FND-001`, `MOD-001`, `MCP-002`, `MCP-005`, `AGT-008`, `EMU-001`, `APP-003`.
+- plan §"Decisions made": `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `AGT-008`, `EMU-004`.
+- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`, `G3-011`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`, `AGT-008`, `AGT-009`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`, `MCP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
+- plan §"Rules for the agents writing the code": `GOV-002`, `AGT-008`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.

@@ -3,5 +3,7 @@ pub mod chat;
 pub mod history;
 pub mod launch;
 pub mod mcp_host;
-pub mod playback;
 pub mod native_edit;
+pub mod playback;
+pub mod codex_tools;
+pub mod codex_login;

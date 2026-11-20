@@ -186,6 +186,7 @@ const chatLog = document.getElementById('chat-log');
 const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatStop = document.getElementById('chat-stop');
+let authBusy = false;
 let chatBusy = false, chatGeneration = 0;   // a new chat ignores the old turn's late events
 
 invoke('chat_info').then((project) => {
@@ -224,7 +225,10 @@ function formatOutput(output) {
 
 function setChatBusy(busy) {
   chatBusy = busy;
-  chatSend.disabled = busy;
+  chatSend.disabled = busy || authBusy;
+  document.getElementById('chat-provider').disabled = busy || authBusy;
+  document.getElementById('chat-new').disabled = authBusy;
+  document.getElementById('codex-login').disabled = busy || authBusy;
   chatStop.hidden = !busy;
   updatePreviewControls();
 }
@@ -299,7 +303,7 @@ function startTurn(text) {
 document.getElementById('chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
-  if (!text || chatBusy) return;
+  if (!text || chatBusy || authBusy) return;
   chatInput.value = '';
   startTurn(text);
 });
@@ -417,3 +421,81 @@ async function runPreview(build) {
 }
 playBuild.addEventListener('click', () => runPreview(true));
 playPreview.addEventListener('click', () => runPreview(false));
+
+// A provider change starts a fresh conversation. Never mix vendor histories.
+let selectedProvider = 'claude';
+document.getElementById('chat-provider').addEventListener('change', async (event) => {
+  const provider = event.target.value;
+  try {
+    await invoke('chat_select', { provider });
+    selectedProvider = provider;
+    chatGeneration++;
+    chatLog.innerHTML = '';
+    document.getElementById('codex-auth').hidden = provider !== 'codex_chatgpt';
+  } catch (error) {
+    event.target.value = selectedProvider;
+    chatAppend('error', `${error}`);
+  }
+});
+
+
+// The runtime owns the browser callback and credential store. Only a status
+// enum crosses IPC: OAuth URLs, login IDs and tokens stay out of the chat log.
+const codexLogin = document.getElementById('codex-login');
+const codexLoginCancel = document.getElementById('codex-login-cancel');
+const codexLoginStatus = document.getElementById('codex-login-status');
+let loginGeneration = 0;
+const loginMessages = {
+  idle: 'Connect with your ChatGPT account. No API key needed.', pending: 'Complete sign-in in your browser, then return here.',
+  signed_in: 'Connected with ChatGPT. Model access will be checked on your next message.',
+  cancelled: 'Sign-in cancelled. You can try again.',
+  failed: 'Sign-in failed. Try again.', expired: 'Sign-in expired. Try again.',
+};
+function showLoginStatus(state) {
+  authBusy = state === 'pending';
+  document.getElementById('codex-auth').dataset.state = state;
+  codexLogin.textContent = state === 'signed_in' ? 'Check connection' : 'Sign in';
+  codexLoginStatus.textContent = loginMessages[state] || loginMessages.failed;
+  codexLoginCancel.hidden = !authBusy;
+  codexLoginCancel.disabled = false;
+  setChatBusy(chatBusy);
+}
+async function pollLogin(generation) {
+  if (generation !== loginGeneration || !authBusy) return;
+  try {
+    const state = await invoke('codex_login_status');
+    if (generation !== loginGeneration) return;
+    showLoginStatus(state);
+    if (state === 'pending') setTimeout(() => pollLogin(generation), 1500);
+  } catch (error) {
+    if (generation !== loginGeneration) return;
+    showLoginStatus('failed');
+    codexLoginStatus.textContent = `${error}`;
+  }
+}
+codexLogin.addEventListener('click', async () => {
+  const generation = ++loginGeneration;
+  authBusy = true;
+  setChatBusy(chatBusy);
+  document.getElementById('codex-auth').dataset.state = 'pending';
+  codexLoginStatus.textContent = 'Opening ChatGPT sign-in…';
+  try {
+    const state = await invoke('codex_login_start');
+    if (generation !== loginGeneration) return;
+    showLoginStatus(state);
+    if (state === 'pending') pollLogin(generation);
+  } catch (error) {
+    if (generation !== loginGeneration) return;
+    showLoginStatus('failed');
+    codexLoginStatus.textContent = `${error}`;
+  }
+});
+codexLoginCancel.addEventListener('click', async () => {
+  ++loginGeneration;
+  codexLoginCancel.disabled = true;
+  try { showLoginStatus(await invoke('codex_login_cancel')); }
+  catch (error) {
+    showLoginStatus('failed');
+    codexLoginStatus.textContent = `${error}`;
+  }
+});
