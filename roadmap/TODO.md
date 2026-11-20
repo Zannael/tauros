@@ -380,6 +380,15 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Implement the agent-bridge interface over a Gemini runtime (Antigravity SDK, Gemini API or Vertex AI, chosen and recorded) using only a user-supplied Gemini API key or Vertex credentials, never a consumer Google AI subscription, per master.md RES-003. Refs: plan §"Decisions made" (Swappable agent row).
   Completion: A prompt sent through the bridge reaches Gemini, a Tauros domain tool call executes and streams back; refusal without an API key or Vertex credentials is tested.
 
+- [ ] **In progress** **AGT-008** Hybrid agent workflow with native source editing and MCP tools.
+  Depends on: `AGT-003`, `G3-001`.
+  Responsible: Agent
+  Owner: Codex
+  Note: (owner: Codex, implemented; local hybrid build-preview and real Claude decomp hybrid turn passed; Owner accepted Codex native editing/build/preview at AGT-006 closure on 2026-11-20, while explicit desktop provenance/history/undo verification remains open)
+  Scope: Accepted by the Owner on 2026-11-20: let the integrated agent combine Tauros MCP/domain tools with native project source inspection, editing and development commands in the same request, choosing the most suitable path without requiring a domain tool for every game capability. Cover scripts, C and project configuration; retain snapshot-before-write, AI provenance, reviewable diffs and non-destructive undo for native edits, including writes performed by commands. Keep operations within the game project and the external-sources policy, prevent unguarded mutations, refresh or invalidate connector/editor state after native edits, and reuse Tauros build, emulator and verification tools. A native-edit failure must leave recoverable changes and a usable session. Per master.md "Agent reach over the whole game (Owner direction)"; supersedes the MCP-only writing restriction for this workflow once implemented. Refs: plan §"Decisions made" (Agent row, Swappable agent row), plan §"Layered architecture" (layers 1-4), plan §"Rules for the agents writing the code" (Never destructive, Compatible formats).
+  Completion: An integration check demonstrates one agent request combining a domain change with a native source edit, followed by build and shared-emulator preview; checks demonstrate snapshot failure prevents native mutations, source edits appear in provenance/history and can be undone, and subsequent connector reads/writes use refreshed state without overwriting native changes. The Owner confirms the mixed workflow in the app; README and master.md record capabilities and limits.
+
+
 ## Phase 5 — Full app (beta)
 
 - [ ] **Not started** **APP-001** Map editor and viewer.
@@ -423,7 +432,7 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: `MCP-002`, `AGT-003`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Instead of one tool per missing question, generic tools driven by the semantic model: `describe` (entity kinds, their fields, game capabilities and the game's constant vocabularies such as weather, music and movements), `query` (kind plus filter) and `get` (kind plus id) for every kind the model represents, so new model coverage reaches the agent without new tools; plus read-only search and reading of the project's source files, confined to the project directory, for what the model does not cover. Writes stay domain tools behind the snapshot guard, with no free-form file edits. Gaps found while using the chat are added here only when they recur. Per master.md "Agent reach over the whole game (Owner direction)". Refs: plan §"Layered architecture" (layer 2), plan §"Layered roadmap toward the beta" (Phase 5).
+  Scope: Instead of one tool per missing question, generic tools driven by the semantic model: `describe` (entity kinds, their fields, game capabilities and the game's constant vocabularies such as weather, music and movements), `query` (kind plus filter) and `get` (kind plus id) for every kind the model represents, so new model coverage reaches the agent without new tools; plus read-only search and reading of the project's source files, confined to the project directory, for what the model does not cover. This task adds read-only access; native source writes are covered separately by `AGT-008`, with the same snapshot guarantees. Gaps found while using the chat are added here only when they recur. Per master.md "Agent reach over the whole game (Owner direction)". Refs: plan §"Layered architecture" (layer 2), plan §"Layered roadmap toward the beta" (Phase 5).
   Completion: Contract tests show describe, query and get over every model kind against the Gen 3 connector, and read-only access refusing paths outside the project and any write; in the app chat the agent lists the trainers whose id contains DIRECTOR on a real project (manual check recorded).
 
 - [ ] **Not started** **PROV-001** Show and export provenance labels in the app.
@@ -491,10 +500,10 @@ contracts live in [docs/master.md](docs/master.md). The derived
 Each H2 section of the plan maps to the tasks that satisfy it.
 
 - plan §"Summary": `FND-002`, `RES-001`, `MOD-001`, `MCP-002`, `AGT-002`, `APP-005`.
-- plan §"Layered architecture": `FND-001`, `MOD-001`, `MCP-002`, `MCP-005`, `EMU-001`, `APP-003`.
-- plan §"Decisions made": `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
-- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`, `G3-011`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`, `MCP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
-- plan §"Rules for the agents writing the code": `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
+- plan §"Layered architecture": `AGT-008`, `FND-001`, `MOD-001`, `MCP-002`, `MCP-005`, `EMU-001`, `APP-003`.
+- plan §"Decisions made": `AGT-008`, `RES-001`, `RES-002`, `RES-003`, `DEC-001`, `DEC-002`, `FND-001`, `MCP-001`, `AGT-001`, `AGT-002`, `AGT-004`, `EMU-004`.
+- plan §"Layered roadmap toward the beta": Phase 0 `FND-001`, `FND-002`, `RES-001`; Phase 1 `MOD-001`, `G3-001`, `G3-002`, `G3-003`, `G3-004`, `G3-005`, `G3-006`, `G3-007`, `G3-008`, `G3-009`, `G3-010`, `G3-011`; Phase 3 design `VER-001`; Phase 2 `EMU-001`, `EMU-002`, `EMU-003`, `EMU-004`, `EMU-005`; Phase 3 `MCP-001`, `MCP-002`, `MCP-003`, `MCP-004`; Phase 4 `AGT-001`, `AGT-002`, `AGT-003`, `AGT-004`, `AGT-005`, `AGT-006`, `AGT-007`, `AGT-008`; Phase 5 `APP-001`, `APP-002`, `APP-003`, `APP-004`, `APP-005`, `MCP-005`; Phase 6 `GFX-001`, `GFX-002`, `GFX-003`, `GFX-004`.
+- plan §"Rules for the agents writing the code": `AGT-008`, `GOV-002`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
 - plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.

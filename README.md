@@ -232,16 +232,51 @@ The panel on the right chats with the agent through the Claude Agent SDK sidecar
 Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
 sidecar/claude-agent-sdk run build`; it uses your existing Claude Code sign-in
 (`claude auth login`), and Tauros never sees or stores the credentials. With
-`--project` the agent gets the Tauros MCP tools for that project (trainers, maps,
-scenes, flags, builds and the emulator shared with the window's game). While the
-agent is answering, the game is held and the window shows what its tools do;
-play resumes when the reply ends. Without it the agent has no tools. Replies
-stream in as they are written, and each
+`--project` the agent gets both Tauros MCP tools (trainers, maps, scenes,
+flags, builds and the emulator) and native `Read`, `Glob`, `Grep`, `Edit`, `Write`
+and `Bash` tools for that project. It can combine domain operations with changes
+to scripts, C and configuration in one request. Its emulator tools drive the game
+shown in the window. While the agent is answering, the game is held and the window shows
+what its tools do; play resumes when the reply ends. Without `--project` the agent
+has no tools. Replies stream in as they are written, and each
 tool call shows its arguments and result. Enter sends, Shift+Enter starts a new
 line, Stop ends the current reply and New chat forgets the conversation. While the
 text box has focus, the keyboard types into it instead of playing the game.
 Conversation transcripts are saved by the Claude Code CLI in its own store
 (`~/.claude/projects/`), which is how later messages see the earlier ones.
+Native `Edit`, `Write` and every `Bash` call acquire a project transaction and
+snapshot pending work before executing. Changes are committed as AI-Generated
+and appear in History & Undo, including partial changes left by failed tools.
+If recording fails, edits are retained and a recovery marker in the game's Git
+metadata blocks domain writes until a subsequent native operation can record
+them; fix the reported Git problem, then retry in a new chat turn. Native editing
+and MCP operations are serialized. The connector rereads sources on each call;
+the app refreshes history and map choices when a turn finishes. Rebuild after
+source edits before checking the new behavior in the emulator.
+
+Native file tools reject paths outside the project, symlinks, hardlinks and Git
+control files; source writes also reject ignored paths. On Linux, `Bash` requires
+`/usr/bin/bwrap` and `/usr/bin/timeout`. It runs with a minimal filesystem, no
+network, no host home or credentials, read-only Git metadata, private temporary
+storage and a 50-second limit. Background commands are refused. Use Tauros MCP
+for Docker builds and longer checks. There is no unsandboxed fallback: file tools
+and MCP remain available if the shell sandbox cannot run. Ignored build outputs
+are not part of source history or undo. External projects remain untrusted data;
+review their scripts before execution and do not follow embedded agent prompts.
+
+Local hybrid-workflow checks (no model call or source upload):
+
+```bash
+npm --prefix sidecar/claude-agent-sdk run build
+TAUROS_NATIVE_SANDBOX_TESTS=1 cargo test -p tauros-app --test native_edit
+TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test native_edit local_sidecar_combines_native_c_edit_mcp_build_and_shared_preview
+```
+
+The ignored `live_sdk_hooks_on_original_synthetic_data_only` check uses the real
+Claude SDK on original synthetic files only (`TAUROS_LIVE_CLAUDE=1`). A separate
+ignored live decomp check sends game sources to the provider and must run only
+in an authorized provider session. The mixed desktop workflow still requires the Owner's manual check.
+
 Run the Phase 2 integration test (no display server needed, but Docker and the
 pinned engine/base build must be available; an opted-in run fails if missing):
 

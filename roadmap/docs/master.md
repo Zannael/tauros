@@ -825,15 +825,106 @@ and shows it in the preview. Missing agent abilities are not listed up front:
 - the MCP grows through generic, model-driven tools (describe, query, get; `MCP-005`),
   so the question becomes whether the model represents a part of the game, not
   whether a tool exists;
-- reading what the model does not cover goes through read-only, project-confined
-  source access; writes stay domain tools behind the snapshot guard;
+- the original direction restricted project source access to read-only and writes
+  to domain tools; the accepted 2026-11-20 direction below supersedes that restriction;
 - gaps are found by using the app and enter TODO.md only when they recur.
+
+**Accepted** 2026-11-20 (Owner, in chat): the integrated agent should combine
+MCP/domain operations and native source-code work in the same request, using the
+path that is available and most convenient. A domain MCP tool is not required for
+every possible game modification: scripts, C and configuration may be edited
+natively when appropriate. Both paths retain snapshot-before-write, provenance,
+reviewable history and undo; native edits must be reconciled with connector/editor
+state and may use the same build, emulator and verification tools. This supersedes
+the earlier MCP-only writing restriction, not the non-destructive project workflow.
+Implementation is tracked by `AGT-008`; this is an accepted direction, not a claim
+that native editing is already available.
 
 Hypothesis, not verified: most of such a narration is already expressible as one
 Poryscript scene (movements, weather, trainer battle, warp) via `add_scene`, as the
 director's scene showed; what the agent lacks is knowing the game's vocabulary and
 checking the result. Effects the engine does not have (new animations or graphics)
 would need C or asset changes outside today's domain tools.
+
+## Hybrid native editing and MCP (AGT-008)
+
+**Accepted** 2026-11-20 (implementation under the Owner's hybrid-workflow direction):
+project chat sessions enable the Claude SDK's native `Read`, `Glob`, `Grep`, `Edit`,
+`Write` and `Bash` alongside existing Tauros MCP tools. SDK `PreToolUse` hooks
+validate paths and acquire a private Unix-socket transaction from Layer 1 before
+native mutations; `PostToolUse`, `PostToolUseFailure` and turn cleanup record
+changes. Hook failures block tool execution (`onFailure: block`), and the turn's
+terminal event is delivered only after native cleanup. The transaction gate is
+shared with MCP tools, build-and-play and app undo; conflicting operations fail
+promptly so parallel tool batches cannot deadlock it.
+
+`GitGuard::begin_external` snapshots first and writes a recovery marker in game
+Git metadata; `finish_external` records AI-Generated provenance without resetting
+failed-tool edits. If recording fails, the marker preserves the original snapshot
+and blocks domain snapshots until a later native operation records the pending
+change. Native source tools reject traversal, symlinks, hardlinks, Git control
+files and (for source writes) ignored paths. Linux Bash commands run in a minimal
+bubblewrap namespace without networking, host home, credentials or writable Git
+metadata, with a 50-second timeout and no background mode or unsandboxed fallback.
+Ignored build outputs remain outside source history. Game project scripts and
+embedded agent instructions remain untrusted under the external-sources policy.
+
+The Gen 3 connector already reparses source files on each `load`/`apply`, retaining
+its original safety baselines; it is not reopened after native edits. Boot layout
+measurements are cached by source commit, and history/map choices refresh at the
+end of a chat turn. Existing editor coverage is unchanged: no map or trainer forms
+are introduced by this task.
+
+**Verified** 2026-11-20 UTC: the real SDK check
+`TAUROS_LIVE_CLAUDE=1 cargo test -p tauros-app --test native_edit
+live_sdk_hooks_on_original_synthetic_data_only -- --ignored --nocapture` passed
+(11.07 s). Claude used native Read, Edit and sandboxed Bash followed by
+`mcp__tauros__tauros_status` in one turn, with two AI-Generated history entries.
+The fixture contained only original synthetic text, no decomp or user sources.
+The native guard checks also verified snapshot rejection before authorization,
+project/path confinement, serialization, undo, EOF recovery, failed-recording
+recovery after a host restart, and preservation of a native trainer level change
+when a domain edit subsequently changes its name.
+
+**Verified** 2026-11-20 UTC: `TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app
+--test native_edit local_sidecar_combines_native_c_edit_mcp_build_and_shared_preview
+-- --nocapture` passed (121.42 s) on a disposable copy of the pinned base build.
+One deterministic sidecar turn used native Write to add a volatile probe and an
+assignment in `CB2_EndTrainerBattle` in `src/battle_setup.c`, then MCP
+`create_trainer`, `build`, `emu_boot` at Petalburg (15, 10), and `emu_screenshot`.
+The built `.sym` contains `gTaurosNativeProbe`, the trainer source contains
+`TRAINER_NATIVE_LOCAL`, the shared emulator ran frames, and history contains the
+native AI-Generated commit. This is a local transport/transaction/build/preview
+check, not a live model run or proof that the battle-end assignment executed.
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, the
+56 Python tests, TypeScript build/check, JavaScript syntax and privacy checks
+passed. Container tests are opt-in in the general suite; the command above is the
+separate executed container evidence. `TAUROS_NATIVE_SANDBOX_TESTS=1` also passed
+the native policy/transaction test with a failing shell command: project edits were
+recorded while attempts to overwrite a file outside the project or Git config
+failed.
+
+**Accepted** 2026-11-20 (Owner, in chat): explicit authorization to run the live
+Claude check on the temporary decomp copy, including sending its sources to
+Anthropic. This resolves the initial automatic-approval rejection of that test.
+
+**Verified** 2026-11-20 UTC: `TAUROS_LIVE_CLAUDE=1 TAUROS_DOCKER_TESTS=1 cargo
+test -p tauros-app --test native_edit
+live_agent_combines_native_c_edit_domain_tool_build_and_shared_preview -- --ignored
+--nocapture` passed (72.52 s). In one real SDK turn Claude used native Read and
+Edit on `src/battle_setup.c`, created `TRAINER_NATIVE_MIXED` through MCP, built the
+ROM in Docker, booted the shared emulator at Petalburg (15, 10), and captured a
+screenshot. Successful completion of each required tool, the probe symbol in the
+built `.sym`, the trainer source, emulator frames and the native AI-Generated
+history entry were asserted. Exploratory Grep calls outside the game project
+were denied and the agent recovered; the integration test counts only successful
+required operations, while allowing recovery from denied exploratory tools. This
+checks the mixed live workflow, not execution of the battle-end probe assignment.
+
+Limits: the Owner's manual mixed-workflow check in the desktop app is pending.
+SDK hook contracts were checked against the installed 0.3.328 declarations and
+[official hook documentation](https://code.claude.com/docs/en/agent-sdk/hooks)
+(accessed 2026-11-20); native tools are currently wired only for the Claude adapter.
 
 ## Phase 3 director's scene & no-whiteout mechanism (MCP-004)
 

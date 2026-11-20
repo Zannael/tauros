@@ -58,7 +58,7 @@ pub struct Gen3BootHook {
     project_dir: PathBuf,
     connector: Arc<Mutex<Box<dyn Connector + Send>>>,
     toolchain: Option<Toolchain>,
-    cached_layout: Option<GameLayout>,
+    cached_layout: Option<(String, GameLayout)>,
 }
 
 impl Gen3BootHook {
@@ -76,15 +76,24 @@ impl Gen3BootHook {
     }
 
     fn layout(&mut self) -> Result<GameLayout, String> {
-        if let Some(layout) = self.cached_layout {
-            return Ok(layout);
+        // Native edits can change C struct layouts; only reuse a measurement at
+        // the same source revision. Failed recordings invalidate it as well.
+        let revision = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&self.project_dir).output()
+            .map_err(|e| e.to_string())?;
+        let revision = String::from_utf8_lossy(&revision.stdout).trim().to_owned();
+        if let Some((cached_revision, layout)) = &self.cached_layout {
+            if *cached_revision == revision {
+                return Ok(*layout);
+            }
         }
         let toolchain = self
             .toolchain
             .as_ref()
             .ok_or_else(|| "toolchain not configured; cannot measure Gen 3 struct layout".to_owned())?;
         let layout = GameLayout::measure(toolchain, &self.project_dir).map_err(|e| e.to_string())?;
-        self.cached_layout = Some(layout);
+        self.cached_layout = Some((revision, layout));
         Ok(layout)
     }
 }

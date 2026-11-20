@@ -104,6 +104,11 @@ impl GitGuard {
 
     /// Commits pending work so the current state is recoverable; returns that commit.
     pub fn snapshot(&self, summary: &str) -> Result<String, GuardError> {
+        if self.external_journal()?.exists() {
+            return Err(GuardError::Snapshot(
+                "a native edit needs recording; retry a native operation to recover it before domain writes or undo".into()
+            ));
+        }
         let snap = |e: GuardError| GuardError::Snapshot(e.to_string());
         self.git(&["add", "-A"]).map_err(snap)?;
         let has_head = self.git(&["rev-parse", "--verify", "-q", "HEAD"]).is_ok();
@@ -147,6 +152,63 @@ impl GitGuard {
         }
         let commit = self.git(&["rev-parse", "HEAD"])?.trim().to_owned();
         Ok(WriteReceipt { snapshot, commit: Some(commit) })
+    }
+
+    /// Records edits made by an external editor after `snapshot`. Unlike `write`,
+    /// a recording failure leaves the edits intact for inspection and recovery.
+    /// The caller must serialize the external operation with connector writes.
+    pub fn record_external(&self, snapshot: &str, summary: &str) -> Result<WriteReceipt, GuardError> {
+        if self.git(&["rev-parse", "HEAD"])?.trim() != snapshot {
+            return Err(GuardError::Git("HEAD changed during native editing; changes retained".into()));
+        }
+        self.git(&["add", "-A"])?;
+        if self.git(&["status", "--porcelain"])?.trim().is_empty() {
+            return Ok(WriteReceipt { snapshot: snapshot.to_owned(), commit: None });
+        }
+        let message = format!(
+            "{summary}\n\nTauros-Provenance: ai-generated\nTauros-Snapshot: {snapshot}"
+        );
+        self.git(&["commit", "-q", "-m", &message])?;
+        Ok(WriteReceipt {
+            snapshot: snapshot.to_owned(),
+            commit: Some(self.git(&["rev-parse", "HEAD"])?.trim().to_owned()),
+        })
+    }
+
+    /// Durable recovery marker: failed recordings are retried before another
+    /// native mutation, including after the app restarts. Never bypasses hooks.
+    pub fn begin_external(&self, summary: &str) -> Result<String, GuardError> {
+        let journal = self.external_journal()?;
+        if journal.exists() {
+            let marker = std::fs::read_to_string(&journal).map_err(|e| GuardError::Git(e.to_string()))?;
+            let (snapshot, previous_summary) = marker.split_once('\n')
+                .ok_or_else(|| GuardError::Git("invalid native recovery marker".into()))?;
+            let head = self.git(&["rev-parse", "HEAD"])?;
+            if head.trim() == snapshot {
+                self.record_external(snapshot, previous_summary)?;
+            } else {
+                let body = self.git(&["log", "-1", "--format=%B"])?;
+                if !body.lines().any(|line| line == format!("Tauros-Snapshot: {snapshot}")) {
+                    return Err(GuardError::Git("native recovery requires review: HEAD changed; edits retained".into()));
+                }
+            }
+            std::fs::remove_file(&journal).map_err(|e| GuardError::Git(e.to_string()))?;
+        }
+        let snapshot = self.snapshot(summary)?;
+        std::fs::write(journal, format!("{snapshot}\n{summary}")).map_err(|e| GuardError::Git(e.to_string()))?;
+        Ok(snapshot)
+    }
+
+    /// Clears the marker only after the result has been recorded successfully.
+    pub fn finish_external(&self, snapshot: &str, summary: &str) -> Result<WriteReceipt, GuardError> {
+        let receipt = self.record_external(snapshot, summary)?;
+        std::fs::remove_file(self.external_journal()?).map_err(|e| GuardError::Git(e.to_string()))?;
+        Ok(receipt)
+    }
+
+    fn external_journal(&self) -> Result<PathBuf, GuardError> {
+        let path = PathBuf::from(self.git(&["rev-parse", "--git-path", "tauros-native-pending"])?.trim());
+        Ok(if path.is_absolute() { path } else { self.root.join(path) })
     }
 
     /// Returns the tree to `commit`, dropping changes made since (ignored files stay).

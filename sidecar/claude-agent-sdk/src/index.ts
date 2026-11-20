@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { NativeTools } from './native-tools.js';
 import readline from 'node:readline';
+import fs from 'node:fs/promises';
 import {
   query,
   type McpServerConfig as SdkMcpServerConfig,
@@ -128,12 +130,21 @@ async function runSdkTurn(
 ): Promise<void> {
   const { sessionId, config } = session;
   const { turnId, abortController } = turn;
+  let terminal: Extract<AgentEvent, { type: 'turn_completed' }> | undefined;
+  const turnEvent = (event: AgentEvent): void => {
+    // Release the chat only after native transactions have been recorded.
+    if (event.type === 'turn_completed') terminal = event;
+    else emitEvent(sessionId, event);
+  };
 
-  emitEvent(sessionId, { type: 'turn_started', turn_id: turnId });
+  turnEvent({ type: 'turn_started', turn_id: turnId });
 
   const mcpServers = toSdkMcpServers(config.mcp_servers);
   const allowedTools = mapAllowedTools(config);
 
+  const nativeSocket = config.extra?.native_guard_socket;
+  const native = typeof nativeSocket === 'string' && config.working_dir
+    ? new NativeTools(config.working_dir, nativeSocket) : undefined;
   const options: SdkOptions = {
     abortController,
     cwd: config.working_dir,
@@ -141,7 +152,7 @@ async function runSdkTurn(
     systemPrompt: config.system_prompt,
     mcpServers,
     allowedTools,
-    // Keep edits strictly inside Tauros's domain MCP tools (no built-in file/shell tools).
+    // Native tools are enabled below only when a host-owned guard is attached.
     tools: [],
     includePartialMessages: true,
     // `resume` reloads the previous turns from the host CLI's own transcript
@@ -149,6 +160,7 @@ async function runSdkTurn(
     persistSession: true,
     settingSources: [],
     resume: session.sdkSessionId,
+    ...(native?.options(allowedTools ?? []) ?? {}),
   };
 
   const toolNamesById = new Map<string, string>();
@@ -175,7 +187,7 @@ async function runSdkTurn(
           session.sdkSessionId = msg.session_id;
         }
         const subtype = typeof msg.subtype === 'string' ? msg.subtype : 'system';
-        emitEvent(sessionId, {
+        turnEvent({
           type: 'status',
           turn_id: turnId,
           message: `sdk:${subtype}`,
@@ -191,13 +203,13 @@ async function runSdkTurn(
           if (!delta) continue;
           if (delta.type === 'text_delta' && typeof delta.text === 'string') {
             streamedTextForCurrentMessage = true;
-            emitEvent(sessionId, {
+            turnEvent({
               type: 'text_delta',
               turn_id: turnId,
               delta: delta.text,
             });
           } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
-            emitEvent(sessionId, {
+            turnEvent({
               type: 'thinking_delta',
               turn_id: turnId,
               delta: delta.thinking,
@@ -217,7 +229,7 @@ async function runSdkTurn(
             const callId = String(b.id ?? `call-${toolNamesById.size + 1}`);
             const name = String(b.name ?? 'unknown');
             toolNamesById.set(callId, name);
-            emitEvent(sessionId, {
+            turnEvent({
               type: 'tool_call_started',
               turn_id: turnId,
               call_id: callId,
@@ -229,7 +241,7 @@ async function runSdkTurn(
             typeof b.text === 'string' &&
             !streamedTextForCurrentMessage
           ) {
-            emitEvent(sessionId, {
+            turnEvent({
               type: 'text_delta',
               turn_id: turnId,
               delta: b.text,
@@ -249,7 +261,7 @@ async function runSdkTurn(
           if (b.type === 'tool_result') {
             const callId = String(b.tool_use_id ?? 'unknown');
             const name = toolNamesById.get(callId) ?? 'unknown';
-            emitEvent(sessionId, {
+            turnEvent({
               type: 'tool_call_completed',
               turn_id: turnId,
               call_id: callId,
@@ -282,20 +294,20 @@ async function runSdkTurn(
               : Array.isArray(msg.errors)
                 ? msg.errors.map(String).join('; ')
                 : `SDK turn failed (${subtype})`;
-          emitEvent(sessionId, {
+          turnEvent({
             type: 'error',
             turn_id: turnId,
             code: isAuthErrorMessage(errText) ? 'auth_required' : 'provider',
             message: errText,
           });
-          emitEvent(sessionId, {
+          turnEvent({
             type: 'turn_completed',
             turn_id: turnId,
             finish_reason: 'failed',
             usage,
           });
         } else {
-          emitEvent(sessionId, {
+          turnEvent({
             type: 'turn_completed',
             turn_id: turnId,
             finish_reason: subtype === 'error_max_turns' ? 'max_turns' : 'completed',
@@ -307,7 +319,7 @@ async function runSdkTurn(
     }
 
     if (!completedEmitted) {
-      emitEvent(sessionId, {
+      turnEvent({
         type: 'turn_completed',
         turn_id: turnId,
         finish_reason: turn.cancelled ? 'cancelled' : 'completed',
@@ -317,20 +329,20 @@ async function runSdkTurn(
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     if (turn.cancelled || abortController.signal.aborted) {
-      emitEvent(sessionId, {
+      turnEvent({
         type: 'turn_completed',
         turn_id: turnId,
         finish_reason: 'cancelled',
         usage,
       });
     } else {
-      emitEvent(sessionId, {
+      turnEvent({
         type: 'error',
         turn_id: turnId,
         code: isAuthErrorMessage(errMsg) ? 'auth_required' : 'provider',
         message: errMsg,
       });
-      emitEvent(sessionId, {
+      turnEvent({
         type: 'turn_completed',
         turn_id: turnId,
         finish_reason: 'failed',
@@ -338,6 +350,13 @@ async function runSdkTurn(
       });
     }
   } finally {
+    try {
+      await native?.close();
+    } catch (error) {
+      turnEvent({ type: 'error', turn_id: turnId, code: 'internal', message: String(error) });
+      terminal = { type: 'turn_completed', turn_id: turnId, finish_reason: 'failed', usage };
+    }
+    if (terminal) emitEvent(sessionId, terminal);
     if (session.activeTurn?.turnId === turnId) {
       session.activeTurn = undefined;
     }
@@ -383,13 +402,10 @@ async function runDirectMcpTestTurn(
     return;
   }
 
-  let directive: { tool: string; arguments?: Record<string, unknown>; delay_ms?: number };
+  type Step = { tool: string; arguments?: Record<string, unknown>; native?: boolean };
+  let directive: Step & { delay_ms?: number; steps?: Step[] };
   try {
-    directive = JSON.parse(message.text) as {
-      tool: string;
-      arguments?: Record<string, unknown>;
-      delay_ms?: number;
-    };
+    directive = JSON.parse(message.text);
   } catch {
     directive = { tool: 'tauros_status', arguments: {} };
   }
@@ -475,40 +491,62 @@ async function runDirectMcpTestTurn(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })}\n`,
     );
 
-    const callId = `mcp-call-${turnId}`;
-    const args = directive.arguments ?? {};
-    emitEvent(sessionId, {
-      type: 'tool_call_started',
-      turn_id: turnId,
-      call_id: callId,
-      name: directive.tool,
-      arguments: args,
-    });
+    const nativeSocket = config.extra?.native_guard_socket;
+    const native = typeof nativeSocket === 'string' && config.working_dir
+      ? new NativeTools(config.working_dir, nativeSocket) : undefined;
+    let stepNumber = 0;
+    for (const step of directive.steps ?? [directive]) {
+      const callId = `mcp-call-${turnId}-${stepNumber++}`;
+      const args = step.arguments ?? {};
+      emitEvent(sessionId, {
+        type: 'tool_call_started', turn_id: turnId, call_id: callId,
+        name: step.tool, arguments: args,
+      });
+      if (step.native) {
+        if (!native || !['Write', 'Edit'].includes(step.tool)) throw new Error('native test step unavailable');
+        try {
+          const prepared = await native.prepare(step.tool, args, callId);
+          const file = String(prepared.file_path);
+          if (step.tool === 'Write') {
+            await fs.writeFile(file, String(args.content));
+          } else {
+            const text = await fs.readFile(file, 'utf8');
+            const oldText = String(args.old_string);
+            if (!text.includes(oldText)) throw new Error('native test edit target missing');
+            await fs.writeFile(file, text.replace(oldText, String(args.new_string)));
+          }
+        } finally {
+          await native.close();
+        }
+        emitEvent(sessionId, { type: 'tool_call_completed', turn_id: turnId,
+          call_id: callId, name: step.tool, is_error: false, output: { ok: true } });
+        continue;
+      }
 
-    const resp = await rpc('tools/call', {
-      name: directive.tool,
-      arguments: args,
-    });
+      const resp = await rpc('tools/call', {
+        name: step.tool,
+        arguments: args,
+      });
 
-    const result = (resp.result ?? {}) as Record<string, unknown>;
-    const isError = Boolean(result.isError);
-    const content = Array.isArray(result.content) ? result.content : [];
-    const firstText =
-      content.length > 0 && typeof (content[0] as Record<string, unknown>).text === 'string'
-        ? ((content[0] as Record<string, unknown>).text as string)
-        : '';
-    let parsedOutput: unknown = firstText;
-    try {
-      parsedOutput = JSON.parse(firstText);
-    } catch {
-      // keep string output
+      const result = (resp.result ?? {}) as Record<string, unknown>;
+      const isError = Boolean(result.isError);
+      const content = Array.isArray(result.content) ? result.content : [];
+      const firstText =
+        content.length > 0 && typeof (content[0] as Record<string, unknown>).text === 'string'
+          ? ((content[0] as Record<string, unknown>).text as string)
+          : '';
+      let parsedOutput: unknown = firstText;
+      try {
+        parsedOutput = JSON.parse(firstText);
+      } catch {
+        // keep string output
     }
 
     emitEvent(sessionId, {
       type: 'tool_call_completed',
       turn_id: turnId,
       call_id: callId,
-      name: directive.tool,
+      name: step.tool,
       is_error: isError,
       output: parsedOutput,
     });
@@ -516,8 +554,11 @@ async function runDirectMcpTestTurn(
     emitEvent(sessionId, {
       type: 'text_delta',
       turn_id: turnId,
-      delta: `Executed ${directive.tool}: ${firstText}`,
+      delta: `Executed ${step.tool}: ${firstText}`,
     });
+
+    if (isError && directive.steps) throw new Error(`tool failed: ${step.tool}: ${firstText}`);
+    }
 
     emitEvent(sessionId, {
       type: 'turn_completed',
