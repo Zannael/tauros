@@ -15,6 +15,8 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(600);
 pub enum LoginStatus {
     #[default]
     Idle,
+    /// A status check found no cached sign-in (used by Antigravity).
+    SignedOut,
     Pending,
     SignedIn,
     Cancelled,

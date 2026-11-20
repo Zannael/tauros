@@ -228,7 +228,7 @@ function setChatBusy(busy) {
   chatSend.disabled = busy || authBusy;
   document.getElementById('chat-provider').disabled = busy || authBusy;
   document.getElementById('chat-new').disabled = authBusy;
-  document.getElementById('codex-login').disabled = busy || authBusy;
+  document.getElementById('auth-login').disabled = busy || authBusy;
   chatStop.hidden = !busy;
   updatePreviewControls();
 }
@@ -277,6 +277,7 @@ function startTurn(text) {
         break;
       }
       case 'error':
+        if (event.code === 'auth_required') handleAuthRequired(event.message);
         chatAppend('error', event.message);
         break;
       case 'turn_completed': {
@@ -295,8 +296,9 @@ function startTurn(text) {
   };
   setChatBusy(true);
   invoke('chat_send', { text, onEvent: channel }).catch((err) => {
-    chatAppend('error', `${err}`);
     setChatBusy(false);
+    if (handleAuthRequired(err)) chatAppend('meta', 'Sign in with Google above, then send the message again.');
+    else chatAppend('error', `${err}`);
   });
 }
 
@@ -431,7 +433,7 @@ document.getElementById('chat-provider').addEventListener('change', async (event
     selectedProvider = provider;
     chatGeneration++;
     chatLog.innerHTML = '';
-    document.getElementById('codex-auth').hidden = provider !== 'codex_chatgpt';
+    showAuthPanel(provider);
   } catch (error) {
     event.target.value = selectedProvider;
     chatAppend('error', `${error}`);
@@ -441,61 +443,104 @@ document.getElementById('chat-provider').addEventListener('change', async (event
 
 // The runtime owns the browser callback and credential store. Only a status
 // enum crosses IPC: OAuth URLs, login IDs and tokens stay out of the chat log.
-const codexLogin = document.getElementById('codex-login');
-const codexLoginCancel = document.getElementById('codex-login-cancel');
-const codexLoginStatus = document.getElementById('codex-login-status');
-let loginGeneration = 0;
-const loginMessages = {
-  idle: 'Connect with your ChatGPT account. No API key needed.', pending: 'Complete sign-in in your browser, then return here.',
-  signed_in: 'Connected with ChatGPT. Model access will be checked on your next message.',
-  cancelled: 'Sign-in cancelled. You can try again.',
-  failed: 'Sign-in failed. Try again.', expired: 'Sign-in expired. Try again.',
+// One panel serves every provider that signs in from Tauros.
+const authPanel = document.getElementById('agent-auth');
+const authLogin = document.getElementById('auth-login');
+const authLoginCancel = document.getElementById('auth-login-cancel');
+const authLoginStatus = document.getElementById('auth-login-status');
+const authProviders = {
+  codex_chatgpt: {
+    title: 'ChatGPT plan', label: 'Sign in with ChatGPT', commands: 'codex_login', opening: 'Opening ChatGPT sign-in…',
+    messages: {
+      idle: 'Connect with your ChatGPT account. No API key needed.', pending: 'Complete sign-in in your browser, then return here.',
+      signed_in: 'Connected with ChatGPT. Model access will be checked on your next message.',
+      cancelled: 'Sign-in cancelled. You can try again.',
+      failed: 'Sign-in failed. Try again.', expired: 'Sign-in expired. Try again.',
+    },
+  },
+  antigravity: {
+    title: 'Google account', label: 'Sign in with Google', commands: 'antigravity_login', opening: 'Opening Google sign-in…',
+    messages: {
+      idle: 'Checking your Antigravity sign-in…', signed_out: 'Sign in with your Google account to use Antigravity. No API key needed.',
+      pending: 'Complete sign-in in your browser, then return here.',
+      signed_in: 'Connected with your Google account. Shared with your other Antigravity apps.',
+      cancelled: 'Sign-in cancelled. You can try again.',
+      failed: 'Sign-in failed. Try again.', expired: 'Sign-in expired. Try again.',
+    },
+  },
 };
+let loginGeneration = 0;
+const authFor = () => authProviders[selectedProvider];
 function showLoginStatus(state) {
+  const auth = authFor();
+  if (!auth) return;
   authBusy = state === 'pending';
-  document.getElementById('codex-auth').dataset.state = state;
-  codexLogin.textContent = state === 'signed_in' ? 'Check connection' : 'Sign in';
-  codexLoginStatus.textContent = loginMessages[state] || loginMessages.failed;
-  codexLoginCancel.hidden = !authBusy;
-  codexLoginCancel.disabled = false;
+  authPanel.dataset.state = state;
+  authLogin.textContent = state === 'signed_in' ? 'Check connection' : 'Sign in';
+  authLoginStatus.textContent = auth.messages[state] || auth.messages.failed;
+  authLoginCancel.hidden = !authBusy;
+  authLoginCancel.disabled = false;
   setChatBusy(chatBusy);
+}
+function showAuthError(error) {
+  showLoginStatus('failed');
+  authLoginStatus.textContent = `${error}`;
+}
+// Antigravity checks its cached sign-in silently; nothing opens in the browser.
+async function showAuthPanel(provider) {
+  const auth = authProviders[provider];
+  const generation = ++loginGeneration;
+  authPanel.hidden = !auth;
+  if (!auth) { authBusy = false; setChatBusy(chatBusy); return; }
+  document.getElementById('auth-title').textContent = auth.title;
+  authLogin.setAttribute('aria-label', auth.label);
+  showLoginStatus('idle');
+  if (provider !== 'antigravity') return;
+  authLogin.disabled = true;
+  try {
+    const state = await invoke('antigravity_login_check');
+    if (generation === loginGeneration) showLoginStatus(state);
+  } catch (error) {
+    if (generation === loginGeneration) showAuthError(error);
+  }
 }
 async function pollLogin(generation) {
   if (generation !== loginGeneration || !authBusy) return;
   try {
-    const state = await invoke('codex_login_status');
+    const state = await invoke(`${authFor().commands}_status`);
     if (generation !== loginGeneration) return;
     showLoginStatus(state);
     if (state === 'pending') setTimeout(() => pollLogin(generation), 1500);
   } catch (error) {
-    if (generation !== loginGeneration) return;
-    showLoginStatus('failed');
-    codexLoginStatus.textContent = `${error}`;
+    if (generation === loginGeneration) showAuthError(error);
   }
 }
-codexLogin.addEventListener('click', async () => {
+authLogin.addEventListener('click', async () => {
+  const auth = authFor();
+  if (!auth) return;
   const generation = ++loginGeneration;
   authBusy = true;
   setChatBusy(chatBusy);
-  document.getElementById('codex-auth').dataset.state = 'pending';
-  codexLoginStatus.textContent = 'Opening ChatGPT sign-in…';
+  authPanel.dataset.state = 'pending';
+  authLoginStatus.textContent = auth.opening;
   try {
-    const state = await invoke('codex_login_start');
+    const state = await invoke(`${auth.commands}_start`);
     if (generation !== loginGeneration) return;
     showLoginStatus(state);
     if (state === 'pending') pollLogin(generation);
   } catch (error) {
-    if (generation !== loginGeneration) return;
-    showLoginStatus('failed');
-    codexLoginStatus.textContent = `${error}`;
+    if (generation === loginGeneration) showAuthError(error);
   }
 });
-codexLoginCancel.addEventListener('click', async () => {
+authLoginCancel.addEventListener('click', async () => {
   ++loginGeneration;
-  codexLoginCancel.disabled = true;
-  try { showLoginStatus(await invoke('codex_login_cancel')); }
-  catch (error) {
-    showLoginStatus('failed');
-    codexLoginStatus.textContent = `${error}`;
-  }
+  authLoginCancel.disabled = true;
+  try { showLoginStatus(await invoke(`${authFor().commands}_cancel`)); }
+  catch (error) { showAuthError(error); }
 });
+// A reply refused for a missing Antigravity sign-in reopens the panel instead.
+function handleAuthRequired(error) {
+  if (selectedProvider !== 'antigravity' || !`${error}`.includes('Antigravity sign-in required')) return false;
+  showLoginStatus('signed_out');
+  return true;
+}

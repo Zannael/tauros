@@ -43,6 +43,7 @@ struct App {
     chat: Arc<Chat>,
     chat_provider: Arc<Mutex<String>>,
     codex_login: Mutex<tauros_app::codex_login::CodexLogin>,
+    antigravity_login: Mutex<tauros_app::antigravity_login::AntigravityLogin>,
     /// Set while a text field has focus: game keys then go to the field.
     typing: Arc<AtomicBool>,
 }
@@ -112,6 +113,7 @@ fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
 fn chat_send(app: tauri::State<'_, App>, text: String, on_event: Channel<AgentEvent>) -> Result<String, String> {
     let login = app.codex_login.lock().unwrap();
     if login.pending() { return Err("finish or cancel ChatGPT sign-in before sending".into()); }
+    if app.antigravity_login.lock().unwrap().pending() { return Err("finish or cancel Google sign-in before sending".into()); }
     let turn = app.chat.send(&text, move |event| {
         let _ = on_event.send(event);
     })?;
@@ -147,6 +149,7 @@ fn chat_select(app: tauri::State<'_, App>, provider: String) -> Result<(), Strin
     }
     if app.chat.busy() { return Err("wait for the current reply or stop it before switching agents".into()); }
     if app.codex_login.lock().unwrap().pending() { return Err("finish or cancel ChatGPT sign-in before switching agents".into()); }
+    if app.antigravity_login.lock().unwrap().pending() { return Err("finish or cancel Google sign-in before switching agents".into()); }
     app.chat.reset();
     *app.chat_provider.lock().unwrap() = provider;
     Ok(())
@@ -171,6 +174,35 @@ fn codex_login_status(app: tauri::State<'_, App>) -> Result<tauros_app::codex_lo
 #[tauri::command(async)]
 fn codex_login_cancel(app: tauri::State<'_, App>) -> Result<tauros_app::codex_login::LoginStatus, String> {
     app.codex_login.lock().unwrap().cancel()
+}
+
+/// Silent check of the cached Antigravity sign-in when the provider is selected.
+#[tauri::command(async)]
+fn antigravity_login_check(app: tauri::State<'_, App>) -> Result<tauros_app::antigravity_login::LoginStatus, String> {
+    if *app.chat_provider.lock().unwrap() != "antigravity" { return Err("select Antigravity first".into()); }
+    let project = app.project_root().unwrap_or_else(repo_root);
+    app.antigravity_login.lock().unwrap().check(antigravity_config(), &project)
+}
+
+/// The runtime opens the browser and hosts the callback; only a status returns.
+#[tauri::command(async)]
+fn antigravity_login_start(app: tauri::State<'_, App>) -> Result<tauros_app::antigravity_login::LoginStatus, String> {
+    if *app.chat_provider.lock().unwrap() != "antigravity" { return Err("select Antigravity first".into()); }
+    let mut login = app.antigravity_login.lock().unwrap();
+    if app.chat.busy() { return Err("stop the current reply before signing in".into()); }
+    app.chat.reset();
+    let project = app.project_root().unwrap_or_else(repo_root);
+    login.start(antigravity_config(), &project)
+}
+
+#[tauri::command(async)]
+fn antigravity_login_status(app: tauri::State<'_, App>) -> Result<tauros_app::antigravity_login::LoginStatus, String> {
+    app.antigravity_login.lock().unwrap().poll()
+}
+
+#[tauri::command(async)]
+fn antigravity_login_cancel(app: tauri::State<'_, App>) -> Result<tauros_app::antigravity_login::LoginStatus, String> {
+    app.antigravity_login.lock().unwrap().cancel()
 }
 
 fn codex_config() -> tauros_agent_bridge::codex::CodexConfig {
@@ -412,7 +444,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), typing })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -437,6 +469,10 @@ fn main() {
             codex_login_start,
             codex_login_status,
             codex_login_cancel,
+            antigravity_login_check,
+            antigravity_login_start,
+            antigravity_login_status,
+            antigravity_login_cancel,
             chat_reset,
             chat_select,
             chat_info,

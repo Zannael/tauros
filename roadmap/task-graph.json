@@ -894,10 +894,12 @@
     },
     {
       "completion": "An officially supported subscription route is documented and a prompt sent through the bridge reaches Gemini, a Tauros domain tool call executes and streams back; no API spending or unsupported consumer credential reuse. If no supported route exists, keep the task open with evidence of the blocker. A mixed native-edit/domain-tool turn is verified with source changes in history and reversible through undo; snapshot failure prevents native writes.",
-      "dependents": [],
+      "dependents": [
+        "AGT-010"
+      ],
       "id": "AGT-007",
       "incomplete_prerequisites": [],
-      "note": "Official route selected: Antigravity CLI ACP server (`agy acp`) with the user's cached subscription sign-in; see master.md \"Antigravity ACP adapter (AGT-007)\". Desktop check in the Tauri window, in-app sign-in and Gemini image delivery are not covered.",
+      "note": "Official route selected: Antigravity CLI ACP server (`agy acp`) with the user's cached subscription sign-in; see master.md \"Antigravity ACP adapter (AGT-007)\". In-app Google sign-in is AGT-010. Desktop check in the Tauri window and Gemini image delivery are not covered.",
       "owner": "Claude Code",
       "prerequisites": [
         "AGT-001",
@@ -950,6 +952,24 @@
       "verification": null
     },
     {
+      "completion": "The ACP `authenticate` behaviour of the pinned CLI is recorded in master.md from an actual probe; tests cover the status check, start, success, failure and cancel paths and that no URL or provider text crosses IPC; the panel is checked in the UI; the Owner's real sign-in is not altered by automated checks.",
+      "dependents": [],
+      "id": "AGT-010",
+      "incomplete_prerequisites": [],
+      "note": "A real completed sign-in from Tauros is left to the Owner's first use; automated checks never touch the real sign-in.",
+      "owner": "Claude Code",
+      "prerequisites": [
+        "AGT-007"
+      ],
+      "responsible": "Agent",
+      "scope": "Accepted by the Owner on 2026-11-20. When Antigravity is selected, Tauros checks the cached `agy` sign-in silently and shows only signed-in or not signed-in, with no account details. If not signed in, a **Sign in with Google** panel consistent with the Codex one starts the official ACP `authenticate` method `oauth-personal` and shows pending, success, failure and cancel states; cancel stops the login process. A send that fails for missing sign-in opens the panel instead of a bare error. Only `oauth-personal` is offered (API key, Vertex and Enterprise stay in AGT-009 or out of scope). Only a status enum crosses IPC; OAuth URLs and provider error text never reach the chat or logs. No sign-out control, because the Antigravity sign-in is shared with the user's other Antigravity surfaces. Refs: plan §\"Decisions made\" (Swappable agent row, Agent row).",
+      "section": "Tauros roadmap / Phase 4 — Agent bridge and voice",
+      "source_line": 404,
+      "status": "Done",
+      "title": "Antigravity Google sign-in inside the app.",
+      "verification": "2026-11-20 UTC: probed `agy acp` 1.5.11 `authenticate` signed in (immediate reply, nothing opened) and in a bubblewrap namespace hiding the home and user bus (`-32000` on session/new; pending authenticate; runtime opened the browser on accounts.google.com; no URL over ACP); recorded in master.md \"Antigravity sign-in inside the app (AGT-010)\". Implemented `AntigravityAdapter::{signed_in, start_google_login, google_login_result}`, `crates/app/src/antigravity_login.rs`, Tauri commands `antigravity_login_{check,start,status,cancel}`, a `signed_out` status, and a shared Codex/Antigravity sign-in panel in `crates/app/ui`. `cargo test -p tauros-app --test antigravity_login` passed (already/success/failure/pending, check never starts sign-in, duplicate start refused, cancel kills the runtime, no provider text in status); `TAUROS_AGY_BIN=... --test antigravity_login installed_ -- --ignored` passed in isolation (signed_out, pending, stub browser host accounts.google.com, cancelled, no leftover process); the Owner's real sign-in still opened a session afterwards. UI checked in the built-in browser with mocked IPC (silent check, signed-out prompt, send redirected to the panel, pending/cancel/signed-in states, Codex panel unchanged, hidden for Claude). `cargo clippy --workspace --tests -- -D warnings`, `cargo test -p tauros-agent-bridge -p tauros-app` and 56 Python tests passed. Limits: no real completed Google sign-in from Tauros, no browser-failure case, no token renewal, Tauri window not driven; no commit."
+    },
+    {
       "completion": "An edit made in the app opens correctly in Porymap and builds.",
       "dependents": [
         "APP-005"
@@ -965,7 +985,7 @@
       "responsible": "Agent",
       "scope": "View and edit maps, metatiles and events through the model; saves remain Porymap-compatible. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Compatible formats).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 407,
+      "source_line": 416,
       "status": "Not started",
       "title": "Map editor and viewer.",
       "verification": null
@@ -987,7 +1007,7 @@
       "responsible": "Agent",
       "scope": "Forms for trainers, parties and Poryscript scenes through the model. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 414,
+      "source_line": 423,
       "status": "Not started",
       "title": "Trainer and scene editor.",
       "verification": null
@@ -1009,7 +1029,7 @@
       "responsible": "Agent",
       "scope": "Build-and-preview from the editor in the same window, boot to the selected map or scene. The window's emulator is the same session the agent's MCP emulator tools drive, so what the agent builds, boots and checks appears in the window (accepted 2026-11-19, see master.md \"Streaming chat panel (AGT-003)\"). Owner follow-up 2026-11-20: pass structured context for the selected preview/editor map and the actual emulator map/position to the agent, keeping selection, launch target and live location distinct and marking unavailable/stale state. Show an explicit agent-held state instead of presenting the 10 Hz frame refresh as gameplay FPS. After an agent build, provide a direct preview at the selected/current target without a manual New Game sequence; keep the target and supported flags explicit. Owner map-switch follow-up 2026-11-20: prevent stale out-of-bounds coordinates when changing maps and reject invalid targets before building; add a separate preview action using the existing built ROM/symbol pair without rebuilding the ROM. Document that this is a fresh boot-to-point, not instant live-state teleportation, and that bounded defaults do not guarantee walkability. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Layered architecture\" (layer 1).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 421,
+      "source_line": 430,
       "status": "In progress",
       "title": "Emulator panel integrated with the editor.",
       "verification": null
@@ -1031,7 +1051,7 @@
       "responsible": "Agent",
       "scope": "History view over the snapshot commits with undo/restore of agent and manual changes. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Never destructive).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 429,
+      "source_line": 438,
       "status": "Done",
       "title": "Change history with undo.",
       "verification": "2026-11-18 UTC: added `crates/app/src/history.rs` (`list_history`, `undo_to`, `ChangeOrigin`, `HistoryEntry`, `UndoReceipt`) reading G3-001 commits and `Tauros-Provenance`/`Tauros-Snapshot`/`Tauros-Undo-Target` trailers, wired `history_list` and `history_undo` Tauri commands in `crates/app/src/main.rs`, and added the History & Undo panel in `crates/app/ui/index.html` and `crates/app/ui/main.js` showing each commit's origin/provenance and Restore button. `cargo test -p tauros-app --test history_undo -- --nocapture` passed both tests: `lists_agent_and_manual_changes_and_restores_previous_snapshot_exactly` verified listing Human, AiGenerated, External, Snapshot and Undo entries, snapshotting pending dirty work before undo, restoring modified/CRLF files and removing post-snapshot files byte-for-byte while preserving ignored build outputs, reversible undo-of-undo and no-op undo; `undo_rejects_unknown_commit_without_modifying_tree` verified clean rejection. Full `cargo test --workspace`, `cargo clippy -p tauros-app --tests -- -D warnings` and 56 Python tests all passed. Limits: the UI History panel was compiled and wired into Tauri, not visually clicked in a live window."
@@ -1062,7 +1082,7 @@
       "responsible": "Agent",
       "scope": "One end-to-end check covering map, trainer/scene editing, chat, voice, preview and undo, including a narrated request (a sequence of story events told in the chat, per master.md \"Agent reach over the whole game (Owner direction)\") that the agent turns into a built, verified and previewed scene; README documents beta capabilities and gaps. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5 beta), plan §\"Rules for the agents writing the code\" (End of phase).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 437,
+      "source_line": 446,
       "status": "Not started",
       "title": "Beta integration test and README update.",
       "verification": null
@@ -1083,7 +1103,7 @@
       "responsible": "Agent",
       "scope": "Instead of one tool per missing question, generic tools driven by the semantic model: `describe` (entity kinds, their fields, game capabilities and the game's constant vocabularies such as weather, music and movements), `query` (kind plus filter) and `get` (kind plus id) for every kind the model represents, so new model coverage reaches the agent without new tools; plus read-only search and reading of the project's source files, confined to the project directory, for what the model does not cover. This task adds read-only access; native source writes are covered separately by `AGT-008`, with the same snapshot guarantees. Gaps found while using the chat are added here only when they recur. Per master.md \"Agent reach over the whole game (Owner direction)\". Refs: plan §\"Layered architecture\" (layer 2), plan §\"Layered roadmap toward the beta\" (Phase 5).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 445,
+      "source_line": 454,
       "status": "Not started",
       "title": "Generic query surface over the model and read-only project access.",
       "verification": null
@@ -1102,7 +1122,7 @@
       "responsible": "Agent",
       "scope": "Display the AI-Generated / AI-Assisted / Human label of every changed entity in the change history and editors, let the human promote a label when they intervene, and export a per-project provenance report suitable for a release note. Per master.md \"Provenance labels (DEC-003)\". Refs: plan §\"Risks and community notes\" (Positioning).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 452,
+      "source_line": 461,
       "status": "Not started",
       "title": "Show and export provenance labels in the app.",
       "verification": null
@@ -1125,7 +1145,7 @@
       "responsible": "Agent",
       "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 461,
+      "source_line": 470,
       "status": "Not started",
       "title": "Asset pipeline with palette and VRAM validator.",
       "verification": null
@@ -1146,7 +1166,7 @@
       "responsible": "Agent",
       "scope": "Palette-aware pixel editing of sprites and tiles with validator feedback and build-and-preview. Refs: plan §\"Graphics assets and visual enhancements\" (step 4), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 468,
+      "source_line": 477,
       "status": "Not started",
       "title": "Pixel panel in the app.",
       "verification": null
@@ -1167,7 +1187,7 @@
       "responsible": "Agent",
       "scope": "Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §\"Young projects to take ideas from\" (Aseprite MCPs), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 475,
+      "source_line": 484,
       "status": "Not started",
       "title": "Aseprite MCP integration for agent sketches.",
       "verification": null
@@ -1187,7 +1207,7 @@
       "responsible": "Agent",
       "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 482,
+      "source_line": 491,
       "status": "Not started",
       "title": "Catalog of graphical upgrades.",
       "verification": null
@@ -1207,7 +1227,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 491,
+      "source_line": 500,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1228,7 +1248,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 498,
+      "source_line": 507,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1247,14 +1267,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 505,
+      "source_line": 514,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "6463b37b2947ec86190380c353075e34e06707b29b8816352c1f8009c26b5ce2",
+  "todo_sha256": "ad4fe699153e9fc075064efbf9da929b8d48cc0a0d241d29a4f26ddea6fd80cf",
   "topological_layers": [
     [
       "G3-010",

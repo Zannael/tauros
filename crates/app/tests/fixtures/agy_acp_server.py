@@ -19,6 +19,17 @@ cancelled = threading.Event()
 sessions = {}
 turns = 0
 next_id = 1000
+authenticated = False
+# Login tests put the mode next to the dedicated workspace; absent means signed in.
+mode_file = os.path.join(os.path.dirname(os.getcwd()), "login-mode")
+login_mode = open(mode_file).read().strip() if os.path.exists(mode_file) else "already"
+
+
+def finish_login(ident):
+    global authenticated
+    threading.Event().wait(0.3)
+    authenticated = True
+    emit(dict(id=ident, result=dict(_meta=dict(antigravity=dict(tier=dict(name="PRIVATE_TIER"))))))
 
 
 def emit(value):
@@ -155,13 +166,23 @@ for line in sys.stdin:
         assert params["clientCapabilities"] == dict(fs=dict(readTextFile=False, writeTextFile=False), terminal=False)
         result = dict(protocolVersion=1, agentCapabilities=dict(loadSession=True), authMethods=[])
     elif method == "session/new":
-        if "--fixture-auth-required" in sys.argv:
+        if "--fixture-auth-required" in sys.argv or (login_mode != "already" and not authenticated):
             emit(dict(id=ident, error=dict(code=-32000, message="Authentication required")))
             continue
         assert params["cwd"] == os.getcwd()
         session = f"session-{len(sessions) + 1}"
         sessions[session] = dict(mcp={s["name"]: Mcp(s) for s in params["mcpServers"]}, mode=None)
         result = dict(sessionId=session)
+    elif method == "authenticate":
+        # The real runtime opens the browser itself; no URL is ever sent to the client.
+        assert params == dict(methodId="oauth-personal"), params
+        with open(os.path.join(os.path.dirname(os.getcwd()), "login-started"), "w") as marker:
+            marker.write(str(os.getpid()))
+        if login_mode == "success":
+            threading.Thread(target=finish_login, args=(ident,), daemon=True).start()
+        elif login_mode == "failure":
+            emit(dict(id=ident, error=dict(code=-32603, message="PRIVATE_failure detail")))
+        continue  # "pending": never answers until terminated
     elif method == "session/set_mode":
         assert params["modeId"] == "default"
         sessions[params["sessionId"]]["mode"] = params["modeId"]

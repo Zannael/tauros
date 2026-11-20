@@ -665,6 +665,42 @@ check in the Tauri window yet; only the default model; image delivery from
 are not exercised; the CLI's permission prompts are runtime behaviour that a
 future version could change, so the policy test must be rerun on upgrades.
 
+## Antigravity sign-in inside the app (AGT-010)
+
+**Verified** 2026-11-20 UTC (Antigravity CLI 1.5.11, probes on the dev machine):
+- Signed in, ACP `authenticate` with `methodId: oauth-personal` returns at once
+  with only `_meta.antigravity.tier` (plan name) and opens nothing.
+- With the user's home and `/run/user/<uid>` hidden by bubblewrap tmpfs mounts
+  and `DBUS_SESSION_BUS_ADDRESS` unset, `session/new` fails with `-32000
+  Authentication required`; `authenticate` stays pending, the runtime itself
+  opens the browser (`$BROWSER`/`xdg-open`) on `accounts.google.com`, and no URL
+  is sent over ACP. Killing the process ends it. Overriding `HOME` alone did not
+  hide the cached sign-in.
+
+**Accepted** 2026-11-20 (Owner request, agent-owned design): Antigravity uses the
+shared sign-in panel with Codex. Selecting it runs a silent check (`session/new`
+plus `session/close` in the dedicated workspace) reported as `signed_in` or
+`signed_out`; **Sign in** sends `authenticate` `oauth-personal`; status is polled;
+cancel and the 10-minute expiry terminate the runtime. Only `oauth-personal` is
+offered. Only a status enum crosses IPC; the provider reply (plan tier) and error
+text are discarded. A send refused with `Antigravity sign-in required` reopens the
+panel. No sign-out control, because the sign-in is shared across Antigravity
+surfaces.
+
+**Verified** 2026-11-20 UTC: `cargo test -p tauros-app --test antigravity_login`
+passed with the deterministic peer for already signed in, success, failure and
+pending: the check never starts sign-in, a duplicate start is refused, cancel
+terminates the runtime process, and no provider text reaches the serialized
+status. The ignored installed-CLI check passed (0.4 s) in the bubblewrap
+isolation above: `signed_out`, pending, stub browser host `accounts.google.com`,
+cancelled, no leftover process; the Owner's real sign-in still opened a session
+afterwards. The panel was checked in the built-in browser with mocked Tauri IPC:
+silent check, signed-out prompt, send redirected to the panel, pending with
+send/selector disabled and cancel visible, signed in, cancel, Codex labels
+unchanged and the panel hidden for Claude. Limits: a real completed Google
+sign-in from Tauros, failure after a browser error and token renewal were not
+exercised; the Tauri window itself was not driven.
+
 ## Open decisions
 
 Tracked as tasks, not here. The voice engine is chosen within AGT-004.

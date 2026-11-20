@@ -430,8 +430,14 @@ is not evidence that Tauri commands or Stop/history work.
 **Antigravity** uses the official Agent Client Protocol server of Antigravity CLI
 (`agy acp`), the route Google documents for "any ACP client"
 ([ACP guide](https://antigravity.google/docs/ide/extensions/acp)). It reuses the
-Google subscription sign-in cached by the CLI: sign in once with an interactive
-`agy` session or `agy acp --login`. Tauros never reads or stores the credentials,
+Google subscription sign-in cached by the CLI. Selecting **Antigravity** checks it
+silently; if you are not signed in, **Sign in** in its **Google account** panel
+starts the documented ACP `oauth-personal` method: Antigravity opens the browser,
+hosts the callback and stores the credentials, and Tauros receives only a status
+(pending, signed in, failed, cancelled or expired). A message sent while signed
+out reopens the panel. The sign-in is shared with your other Antigravity apps,
+so Tauros offers no sign-out. Signing in with `agy` or `agy acp --login` works
+too. Tauros never reads or stores the credentials,
 removes `GEMINI_API_KEY` and Google Cloud credential variables from the runtime's
 environment so no paid route is chosen, and offers no API-key option (AGT-009).
 Install the CLI from the official release (the version checked is pinned in
@@ -456,11 +462,16 @@ game sources. Check with:
 ```bash
 cargo test -p tauros-app --test antigravity_adapter
 TAUROS_LIVE_AGY=1 cargo test -p tauros-app --test antigravity_adapter live_ -- --ignored
+cargo test -p tauros-app --test antigravity_login
+TAUROS_AGY_BIN=/path/to/agy cargo test -p tauros-app --test antigravity_login installed_ -- --ignored
 ```
 
 The first command uses an original deterministic ACP peer that launches the real
 MCP servers. The second sends original synthetic text to Gemini through your
 subscription and checks a native edit, a Tauros domain tool, History and undo.
+The sign-in tests use the same peer, then the installed CLI inside bubblewrap
+with your home and session bus hidden: it starts signed out, opens a stub browser
+on `accounts.google.com` and is cancelled, leaving your real sign-in untouched.
 
 Native `Edit`, `Write` and every `Bash` call acquire a project transaction and
 snapshot pending work before executing. Changes are committed as AI-Generated

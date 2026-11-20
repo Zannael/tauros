@@ -156,6 +156,8 @@ pub struct AntigravityAdapter {
     next: Arc<AtomicU64>,
     timeout: Duration,
     workspace: PathBuf,
+    /// Pending `authenticate` reply, if a Google sign-in was started.
+    login: Mutex<Option<mpsc::Receiver<Reply>>>,
 }
 
 impl AntigravityAdapter {
@@ -234,6 +236,7 @@ impl AntigravityAdapter {
             next: Arc::new(AtomicU64::new(1)),
             timeout: config.timeout,
             workspace,
+            login: Mutex::new(None),
         };
         // No filesystem or terminal capabilities: the agent cannot route writes
         // through the client, and its own are denied at the permission prompt.
@@ -279,6 +282,53 @@ impl AntigravityAdapter {
                 Err(transport(format!("Antigravity {method} timed out")))
             }
         }
+    }
+}
+
+impl AntigravityAdapter {
+    /// Whether the runtime has a cached sign-in. Opens and closes an empty
+    /// session, because ACP has no status query; no account data is returned.
+    pub fn signed_in(&self) -> Result<bool, BridgeError> {
+        match self.rpc("session/new", json!({"cwd": self.workspace, "mcpServers": []})) {
+            Ok(result) => {
+                if let Some(id) = result["sessionId"].as_str() {
+                    let _ = self.rpc("session/close", json!({"sessionId": id}));
+                }
+                Ok(true)
+            }
+            Err(error) if error.code == ErrorCode::AuthRequired => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Starts the documented `oauth-personal` method. The runtime opens the
+    /// browser and hosts the callback itself; no URL or token reaches Tauros.
+    /// Cancel by dropping the adapter, which terminates the runtime.
+    pub fn start_google_login(&self) -> Result<(), BridgeError> {
+        let mut login = self.login.lock().unwrap();
+        if login.is_some() {
+            return Err(BridgeError::new(ErrorCode::Busy, "Google sign-in is already pending"));
+        }
+        let (_, receiver) = self.send_request("authenticate", json!({"methodId": "oauth-personal"}))?;
+        *login = Some(receiver);
+        Ok(())
+    }
+
+    /// `None` while pending; the provider's reply (plan tier) is discarded.
+    pub fn google_login_result(&self) -> Result<Option<bool>, BridgeError> {
+        let mut login = self.login.lock().unwrap();
+        let Some(receiver) = login.as_ref() else {
+            return Err(BridgeError::new(ErrorCode::InvalidConfig, "no Google sign-in was started"));
+        };
+        let result = match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Empty) => return Ok(None),
+            Err(mpsc::TryRecvError::Disconnected) => Err(transport("Antigravity exited during sign-in")),
+            Ok(Ok(_)) => Ok(Some(true)),
+            Ok(Err((0, _))) => Err(transport("Antigravity exited during sign-in")),
+            Ok(Err(_)) => Ok(Some(false)),
+        };
+        *login = None;
+        result
     }
 }
 
