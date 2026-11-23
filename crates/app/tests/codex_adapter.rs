@@ -600,3 +600,25 @@ fn live_codex_screenshot_before_after_on_synthetic_pixels() {
     }
     assert_eq!(answers[1]["fragment_remaining"], true, "{answers:?}");
 }
+
+#[test]
+fn app_shutdown_closes_active_codex_session_with_chat_retained() {
+    let home = common::TempDir::new("codex-shutdown");
+    let dir = fixture();
+    let server = TaurosServer::default().with_operation_gate(Arc::new(Mutex::new(())));
+    let backend = codex_backend(config(home.path()), Some(server), dir.path().into(), AuthMode::HostSignIn, None).unwrap();
+    let slot = Mutex::new(Some(backend));
+    let chat = Arc::new(tauros_app::chat::Chat::new(move || Ok(slot.lock().unwrap().take().unwrap())));
+    let retained = chat.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    chat.send("wait", move |event| { let _ = tx.send(event); }).unwrap();
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), AgentEvent::TurnStarted { .. }));
+    chat.shutdown();
+    chat.shutdown();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while chat.busy() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(retained.send("restart", |_| {}).unwrap_err().contains("shutting down"));
+}

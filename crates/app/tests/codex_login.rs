@@ -174,3 +174,18 @@ fn runtime_can_resolve_and_reach_official_auth_with_tls() {
     assert!((200..600).contains(&report["https_status"].as_u64().unwrap()));
     eprintln!("public OAuth endpoint reachable with verified TLS; HTTP {}", report["https_status"]);
 }
+
+#[test]
+fn shutdown_cancels_pending_login_and_refuses_another_browser_flow() {
+    let project = common::TempDir::new("login-shutdown-project");
+    let home = common::TempDir::new("login-shutdown-home");
+    let mut login = CodexLogin::default();
+    login.start(config(home.path(), "pending"), project.path(), |_| Ok(())).unwrap();
+    assert!(login.pending());
+    login.shutdown();
+    login.shutdown();
+    assert!(!login.pending());
+    assert!(home.path().join("cancelled").exists());
+    assert!(login.start(config(home.path(), "pending"), project.path(), |_| panic!("browser after shutdown"))
+        .unwrap_err().contains("shutting down"));
+}

@@ -230,3 +230,42 @@ fn live_chat_remembers_the_previous_turn() {
     let second = until_completed(&rx);
     assert!(text(&second).contains("PERSIMMON-42"), "{second:#?}");
 }
+
+#[test]
+fn shutdown_cancels_a_retained_chat_and_never_reopens_its_runtime() {
+    let script = FakeTurnScript { steps: vec![FakeStep::WaitForGate], usage: None };
+    let (chat, sessions) = fake_chat(vec![script]);
+    let chat = Arc::new(chat);
+    let retained_by_emulator = chat.clone();
+    let (sink, events) = event_sink();
+    chat.send("wait", sink).unwrap();
+    assert!(matches!(events.recv_timeout(WAIT).unwrap(), AgentEvent::TurnStarted { .. }));
+    chat.shutdown();
+    assert!(matches!(until_completed(&events).last(), Some(AgentEvent::TurnCompleted { finish_reason: FinishReason::Cancelled, .. })));
+    wait_idle(&chat);
+    chat.shutdown();
+    retained_by_emulator.reset();
+    assert!(retained_by_emulator.send("must not restart", |_| {}).unwrap_err().contains("shutting down"));
+    assert!(retained_by_emulator.models().unwrap_err().contains("shutting down"));
+    assert_eq!(*sessions.lock().unwrap(), 1);
+}
+
+#[test]
+fn app_shutdown_closes_active_claude_sidecar_with_chat_retained() {
+    let sidecar = ClaudeSidecarConfig::from_repo_root(&repo_root());
+    let (server, _) = sample_server();
+    let slot = Mutex::new(Some(claude_backend(sidecar, Some(server), repo_root(),
+        BTreeMap::from([("test_driver".into(), json!("direct_mcp"))])).unwrap()));
+    let chat = Arc::new(Chat::new(move || Ok(slot.lock().unwrap().take().unwrap())));
+    let retained = chat.clone();
+    let (tx, rx) = mpsc::channel();
+    chat.send(&json!({"delay_ms": 60000, "tool": "tauros_status"}).to_string(),
+        move |event| { let _ = tx.send(event); }).unwrap();
+    loop {
+        if matches!(rx.recv_timeout(WAIT).unwrap(), AgentEvent::Status { message, .. } if message == "waiting before tool call") { break; }
+    }
+    chat.shutdown();
+    chat.shutdown();
+    wait_idle(&chat);
+    assert!(retained.send("restart", |_| {}).unwrap_err().contains("shutting down"));
+}

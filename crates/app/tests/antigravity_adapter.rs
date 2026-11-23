@@ -186,3 +186,24 @@ TRAINER_AGY_LIVE, name Gemini, class Youngster and party [{species: SPECIES_TEST
     undo_to(dir.path(), &baseline).unwrap();
     assert_eq!(fs::read_to_string(dir.path().join("scene.c")).unwrap(), "original\n");
 }
+
+#[test]
+fn app_shutdown_closes_active_antigravity_session_with_chat_retained() {
+    let home = common::TempDir::new("agy-shutdown");
+    let dir = fixture();
+    let backend = antigravity_backend(config(home.path()), None, dir.path().into(), None).unwrap();
+    let slot = Mutex::new(Some(backend));
+    let chat = Arc::new(tauros_app::chat::Chat::new(move || Ok(slot.lock().unwrap().take().unwrap())));
+    let retained = chat.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    chat.send("wait", move |event| { let _ = tx.send(event); }).unwrap();
+    assert!(matches!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), AgentEvent::TurnStarted { .. }));
+    chat.shutdown();
+    chat.shutdown();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while chat.busy() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(retained.send("restart", |_| {}).unwrap_err().contains("shutting down"));
+}

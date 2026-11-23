@@ -198,3 +198,35 @@ fn installed_whisper_transcribes_original_italian_speech_offline() {
     );
     assert!(f.jobs().is_empty());
 }
+
+#[test]
+fn shutdown_stops_recording_removes_audio_and_refuses_restart() {
+    let f = Fixture::new();
+    let voice = Voice::new(f.config("raise AssertionError('transcriber must not run')"));
+    voice.start().unwrap();
+    wait_for_pcm(&f);
+    voice.shutdown();
+    voice.shutdown();
+    assert!(f.jobs().is_empty());
+    assert!(voice.start().unwrap_err().contains("shutting down"));
+    assert!(voice.finish("it").is_err());
+}
+
+#[test]
+fn shutdown_during_transcription_removes_private_audio_before_worker_drop() {
+    let f = Fixture::new();
+    let voice = Arc::new(Voice::new(f.config("time.sleep(10)")));
+    voice.start().unwrap();
+    wait_for_pcm(&f);
+    let worker = voice.clone();
+    let thread = std::thread::spawn(move || worker.finish("it"));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !f.jobs().iter().any(|p| p.join("audio.wav").exists()) {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    voice.shutdown();
+    assert!(f.jobs().is_empty());
+    assert!(thread.join().unwrap().is_err());
+    assert!(voice.start().unwrap_err().contains("shutting down"));
+}

@@ -2457,3 +2457,70 @@ roadmap and whitespace checks passed. The app build passed in the preceding cue
 change. Previous real-runtime/synthetic checks and their limits remain recorded
 above. This closure adds no microphone recording, provider call or game edit.
 AGT-004 is Done; APP-006 is the next planned UX foundation task, not started here.
+
+## Explicit application exit and agent cleanup (APP-007, 2026-11-23)
+
+**Accepted requirement:** the Owner requested finishing the shutdown fix and
+checking for an active leftover recording. A read-only host process inventory
+(not merely the shell sandbox's PID namespace) found no Tauros app, Claude
+dictation helper, arecord or whisper-cli process. Other independently launched
+assistant applications are outside Tauros's ownership and are not stopped.
+
+**Implemented:** normal window close is intercepted and converted into an exit
+request. An atomic Open/Closing/Complete coordinator prevents exit while one
+cleanup worker explicitly stops the application's resources; repeated requests
+wait for the same cleanup. The main window shows Closing and incoming UI IPC is
+rejected. Cleanup cancels the active chat turn, closes the session and drops its
+backend independently of remaining Chat Arc references. Chat, offline/cloud
+voice and login controllers permanently reject new starts after shutdown, also
+covering a shutdown racing session creation. Provider calls and login cleanup run
+in parallel with microphone cleanup. Cancellation errors still lead to dropping
+the runtime and closing its local transport.
+
+Claude, Codex and Antigravity transports own separate process groups on Linux.
+After protocol cancellation/session closure, runtime teardown sends TERM then
+KILL to the owned group and reaps the leader, rather than killing only the
+immediate child and possibly hanging on pipes inherited by descendants. Claude
+liveness inspection on Linux leaves the leader unreaped until group cleanup.
+Codex retains its existing PID namespace and die-with-parent protection.
+Offline cancellation removes private audio immediately even when a transcribing
+worker retains the job. Cloud helper cancellation is explicit in both startup
+and recording; no transcript is automatically sent to an agent.
+
+**Verification already executed:** the real Tauri window/event loop under an
+isolated Xvfb display closed during an active fake turn, retained another Chat
+owner, delayed cleanup and received a repeated exit request. It returned only
+after exactly one cleanup and rejected subsequent chat work. The actual shared
+close/exit callbacks used by the app were exercised. Deterministic Claude
+sidecar, Codex app-server and Antigravity ACP shutdown tests passed with active
+turns and retained Chat references. Pending-login shutdown tests passed for both
+login providers. Offline capture and active-transcription shutdown tests passed;
+private audio was absent immediately after shutdown. Cloud helper tests passed
+while awaiting readiness and while recording, with helper PID absence checked.
+The process-group test killed a TERM-resistant descendant and observed inherited
+pipe EOF. Python suite passed 61 tests with one opt-in runtime test skipped;
+voice UI's 18 scenarios, Clippy with warnings denied and the app build passed.
+An initial restricted-shell run could not bind Unix sockets; those tests were
+rerun with host socket/namespace access and passed. The final package regression
+is recorded below after completion.
+
+**Limits:** tests use deterministic peers and original synthetic PCM, not real
+cloud inference or a physical microphone. The graphical test uses the real Tauri
+lifecycle with fake work, not an owner game session. Normal close/exit is covered;
+SIGKILL/power loss and rollback of already processed remote work or charges are
+not promised. Cleanup can await configured runtime timeouts and guarded native
+operation recovery. Existing snapshots and partial-edit recovery remain intact.
+
+
+**Final verification and completion:** 2026-11-23 UTC:
+`cargo test -p tauros-agent-bridge -p tauros-app` completed successfully, including
+bridge, chat/provider, login, voice, native-edit/recovery, history, model-selection,
+MCP, build/preview and phase integration regressions. Live/installed-runtime tests
+remained ignored. The additional session-start/shutdown race test passed
+separately after the package run. The isolated native-close test had already
+passed explicitly. The initial Python coverage test caught the missing APP-007
+specification mapping; the mapping was added, graph regenerated and all 61
+non-opt-in Python tests passed. Clippy with warnings denied, the app build, voice
+UI and whitespace checks passed; the working-file privacy scan found no issues.
+APP-007 is Done. The Owner subsequently requested commit and push of the
+completed fix; APP-006 remains the next planned activity.

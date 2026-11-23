@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -52,6 +52,7 @@ struct Live {
 /// One conversation with the agent; every method may be called from any thread.
 pub struct Chat {
     factory: Factory,
+    closed: AtomicBool,
     live: Mutex<Option<Live>>,
     /// Turns whose events are still being forwarded, counted outside `live` so
     /// `busy` never waits on a session that is starting.
@@ -62,15 +63,20 @@ pub struct Chat {
 
 impl Chat {
     pub fn new(factory: impl Fn() -> Result<ChatBackend, String> + Send + Sync + 'static) -> Self {
-        Self { factory: Box::new(factory), live: Mutex::new(None), streaming: Arc::new(AtomicUsize::new(0)), model: Mutex::new(None) }
+        Self { closed: AtomicBool::new(false), factory: Box::new(factory), live: Mutex::new(None), streaming: Arc::new(AtomicUsize::new(0)), model: Mutex::new(None) }
     }
 
     /// Starts the session if there is none, applying the selected model.
     fn ensure_live<'a>(&self, guard: &'a mut Option<Live>) -> Result<&'a mut Live, String> {
+        if self.closed.load(Ordering::SeqCst) { return Err("Tauros is shutting down.".into()); }
         if guard.is_none() {
             let mut backend = (self.factory)()?;
             if let Some(model) = self.model.lock().unwrap().clone() {
                 backend.bridge.set_model(&backend.session, &model).map_err(|e| e.message)?;
+            }
+            if self.closed.load(Ordering::SeqCst) {
+                let _ = backend.bridge.close_session(&backend.session);
+                return Err("Tauros is shutting down.".into());
             }
             *guard = Some(Live { backend, active: Arc::new(Mutex::new(None)) });
         }
@@ -166,6 +172,12 @@ impl Chat {
             }
             let _ = live.backend.bridge.close_session(&live.backend.session);
         }
+    }
+
+    /// Permanently stop this chat, regardless of outstanding Arc owners.
+    pub fn shutdown(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.reset();
     }
 
     /// Whether a turn is still streaming. Never blocks on a starting session.
@@ -334,4 +346,34 @@ mod tests {
         assert_eq!(tool_display_name("create_trainer"), "create_trainer");
         assert_eq!(tool_display_name("mcp__odd"), "mcp__odd");
     }
+
+    #[test]
+    fn shutdown_racing_session_start_does_not_launch_a_turn() {
+        use tauros_agent_bridge::fake::FakeAdapter;
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let chat = Arc::new(Chat::new(move || {
+            entered_tx.send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+            let mut bridge = FakeAdapter::new();
+            let session = bridge.start_session(SessionConfig::default()).unwrap();
+            Ok(ChatBackend { bridge: Box::new(bridge), session, keep_alive: Box::new(()) })
+        }));
+        let peer = chat.clone();
+        let start = std::thread::spawn(move || peer.send("must not reach a turn", |_| panic!("turn after shutdown")));
+        entered_rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+        let peer = chat.clone();
+        let stop = std::thread::spawn(move || peer.shutdown());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !chat.closed.load(Ordering::SeqCst) {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        release_tx.send(()).unwrap();
+        assert!(start.join().unwrap().unwrap_err().contains("shutting down"));
+        stop.join().unwrap();
+        assert!(!chat.busy());
+    }
+
 }

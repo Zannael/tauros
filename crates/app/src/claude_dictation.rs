@@ -43,14 +43,20 @@ impl Drop for Job {
 
 #[derive(Default)]
 pub struct ClaudeDictation {
+    closed: AtomicBool,
     current: Mutex<Option<Arc<Job>>>,
 }
 
 impl ClaudeDictation {
     pub fn start(&self) -> Result<(), String> {
-        let mut current = self.current.lock().unwrap();
-        if current.is_some() { return Err("Claude dictation is already active.".into()); }
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/claude_dictation.py");
+        self.start_helper(&script)
+    }
+
+    fn start_helper(&self, script: &std::path::Path) -> Result<(), String> {
+        let mut current = self.current.lock().unwrap();
+        if self.closed.load(Ordering::SeqCst) { return Err("Tauros is shutting down.".into()); }
+        if current.is_some() { return Err("Claude dictation is already active.".into()); }
         let mut child = Command::new("/usr/bin/python3").arg(script)
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
             .spawn().map_err(|_| "Cannot start the experimental Claude dictation helper.".to_owned())?;
@@ -99,6 +105,11 @@ impl ClaudeDictation {
         if current.as_ref().is_some_and(|value| Arc::ptr_eq(value, job)) { current.take(); }
     }
 
+    pub fn shutdown(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.cancel();
+    }
+
     pub fn cancel(&self) {
         let job = self.current.lock().unwrap().take();
         if let Some(job) = job { job.stop(); }
@@ -107,4 +118,38 @@ impl ClaudeDictation {
 
 impl Drop for ClaudeDictation {
     fn drop(&mut self) { self.cancel(); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn shutdown_terminates_helper_during_startup_and_recording() {
+        for ready in [false, true] {
+            let dir = std::env::temp_dir().join(format!("tauros-helper-exit-{}-{ready}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            let script = dir.join("helper.py");
+            let pid_file = dir.join("pid");
+            let body = format!("import os,pathlib,time\np = pathlib.Path(__file__).with_name('pid')\np.write_text(str(os.getpid()))\n{}\ntime.sleep(60)\n", if ready { "print('{\"phase\":\"recording\"}', flush=True)" } else { "pass" });
+            fs::write(&script, body).unwrap();
+            let voice = Arc::new(ClaudeDictation::default());
+            let peer = voice.clone();
+            let path = script.clone();
+            let start = std::thread::spawn(move || peer.start_helper(&path));
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !pid_file.exists() || (ready && !start.is_finished()) {
+                assert!(Instant::now() < deadline);
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let pid: u32 = fs::read_to_string(&pid_file).unwrap().parse().unwrap();
+            voice.shutdown();
+            voice.shutdown();
+            assert_eq!(start.join().unwrap().is_ok(), ready);
+            assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+            assert!(voice.start_helper(&script).unwrap_err().contains("shutting down"));
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
 }

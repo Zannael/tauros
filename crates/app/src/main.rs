@@ -48,6 +48,7 @@ struct App {
     antigravity_login: Mutex<tauros_app::antigravity_login::AntigravityLogin>,
     /// Set while a text field has focus: game keys then go to the field.
     typing: Arc<AtomicBool>,
+    shutdown: tauros_app::shutdown::Shutdown,
     voice: tauros_app::voice::Voice,
     claude_voice: tauros_app::claude_dictation::ClaudeDictation,
 }
@@ -58,6 +59,21 @@ impl App {
             Some(Launch::Point { project, .. }) => Some(project.clone()),
             _ => None,
         }
+    }
+}
+
+impl tauros_app::shutdown::Resources for App {
+    fn exit_state(&self) -> &tauros_app::shutdown::Shutdown { &self.shutdown }
+
+    fn stop(&self) {
+        // A slow provider must not keep microphone capture or login alive.
+        std::thread::scope(|scope| {
+            scope.spawn(|| self.chat.shutdown());
+            scope.spawn(|| self.voice.shutdown());
+            scope.spawn(|| self.claude_voice.shutdown());
+            scope.spawn(|| self.codex_login.lock().unwrap().shutdown());
+            scope.spawn(|| self.antigravity_login.lock().unwrap().shutdown());
+        });
     }
 }
 
@@ -506,7 +522,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, voice: Default::default(), claude_voice: Default::default() })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, shutdown: Default::default(), voice: Default::default(), claude_voice: Default::default() })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -517,8 +533,15 @@ fn main() {
             let _ = app;
             Ok(())
         })
+        .on_window_event(tauros_app::shutdown::on_window_event)
         .on_page_load(|window, payload| eprintln!("tauros: page {:?} {} in {}", payload.event(), payload.url(), window.label()))
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(|invoke| {
+            use tauri::Manager;
+            if invoke.message.webview().state::<App>().shutdown.closing() {
+                invoke.resolver.reject("Tauros is shutting down.");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             attach,
             load_rom,
             log,
@@ -551,9 +574,12 @@ fn main() {
             project_info,
             build_and_play,
             preview_map
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running Tauros");
+        ];
+            handler(invoke)
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building Tauros")
+        .run(tauros_app::shutdown::on_event::<App, _>);
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ struct Pending {
 
 #[derive(Default)]
 pub struct AntigravityLogin {
+    closed: bool,
     pending: Option<Pending>,
     status: LoginStatus,
 }
@@ -32,6 +33,7 @@ impl AntigravityLogin {
         if self.pending() {
             return Ok(LoginStatus::Pending);
         }
+        if self.closed { return Err("Tauros is shutting down.".into()); }
         crate::chat::validate_codex_home(&config.home, project)?;
         let runtime = AntigravityAdapter::spawn(config).map_err(|e| e.message)?;
         self.status = if runtime.signed_in().map_err(|e| e.message)? { LoginStatus::SignedIn } else { LoginStatus::SignedOut };
@@ -43,6 +45,7 @@ impl AntigravityLogin {
             return Err("Google sign-in is already pending".into());
         }
         self.status = LoginStatus::Failed;
+        if self.closed { return Err("Tauros is shutting down.".into()); }
         crate::chat::validate_codex_home(&config.home, project)?;
         let runtime = AntigravityAdapter::spawn(config).map_err(|e| e.message)?;
         if runtime.signed_in().map_err(|e| e.message)? {
@@ -82,6 +85,11 @@ impl AntigravityLogin {
             }
         }
         Ok(self.status)
+    }
+
+    pub fn shutdown(&mut self) {
+        self.closed = true;
+        let _ = self.cancel();
     }
 
     pub fn cancel(&mut self) -> Result<LoginStatus, String> {

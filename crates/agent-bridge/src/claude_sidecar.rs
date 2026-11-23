@@ -163,7 +163,9 @@ impl ClaudeSidecarAdapter {
             ));
         }
 
-        let mut child = Command::new(&config.node_binary)
+        let mut command = Command::new(&config.node_binary);
+        crate::process::isolate(&mut command);
+        let mut child = command
             .arg(&config.entry_script)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -329,6 +331,15 @@ impl ClaudeSidecarAdapter {
 
     /// Returns `true` if the supervised sidecar child process is still running.
     pub fn is_alive(&mut self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            // Do not reap here: group teardown in Drop retains the leader PID
+            // until its descendants have been signalled.
+            std::fs::read_to_string(format!("/proc/{}/stat", self.child.id()))
+                .ok().and_then(|stat| stat.rsplit_once(") ").map(|(_, rest)| !rest.starts_with(['Z', 'X'])))
+                .unwrap_or(false)
+        }
+        #[cfg(not(target_os = "linux"))]
         matches!(self.child.try_wait(), Ok(None))
     }
 
@@ -523,14 +534,10 @@ impl Drop for ClaudeSidecarAdapter {
         let _ = self.write_command(&OutboundCommand::Shutdown);
         self.stdin.take();
 
-        for _ in 0..20 {
-            if matches!(self.child.try_wait(), Ok(Some(_))) {
-                break;
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        // Give the protocol shutdown a short grace period, then reap the
+        // entire group, including CLI/MCP children retaining inherited pipes.
+        thread::sleep(Duration::from_millis(200));
+        crate::process::terminate(&mut self.child);
 
         if let Some(handle) = self.stdout_thread.take() {
             let _ = handle.join();

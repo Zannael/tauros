@@ -821,3 +821,33 @@ working transcription with an approximately two-second onset loss; the warm-up
 trial was made while speaking immediately after the click, before readiness.
 Speech during CLI startup cannot be recovered. The Owner accepted AGT-004 closure with this startup wait and the experimental
 CLI route on 2026-11-23; no further post-cue spoken trial is claimed. If audio output is unavailable, use the visible Speak now cue.
+
+### Application shutdown
+
+Closing the window or requesting application exit first enters **Closing…**.
+Tauros refuses new UI commands, explicitly cancels the current agent turn and
+closes its session/runtime even if the emulator still retains the chat. Owned
+Claude, Codex and Antigravity runtime process groups are terminated and reaped,
+including children that would otherwise retain transport pipes. Pending sign-in,
+offline recording/transcription and experimental Claude dictation are stopped
+in parallel, so a slow provider cannot keep the microphone open. Private offline
+audio is removed without waiting for a worker's final reference to disappear.
+Repeated close requests wait for the same cleanup; the process exits afterward.
+
+These guarantees cover normal application/window exit. They do not promise
+cleanup after SIGKILL or power loss, or reversal of work already processed by a
+remote provider. Shutdown can wait for an in-progress runtime call's timeout or
+for guarded project operations to finish recovery.
+
+Local regression checks use deterministic provider peers and synthetic PCM:
+
+```sh
+cargo test -p tauros-agent-bridge -p tauros-app
+xvfb-run -a cargo test -p tauros-app --test shutdown \
+  native_window_close_waits_for_active_chat_cleanup_even_with_repeated_exit \
+  -- --ignored --exact
+```
+
+The graphical check uses an isolated virtual display and an active fake request;
+it does not open a microphone or send a cloud prompt. Other ignored live tests
+remain opt-in.

@@ -116,3 +116,17 @@ fn installed_antigravity_sign_in_starts_and_cancels_in_isolation() {
     assert_eq!(login.cancel().unwrap(), LoginStatus::Cancelled);
     assert!(!login.pending());
 }
+
+#[test]
+fn shutdown_stops_pending_google_login_and_refuses_restart() {
+    let project = common::TempDir::new("agy-login-shutdown-project");
+    let home = common::TempDir::new("agy-login-shutdown-home");
+    let mut login = AntigravityLogin::default();
+    login.start(config(home.path(), "pending"), project.path()).unwrap();
+    assert!(login.pending());
+    login.shutdown();
+    login.shutdown();
+    assert!(!login.pending());
+    assert!(login.start(config(home.path(), "pending"), project.path()).unwrap_err().contains("shutting down"));
+    assert!(login.check(config(home.path(), "pending"), project.path()).unwrap_err().contains("shutting down"));
+}

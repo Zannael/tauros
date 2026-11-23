@@ -12,3 +12,5 @@ pub mod antigravity_login;
 
 pub mod voice;
 pub mod claude_dictation;
+
+pub mod shutdown;

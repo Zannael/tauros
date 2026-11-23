@@ -188,6 +188,7 @@ impl AntigravityAdapter {
         }
         let binary = resolve_binary(&config.binary, std::env::var_os("PATH").as_deref())?;
         let mut command = Command::new(&binary);
+        crate::process::isolate(&mut command);
         command.arg("acp").arg("--gemini-dir").arg(&settings).arg("--disable-telemetry");
         command.args(&config.extra_args);
         for name in CREDENTIAL_ENV {
@@ -594,8 +595,7 @@ impl AgentBridge for AntigravityAdapter {
 
 impl Drop for AntigravityAdapter {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        crate::process::terminate(&mut self.child);
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }

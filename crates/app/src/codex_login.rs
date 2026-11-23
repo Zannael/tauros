@@ -42,6 +42,7 @@ struct Pending {
 
 #[derive(Default)]
 pub struct CodexLogin {
+    closed: bool,
     pending: Option<Pending>,
     status: LoginStatus,
 }
@@ -62,6 +63,7 @@ impl CodexLogin {
             return Err("ChatGPT sign-in is already pending".into());
         }
         self.status = LoginStatus::Failed;
+        if self.closed { return Err("Tauros is shutting down.".into()); }
         crate::chat::validate_codex_home(&config.home, project)?;
         let runtime = CodexAdapter::spawn(config, Arc::new(NoTools)).map_err(|e| e.message)?;
         if runtime.chatgpt_signed_in().map_err(|e| e.message)? {
@@ -121,6 +123,11 @@ impl CodexLogin {
             }
         }
         Ok(self.status)
+    }
+
+    pub fn shutdown(&mut self) {
+        self.closed = true;
+        let _ = self.cancel();
     }
 
     pub fn cancel(&mut self) -> Result<LoginStatus, String> {

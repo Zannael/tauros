@@ -80,6 +80,7 @@ impl Drop for Job {
 
 pub struct Voice {
     config: VoiceConfig,
+    closed: AtomicBool,
     current: Mutex<Option<Arc<Job>>>,
 }
 
@@ -93,6 +94,7 @@ impl Voice {
     pub fn new(config: VoiceConfig) -> Self {
         Self {
             config,
+            closed: AtomicBool::new(false),
             current: Mutex::new(None),
         }
     }
@@ -116,6 +118,7 @@ impl Voice {
 
     pub fn start(&self) -> Result<(), String> {
         let mut current = self.current.lock().unwrap();
+        if self.closed.load(Ordering::SeqCst) { return Err("Tauros is shutting down.".into()); }
         if current.is_some() {
             return Err("Voice input is already active.".into());
         }
@@ -293,10 +296,18 @@ impl Voice {
         Ok(text.to_owned())
     }
 
+    pub fn shutdown(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.cancel();
+    }
+
     pub fn cancel(&self) {
         if let Some(job) = self.current.lock().unwrap().take() {
             job.cancelled.store(true, Ordering::SeqCst);
             job.stop_child();
+            // A transcribing worker may still retain the job. Remove private
+            // audio now rather than relying on its final Arc being dropped.
+            let _ = fs::remove_dir_all(&job.dir);
         }
     }
 }

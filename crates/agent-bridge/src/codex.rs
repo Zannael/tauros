@@ -122,6 +122,7 @@ impl CodexAdapter {
             &[Path::new("/usr/lib/chatgpt/resources/codex")],
         )?;
         let mut command = Command::new("/usr/bin/bwrap");
+        crate::process::isolate(&mut command);
         command
             .args([
                 "--unshare-all",
@@ -765,8 +766,7 @@ impl Drop for CodexAdapter {
         for active in self.state.lock().unwrap().active.values() {
             active.cancelled.store(true, Ordering::SeqCst);
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        crate::process::terminate(&mut self.child);
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
         }

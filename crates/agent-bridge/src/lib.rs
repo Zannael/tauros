@@ -11,6 +11,7 @@ pub mod antigravity;
 pub mod claude_sidecar;
 pub mod codex;
 pub mod fake;
+mod process;
 
 use std::collections::BTreeMap;
 use std::fmt;
