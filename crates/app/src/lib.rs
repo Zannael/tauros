@@ -9,3 +9,6 @@ pub mod codex_tools;
 pub mod codex_login;
 pub mod native_mcp;
 pub mod antigravity_login;
+
+pub mod voice;
+pub mod claude_dictation;

@@ -48,6 +48,8 @@ struct App {
     antigravity_login: Mutex<tauros_app::antigravity_login::AntigravityLogin>,
     /// Set while a text field has focus: game keys then go to the field.
     typing: Arc<AtomicBool>,
+    voice: tauros_app::voice::Voice,
+    claude_voice: tauros_app::claude_dictation::ClaudeDictation,
 }
 
 impl App {
@@ -353,6 +355,43 @@ fn history_undo(
     undo_to(&root, &target_commit)
 }
 
+#[tauri::command]
+fn voice_status(app: tauri::State<'_, App>) -> tauros_app::voice::VoiceStatus {
+    app.voice.status()
+}
+
+#[tauri::command]
+fn voice_start(app: tauri::State<'_, App>) -> Result<(), String> {
+    if app.chat.busy() { return Err("Wait for the agent to finish before recording.".into()); }
+    app.voice.start()
+}
+
+#[tauri::command(async)]
+fn voice_finish(app: tauri::State<'_, App>, language: String) -> Result<String, String> {
+    app.voice.finish(&language)
+}
+
+#[tauri::command]
+fn voice_cancel(app: tauri::State<'_, App>) {
+    app.voice.cancel();
+}
+
+#[tauri::command(async)]
+fn claude_voice_start(app: tauri::State<'_, App>) -> Result<(), String> {
+    if app.chat.busy() { return Err("Wait for the agent to finish before recording.".into()); }
+    app.claude_voice.start()
+}
+
+#[tauri::command(async)]
+fn claude_voice_finish(app: tauri::State<'_, App>) -> Result<String, String> {
+    app.claude_voice.finish()
+}
+
+#[tauri::command(async)]
+fn claude_voice_cancel(app: tauri::State<'_, App>) {
+    app.claude_voice.cancel();
+}
+
 /// The button bit (in `Button::ALL` order) for a GDK key name, case-insensitive:
 /// arrows, X = A, Z = B, Enter = Start, Backspace = Select, A = L, S = R.
 fn bit_for_key_name(name: &str) -> Option<u16> {
@@ -467,7 +506,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, voice: Default::default(), claude_voice: Default::default() })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -485,6 +524,13 @@ fn main() {
             log,
             set_buttons,
             set_paused,
+            voice_status,
+            voice_start,
+            voice_finish,
+            voice_cancel,
+            claude_voice_start,
+            claude_voice_finish,
+            claude_voice_cancel,
             history_list,
             history_undo,
             chat_send,

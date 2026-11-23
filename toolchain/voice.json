@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "engine": {
+    "name": "whisper.cpp",
+    "version": "1.8.2",
+    "url": "https://github.com/ggml-org/whisper.cpp.git",
+    "commit": "4979e04f5dcaccb36057e059bbaed8a2f5288315",
+    "license": "MIT"
+  },
+  "experimental_claude_cli": {
+    "version": "2.1.304",
+    "sha256": "ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912",
+    "homepage": "https://code.claude.com/docs/en/voice-dictation",
+    "license": "Anthropic vendor terms; installed runtime only, not redistributed",
+    "integration": "Experimental interactive hold dictation and external-editor draft handoff; no public speech API"
+  },
+  "model": {
+    "name": "ggml-base.bin",
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+    "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+    "size": 147951465,
+    "license": "MIT",
+    "homepage": "https://huggingface.co/ggerganov/whisper.cpp"
+  }
+}

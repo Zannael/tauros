@@ -36,6 +36,7 @@ function ensureAudio() {
 }
 
 function playAudio(samples) {
+  if (window.voiceControls?.active) return;
   const n = samples.length / 2;
   if (!audio || audio.state !== 'running' || n === 0) return;
   const now = audio.currentTime;
@@ -120,6 +121,8 @@ invoke('attach', { onFrame: channel })
 // APP-004: Change history view over G3-001 snapshot commits with non-destructive undo.
 const historyPanel = document.getElementById('history-panel');
 const historyList = document.getElementById('history-list');
+const historyStatus = document.getElementById('history-status');
+let historyRestoring = false;
 
 async function loadHistory() {
   historyList.innerHTML = '';
@@ -145,14 +148,27 @@ async function loadHistory() {
       sha.className = 'history-sha';
       sha.textContent = entry.short_commit;
       const btn = document.createElement('button');
-      btn.textContent = 'Restore';
+      btn.textContent = 'Restore state';
+      btn.title = `Restore files to commit ${entry.short_commit}, including this commit's changes`;
+      btn.disabled = historyRestoring;
       btn.addEventListener('click', async () => {
+        if (historyRestoring) return;
+        historyRestoring = true;
+        historyStatus.classList.remove('error');
+        historyStatus.textContent = `Restoring state ${entry.short_commit}…`;
+        historyList.querySelectorAll('button').forEach(button => { button.disabled = true; });
         try {
-          await invoke('history_undo', { targetCommit: entry.commit });
-          status.textContent = `Restored snapshot ${entry.short_commit}`;
+          const receipt = await invoke('history_undo', { targetCommit: entry.commit });
+          historyStatus.textContent = receipt.undo_commit
+            ? `Restored state ${entry.short_commit}. Recorded undo ${receipt.undo_commit.slice(0, 8)}. Source files restored; rebuild and reload to update the preview.`
+            : `No files changed: sources already match state ${entry.short_commit}.`;
           await loadHistory();
         } catch (err) {
-          status.textContent = `Undo failed: ${err}`;
+          historyStatus.classList.add('error');
+          historyStatus.textContent = `Restore failed: ${err}`;
+        } finally {
+          historyRestoring = false;
+          historyList.querySelectorAll('button').forEach(button => { button.disabled = false; });
         }
         canvas.focus();
       });
@@ -200,7 +216,7 @@ invoke('chat_info').then((project) => {
 // Text fields take the keyboard: the app stops reading game keys while one has focus.
 for (const field of document.querySelectorAll('textarea, input:not([type=file]), select')) {
   field.addEventListener('focus', () => invoke('set_typing', { typing: true }));
-  field.addEventListener('blur', () => invoke('set_typing', { typing: false }));
+  field.addEventListener('blur', () => invoke('set_typing', { typing: !!window.voiceControls?.active }));
 }
 
 function chatAppend(className, text) {
@@ -234,6 +250,7 @@ function setChatBusy(busy) {
   chatModel.disabled = busy || authBusy || !modelsReady;
   chatStop.hidden = !busy;
   updatePreviewControls();
+  window.voiceControls?.refresh();
 }
 
 function startTurn(text) {
@@ -308,7 +325,7 @@ function startTurn(text) {
 document.getElementById('chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
-  if (!text || chatBusy || authBusy) return;
+  if (!text || chatBusy || authBusy || window.voiceControls?.active) return;
   chatInput.value = '';
   startTurn(text);
 });

@@ -66,7 +66,7 @@ Available in Phase 2:
 What is missing:
 
 - Creating new maps or resizing layouts (G3-010).
-- Local voice input (`AGT-004`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
+- Voice desktop acceptance (`AGT-004`), the pre-editor UX/UI cleanup (`APP-006`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
 
 Available in Phase 3 (complete) & Phase 4 (in progress):
 
@@ -367,7 +367,7 @@ continuity, cancellation and EOF handling. The Owner subsequently demonstrated
 real-game native editing, build, boot, input and screenshot activity with a
 repaired sign in the preview, and accepted **AGT-006 as Done on 2026-11-20**.
 That acceptance does not turn model claims into independently verified collision
-or history/undo results: further desktop mixed-history checks remain in AGT-008,
+results. The Owner completed desktop mixed-history/undo acceptance for AGT-008 on 2026-11-21;
 chat Stop/history integration in APP-005, and interface/map-context refinements
 in APP-003. Token renewal and login expiry remain unverified limitations. Paid
 API validation stays deferred in AGT-009. Additional explicit opt-ins:
@@ -424,6 +424,37 @@ Follow-up hybrid/beta checks (AGT-008 / APP-005; not AGT-006 closure blockers):
    turn settles and accepts another message. Inspect History for any partial
    changes. Once idle, switch providers and confirm the chat clears; **New chat**
    must also start a fresh conversation. Record actual outcomes and any failures.
+
+To repeat the completed AGT-008 desktop check, use a disposable game project or a
+small agreed change in the working project. Record the baseline commit shown in
+History (if there are pending edits, use the safety snapshot created immediately
+before the first test mutation, which preserves those edits). In one chat request:
+
+> Add the comment `/* Tauros AGT-008 desktop acceptance */` to an appropriate
+> location in `src/battle_setup.c` using the guarded native source tools. Then
+> use the Tauros domain tools to read an existing trainer and change one party
+> member's level by one within the supported limits. Report its ID, original
+> level, new level and the baseline snapshot commit before the native edit.
+> Read the trainer again through Tauros and the comment through the native tools
+> to check that both changes coexist. Build through Tauros, boot a known valid
+> map position and capture the shared emulator preview. Report tool failures
+> and unverified results explicitly. Do not undo the changes yet.
+
+After the turn, open **History & Undo** and check that both the native edit and
+the domain edit have `ai-generated` provenance. Inspect the source diff against
+the baseline; a successful chat reply alone is not evidence. Press **Restore state**
+on that baseline, then use a read-only follow-up to verify that the comment is
+absent and the trainer has its original level. History must retain both change
+commits and a new undo entry. The persistent message inside History reports
+pending, success, no-op or failure; it is separate from the emulator FPS status.
+Restore state includes the selected commit's changes; to undo a particular
+change, select its preceding snapshot, not the change commit itself. Restore changes source files; the running emulator
+and ignored ROM outputs still represent the previous build until rebuilt and
+reloaded. Record the provider, both history entries, restore outcome and any
+failure. The Owner confirmed this desktop result on 2026-11-21: Restore to
+`70289c3f` created undo `930264d6`; read-only verification found the acceptance
+comment absent and Geodude back at level 21. AGT-008 is Done.
+Stop/provider-switching acceptance belongs to APP-005.
 
 The current automation session exposes browser control only, with native app
 control disabled. These desktop checks require an enabled native desktop surface
@@ -526,7 +557,7 @@ TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test native_edit local_sidecar_
 The ignored `live_sdk_hooks_on_original_synthetic_data_only` check uses the real
 Claude SDK on original synthetic files only (`TAUROS_LIVE_CLAUDE=1`). A separate
 ignored live decomp check sends game sources to the provider and must run only
-in an authorized provider session. The mixed desktop workflow still requires the Owner's manual check.
+in an authorized provider session. The Owner completed the mixed desktop acceptance on 2026-11-21 as recorded above.
 
 Run the Phase 2 integration test (no display server needed, but Docker and the
 pinned engine/base build must be available; an opted-in run fails if missing):
@@ -534,6 +565,65 @@ pinned engine/base build must be available; an opted-in run fails if missing):
 ```bash
 TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test phase2_integration -- --nocapture
 ```
+
+## Local voice input (AGT-004)
+
+On Linux the chat offers **Record**, **Stop & transcribe** and **Cancel**.
+Speech is transcribed by local [whisper.cpp v1.8.2](https://github.com/ggml-org/whisper.cpp/tree/v1.8.2) with the multilingual base
+model; no speech API or API key is used. Italian is selected initially; English
+and automatic language detection are available. A clip is limited to 60 seconds,
+with a 180-second transcription timeout. Game sound is muted during voice input.
+Recognised text is appended to the current draft, preserving text you type while
+recording. Review and correct it before **Send**; recording never sends a turn.
+Cancellation discards the recording/result and leaves the draft unchanged.
+
+The setup manifest is `toolchain/voice.json` (pinned engine commit and model
+SHA-256, both MIT). Runtime/model/build files stay outside this repository under
+`$TAUROS_DATA`. Requirements: `git`, CMake, a C/C++ compiler and `/usr/bin/arecord`
+from ALSA utils. No system packages are installed by the setup script.
+
+```bash
+python3 scripts/setup_voice.py --fetch-only
+# Review the fetched pinned CMake sources under TAUROS_DATA/dependencies first.
+python3 scripts/setup_voice.py
+cargo run -p tauros-app -- --project "$TAUROS_DATA/projects/my-hack" \
+  --map MAP_PETALBURG_CITY --x 15 --y 10 --flag FLAG_BADGE01_GET
+```
+
+The default data directory is `~/.local/share/tauros`. This development session
+already prepared the runtime/model there and reviewed the pinned build files.
+Optional overrides: `TAUROS_WHISPER_BIN`, `TAUROS_WHISPER_MODEL`, and
+`TAUROS_AUDIO_DEVICE` (an ALSA capture device; default `default`). Use `arecord -L`
+to list local devices. Missing dependencies and recording/transcription failures
+appear beside the microphone controls. Private temporary audio/text files are
+removed after completion, failure, cancellation or normal shutdown; a process
+crash may leave its private temporary directory until OS cleanup.
+
+Verification commands without microphone capture or cloud calls:
+
+```bash
+cargo test -p tauros-app --test voice
+node tests/voice_ui.cjs
+# Optional real engine check on original synthetic Italian speech;
+# requires the prepared runtime/model, espeak-ng and ffmpeg:
+TAUROS_LOCAL_VOICE_TEST=1 cargo test -p tauros-app --test voice installed_whisper_transcribes_original_italian_speech_offline -- --ignored --nocapture
+```
+
+The protocol tests and synthetic inference do not prove the physical microphone
+works in native WebKitGTK. Owner acceptance remains: choose Italian, Record a
+short request, Stop & transcribe, inspect/correct the draft and Send; confirm
+that the selected agent receives it. Also cancel a recording and check the draft
+is preserved. Small local models can misrecognise names and technical terms.
+The Owner confirmed the microphone flow on 2026-11-21 but rejected the current
+transcription quality; AGT-004 remains open while supported provider speech
+integration is investigated. No cloud engine has been enabled. The deeper Codex
+check found that the installed app-server requires API-key auth for v2
+transcription-only WebSocket sessions and rejects that mode over ChatGPT WebRTC.
+The inspected stable 0.171.0 and development sources still provide no standalone
+dictation app-server method; the internal backend dictation client is a separate
+surface. The app's native subscription dictation has not been integrated.
+The full UX/UI audit and cleanup is scheduled as APP-006 after voice acceptance,
+before new Phase 5 editor features; deferred API work is AGT-005/AGT-009.
 
 ## External MCP clients
 
@@ -645,3 +735,89 @@ LGPL-2.1, inih BSD-3); see DEC-002 in the master. Hacks made with Tauros are the
 authors' own work and do not inherit Tauros's license.
 
 Contributor and agent workflow: [AGENTS.md](AGENTS.md).
+
+### Experimental Claude dictation bridge
+
+The **Dictation** selector also offers **Claude CLI · experimental cloud**.
+Select it explicitly, then press **Record**. Microphone audio goes to Anthropic
+through the installed official Claude Code runtime and its existing claude.ai
+sign-in. Italian is fixed for this experiment. This dictation engine is independent
+of the chat provider: the returned text can be reviewed and sent to any agent.
+Stop with **Stop & transcribe**; the CLI finalizes speech and opens its private
+prompt in a Tauros-owned external-editor callback. Only the resulting text is
+appended to the editable chat draft. **Send** remains a separate action.
+
+Requirements: Linux, `/usr/bin/python3` (3.10+), bubblewrap, and the already
+installed Claude Code **2.1.304** executable matching the SHA-256 recorded in
+`toolchain/voice.json`. `TAUROS_CLAUDE_VOICE_BIN` can select that executable;
+a different binary is rejected before audio capture. Sign in and verify `/voice`
+in the official CLI first. The experiment mounts only the runtime's credential
+file read-only; Tauros never reads or copies its contents. Expired credentials
+may need refreshing in the official CLI before retrying. This helper does not
+install a runtime or change the user's Claude settings/keybindings.
+
+Before starting the interactive bridge, Tauros asks that exact official runtime
+for `auth status` inside the audio-free, network-isolated sandbox. A leftover
+credential file does not establish an active sign-in. If the check reports no
+Claude subscription sign-in, use the official terminal flow, then retry Record:
+
+```bash
+claude auth login --claudeai
+claude auth status --text
+```
+
+The runtime runs inside bubblewrap with a private empty workspace, original
+settings and keybindings, no game project, tools or MCP servers. Only controlled
+modifier-key recording and Ctrl+G editor actions reach its terminal. Hold mode
+and `autoSubmit: false` are fixed; the default Space double-tap submission path
+is avoided. No submission key is sent. The CLI still needs network access for
+sign-in/service metadata and cloud speech. Anthropic documents its product
+[dictation](https://code.claude.com/docs/en/voice-dictation) as not consuming
+message/token usage limits; this is not a separately billed API integration.
+It remains an experimental composition of interactive features, not an official
+speech SDK. Offline Whisper is still available.
+
+The default limit is 60 seconds. **Cancel** discards pending text and terminates
+the helper/runtime. Startup is bounded and its controls remain busy while the
+CLI initializes. Normal cleanup removes temporary settings and drafts; a forced
+crash may leave its private temporary directory until OS cleanup. A recording
+indicator is not proof of usable audio or subscription speech availability.
+Physical microphone, real transcript quality and native desktop acceptance are
+still pending; the verified result so far is the unsent draft handoff.
+
+Reproducible checks, with **no credentials, network or microphone** in the CLI:
+
+```bash
+python3 scripts/claude_dictation.py --probe-draft
+TAUROS_CLAUDE_DRAFT_PROBE=1 python3 -m unittest discover -s tests -p test_claude_dictation.py -v
+node tests/voice_ui.cjs
+```
+
+These require an environment that permits bubblewrap namespaces. A separate
+`--probe-availability` option permits the official runtime's network/sign-in
+checks but mounts no audio devices; it tests UI activation only, not speech.
+
+The experimental bridge retains bounded, content-free diagnostics under
+`$TAUROS_DATA/logs/voice` (default `~/.local/share/tauros/logs/voice`):
+`last-claude-dictation.json` for the last app attempt, and separate
+`last-claude-draft-probe.json` / `last-claude-availability-probe.json` for probes.
+They contain UTC time, stage, result, fixed event codes and numeric counters for
+capture, audio bytes, connection and transcript character counts. They contain
+no recording, transcript text, account identifiers, credentials or raw CLI debug
+output. Files are private and replaced per operation; raw runtime diagnostics
+are filtered from a pipe in memory. Probe runs do not overwrite app diagnostics.
+
+The sandbox exposes system ALSA/PipeWire configuration and the exact PipeWire
+socket as well as PulseAudio facilities. It does not mount the whole user runtime
+directory. An app recording is declared active only after the pinned runtime
+reports an open speech stream, then two seconds of warm-up with at least
+64,000 additional PCM bytes sent. Click **Prepare microphone**, then wait for
+the short ready beep and **Speak now** before speaking; the
+60-second recording allowance starts then. Its transient `listening` indicator
+alone is insufficient. A recorder that stops before the
+requested Stop produces an immediate diagnostic error rather than a misleading
+empty transcription. Device enumeration and audio-free rejection were verified. The Owner reports
+working transcription with an approximately two-second onset loss; the warm-up
+trial was made while speaking immediately after the click, before readiness.
+Speech during CLI startup cannot be recovered. The Owner accepted AGT-004 closure with this startup wait and the experimental
+CLI route on 2026-11-23; no further post-cue spoken trial is claimed. If audio output is unavailable, use the visible Speak now cue.

@@ -1754,3 +1754,706 @@ with AGT-008. No requirement was silently marked as a passed manual check.
 TODO and README now reflect Done with dated Verification and remaining work.
 No implementation change, commit, push, paid API call or game revert occurred;
 all existing uncommitted work was preserved.
+
+
+## AGT-008 desktop acceptance preparation (2026-11-21)
+
+**Verified** 2026-11-21 UTC: `cargo test -p tauros-app --test native_edit
+--test history_undo --test codex_adapter --test antigravity_adapter` completed
+successfully outside the restricted execution sandbox. The initial restricted
+run failed when creating Unix sockets (`Operation not permitted`); the authorized
+rerun passed the local protocol/transaction checks. These cover native and MCP
+provenance/undo, snapshot rejection, failed/cancelled native writes, continuity,
+EOF/restart recovery, and connector refresh preserving a native source change.
+`TAUROS_NATIVE_SANDBOX_TESTS=1 cargo test -p tauros-app --test native_edit
+-- --nocapture` also passed, exercising the real bubblewrap shell boundary.
+Live provider tests remained ignored. The Docker mixed build/preview test
+returned early without `TAUROS_DOCKER_TESTS`; it was not reverified in this run.
+Prior dated build/preview evidence above remains the evidence for that path.
+No model inference, game-project edits, build or emulator preview was run.
+
+**Owner report** 2026-11-21: the desktop provenance/history/undo check has not yet
+been performed; the Owner will prepare the in-app check. This is not acceptance.
+README now supplies a concrete mixed native-comment/domain-level-change request,
+coexistence readback, baseline selection preserving pending edits, provenance
+inspection and non-destructive Restore/readback steps. Source restoration does
+not reload the running emulator or restore ignored build artifacts. AGT-008
+remains In progress pending the actual Owner desktop result; APP-005 retains
+Stop/provider-switching acceptance. No implementation change was needed by the
+checks performed here.
+
+
+## AGT-008 Owner desktop Restore failure and visible feedback (2026-11-21)
+
+**Owner report:** one Codex desktop turn added the native acceptance comment,
+changed TRAINER_SAWYER_1 Geodude from 21 to 22 through MCP, built and previewed.
+The screenshot shows AI-generated history for both paths. After clicking Restore,
+a read-only follow-up still found both changes. This is a failed desktop restore
+check, not completion of AGT-008.
+
+**Verified:** read-only inspection of the working project's Git history found no
+undo commit or reflog entry and a clean working tree after the reported click.
+The supplied target `70289c3f` contains no acceptance comment and Sawyer level 21;
+it is a valid baseline for these two edits. Its own native edit changes the
+Petalburg item-ball script reference, so its earlier snapshot `0d61f899` would
+also revert that separate change. No game files were modified in this diagnosis.
+The UI previously wrote restore success/errors into the FPS label, overwritten
+by `onFrame` each second. That explains disappearing feedback; the underlying
+reason this particular command did not restore remains unknown.
+
+History now has its own persistent live status for pending, successful restore
+(with undo commit), no-op and failure. Duplicate restore clicks are suppressed
+while pending and buttons are re-enabled afterwards. The button says Restore
+state and explains that it includes the selected commit's changes. A temporary
+Node VM harness executing the actual history handler passed pending/duplicate,
+success, no-op, error, refresh persistence and retry checks. JavaScript syntax
+and diff whitespace checks passed. Native WebKitGTK click acceptance is pending;
+the VM harness does not establish the cause or resolution of the Owner's failure.
+
+
+## AGT-008 completed after Owner desktop Restore acceptance (2026-11-21)
+
+**Owner acceptance / verified report:** after restarting the rebuilt app, Restore
+state reported success for `70289c3f`, recording undo `930264d6`. The Owner then
+submitted the read-only follow-up result: the acceptance comment is absent from
+`src/battle_setup.c` and TRAINER_SAWYER_1 Geodude is back at Level 21. Together
+with the earlier mixed turn, build/preview report and AI-generated history
+screenshot, this completes the outstanding desktop acceptance for AGT-008.
+This supersedes historical statements above that this check is pending.
+
+**Independently verified:** read-only Git inspection found `930264d6` with
+Tauros-Undo-Target `70289c3f4fc96128a21c30ac0b330dfb70f4eebd` and
+Tauros-Snapshot `e1f31eaad2e3522693c7885f9276df3726177d34`.
+`git diff --quiet 70289c3f HEAD` returned 0: the entire tracked tree matches the
+selected baseline. Prior change commits remain in history. No game files were
+modified by this agent. The app build passed after the feedback correction;
+56 Python tests, roadmap validation and diff whitespace checks passed.
+
+AGT-008 is Done on the combined dated automated and Owner desktop evidence.
+The original failed click's cause is unknown; the successful retry does not
+establish its cause. The running ROM and ignored outputs are not source undo
+artifacts. APP-005 retains Stop/provider-switching acceptance and AGT-009 retains
+deferred API work. No new model call, commit or push was performed for closure.
+
+
+## Voice engine and pre-Phase-5 UX foundation (2026-11-21)
+
+**Accepted Owner direction:** finish AGT-004 now, keep AGT-005/AGT-009 deferred
+for local personal use, then complete APP-006 before adding Phase 5 editor
+features. APP-006 covers actual screenshot/interaction audit and implemented,
+Owner-accepted UX/UI cleanup; it is not being executed as part of voice work.
+APP-001/002/005 and MCP-005 depend on it. Existing partially implemented APP-003
+retains its historical claim, with feature expansion held by its sequencing note.
+
+**Implementation decision:** use local whisper.cpp v1.8.2 at commit
+`4979e04f5dcaccb36057e059bbaed8a2f5288315`, MIT, with the multilingual base model
+pinned by SHA-256 in `toolchain/voice.json`. Linux capture uses the installed ALSA
+`arecord` utility (16 kHz mono signed PCM), invoked only after pressing Record.
+Audio is transcribed by the local CLI, never a cloud speech endpoint. A maximum
+60-second clip is placed in a private temporary directory, cleaned after success,
+failure or cancellation. Italian is the default; English/auto are selectable.
+Transcription appends to the editable draft and never sends automatically.
+Runtime, model and build artifacts belong under TAUROS_DATA, not the repository.
+
+Official sources checked: whisper.cpp pinned source/readme and CLI documentation
+at https://github.com/ggml-org/whisper.cpp/tree/v1.8.2 (MIT; CLI text output and
+language support), GitHub tag API and Hugging Face model LFS SHA-256 metadata.
+This records the engine choice, not successful microphone/desktop acceptance.
+
+
+**Verified AGT-004 implementation** 2026-11-21 UTC: added `app::voice` and Tauri
+voice status/start/finish/cancel commands, with ALSA raw capture, bounded PCM-to-WAV
+conversion and a supervised local whisper CLI process. Capture starts only after
+the Record action. Cancellation/normal shutdown terminate children and normal
+success/failure/cancel paths remove private temporary files; forced process
+crashes may leave private temporary files until OS cleanup. Silent PCM, absent or
+empty text output, process failure and timeout are rejected. The chat UI exposes
+record/stop/transcribe/cancel, language selection, persistent status and editable
+review before Send. It preserves concurrent draft typing, suppresses stale
+cancelled results, disables conflicting chat/provider actions, suppresses game
+sound and releases game inputs while dictating. This is implementation evidence,
+not physical microphone or native desktop acceptance.
+
+`scripts/setup_voice.py --fetch-only` fetched the pinned source under
+TAUROS_DATA/dependencies and SHA-256-verified the 147951465-byte base model under
+TAUROS_DATA/models. The pinned CMake path (root, ggml, CPU, examples/common/CLI
+and build-info helpers) was examined before the build; it compiles local sources
+and performs compiler/Git metadata probes. Optional downloader, server and
+KleidiAI download paths are disabled explicitly by setup. No upstream scripts,
+hooks or embedded agent instructions were used. The source remote push URL is
+disabled; no external code or weights were copied into this repository.
+
+Executed checks: `TAUROS_LOCAL_VOICE_TEST=1 cargo test -p tauros-app --test voice
+-- --include-ignored --nocapture` passed all four tests (local process peers for
+capture/output/failure/silence/overlap/cancel/timeout/cleanup, plus the installed
+engine on an original espeak-ng Italian sentence resampled by ffmpeg). Actual
+recognition was "Questa è un'aproma di trascrizione in italiano."; the assertion
+requires the meaningful words "trascrizione" and "italiano", not exact-word
+accuracy. Earlier exact anchor-word expectations failed on synthetic speech;
+this check does not claim perfect Italian dictation. The first parallel run also
+had one recorder-spawn failure, absent on the subsequent complete run; errors now
+include the OS error kind without private paths. `node tests/voice_ui.cjs` passed
+review-only draft delivery, preserved typing, error recovery, cancellation and
+late-result suppression against the actual UI script. These use a mocked DOM/IPC,
+not WebKitGTK. `cargo clippy -p tauros-app --tests -- -D warnings`,
+`cargo build -p tauros-app`, JavaScript syntax checks, Python setup compilation,
+56 Python tests, privacy check on tracked files and roadmap validation passed.
+
+AGT-004 remains In progress until the Owner records a real spoken request in the
+native app, reviews its local transcript and sends it to the selected agent.
+No physical microphone was opened, no audio/game data was sent to a provider,
+no new model-provider turn was run and no game project was modified by these
+checks. APP-006 remains Not started and is the next UX/UI step after acceptance.
+
+
+## AGT-004 quality rejection and provider speech feasibility (2026-11-21)
+
+**Owner report / requirement:** microphone workflow works, but the current local
+transcription quality is unsatisfactory. Investigate reusing the quality speech
+features seen in Codex, Claude and Antigravity. This is not final AGT-004 quality
+acceptance and does not authorize paid API usage or automatic cloud audio upload.
+The current engine is whisper.cpp with the small multilingual base weights;
+no audio capture analysis was done to attribute every recognition error to model
+size. APP-006 remains scheduled after voice acceptance.
+
+**Verified read-only research:**
+- Codex CLI installed here reports 0.162.0-alpha.2. Generated its exact public
+  protocol via `codex app-server generate-json-schema --experimental --out` into
+  temporary storage, without starting a provider session or reading credentials.
+  Methods include `thread/realtime/start`, `appendAudio`, `appendText`,
+  `appendSpeech`, `stop` and `listVoices`; user/assistant transcript notifications
+  include `ThreadRealtimeTranscriptDoneNotification`. These are EXPERIMENTAL.
+  Start has output modality text/audio and handoff/context controls, but no
+  dedicated transcription-only method was found in this generated ClientRequest.
+  Audio/transcript types prove a protocol candidate, not account entitlement,
+  cost coverage, standalone dictation, exact equality with desktop dictation,
+  quality or safety from unintended agent turns. Official app-server docs explain
+  embedding, version-matched schema generation and experimental opt-in; they do
+  not establish standalone subscriber dictation for this use case.
+- Claude Code officially documents voice dictation streamed to Anthropic servers,
+  claude.ai sign-in, Italian support and no consumption of Claude message/token
+  usage limits for that product feature. Its SDK TypeScript reference and local
+  0.3.328 declarations were inspected: voice/voiceEnabled settings exist, but no
+  dedicated audio-to-transcript entry point was found. Settings visibility is not
+  evidence that a Tauros SDK caller can feed arbitrary microphone audio into the
+  product dictation service. The documented subscription benefit is not assumed
+  to authorize an undocumented endpoint.
+- Antigravity officially documents dictation in its interactive CLI, disabled in
+  noninteractive print mode. Its voice conversation documentation says audio is
+  streamed to Google and uses Gemini Live; do not infer that dictation necessarily
+  uses the identical model. ACP CLI/IDE integration docs were checked; no reusable
+  dictation endpoint was documented there. This does not prove none can exist,
+  but the existing Tauros ACP adapter does not gain speech from the TUI feature.
+- OpenAI separately documents file/realtime transcription API workflows. These
+  are an API integration option, not proof that Codex subscription credentials
+  entitle Tauros to call them. API work/spending remains deferred.
+
+Sources read on 2026-11-21:
+- https://learn.chatgpt.com/docs/app-server
+- https://learn.chatgpt.com/docs/config-file/config-reference
+- https://code.claude.com/docs/en/voice-dictation
+- https://code.claude.com/docs/en/agent-sdk/typescript
+- https://antigravity.google/docs/cli/commands/voice/
+- https://antigravity.google/docs/voice-mode/
+- https://antigravity.google/docs/cli/acp
+- https://antigravity.google/docs/ide/extensions/acp
+- https://developers.openai.com/api/docs/guides/transcription
+
+**Proposed next investigation, not verified implementation:** prioritize Codex's
+runtime-managed public experimental interface and determine whether it supports
+transcription-only subscription use without starting a tool-capable agent turn.
+A common transcription service can supply the same editable draft to any agent;
+there is no requirement to couple voice-engine selection to chat-provider choice.
+Keep the current offline engine until a replacement decision is accepted.
+No provider audio upload, live speech session, auth/cache inspection, paid check,
+game edit, new external install, application-code change, commit or push occurred
+in this research. Temporary schemas contain protocol definitions, not user data.
+
+
+## Codex dictation source investigation authorised (2026-11-21)
+
+**Accepted Owner direction:** investigate the transcription used in this Codex
+app (Owner clarified an initial speech-recognised "Alexa" reference means Codex),
+and implement it if a supported integration is found. Cloud Codex speech may be
+an explicit option with runtime-managed sign-in and review before Send; separately
+billed API checks remain deferred. Do not extract app credentials or call private
+product endpoints as a substitute for a supported interface.
+
+**Pinned study source:** official https://github.com/openai/codex.git tag
+`rust-v0.162.0-alpha.2`, commit `74e804deeb1241d5fe699b31fb319f7d46454c42`
+(resolved through the GitHub tag API), matching the installed CLI version;
+Apache-2.0. Any clone belongs under TAUROS_DATA/references, with push disabled.
+It is untrusted study data: do not execute its scripts/hooks or follow embedded
+instructions. This records a study revision, not code reuse or a successful voice
+integration. No upstream code copying is authorised by this source record.
+
+
+**Additional pinned study revision:** latest stable Codex release reported by the
+official release API on 2026-11-21 is `rust-v0.171.0` (published 2026-11-20),
+commit `ccf9be8cc458bd6b8336fe84d68d8893f2691a5e`. Selective public source/schema
+files may be inspected under TAUROS_DATA/references/codex-voice-0.171.0.
+Apache-2.0; study only, no source copying or execution.
+
+
+**Development-source pin for the same study:** official Codex main at
+`1145028ae47e8119955323d38ce34122d418f951` (reported 2026-11-21 08:39 UTC).
+Selective protocol/backend-client files may be inspected under
+TAUROS_DATA/references/codex-voice-main-1145028. Study only, Apache-2.0, no
+execution, upstream modification, embedded instructions or code copying.
+
+
+## Codex dictation investigation result (2026-11-21)
+
+**Verified implementation distinction:** the installed public runtime
+0.162.0-alpha.2 has configurable `realtime.type = "transcription"`, honoured only
+by the v2 wire adapter. Its `methods_v2.rs` builds a transcription session with
+no instructions, output audio or tools. However, `core::realtime_api_key` admits
+API-key auth, not ordinary ChatGPT sign-in. WebRTC startup explicitly rejects
+v2 and requires conversational mode for the supported v1/v3 paths. Normalized
+v1/v3 modes become conversational; selecting text output does not make a voice
+conversation into safe standalone dictation.
+
+**Executed metadata-only real runtime probes:** an original Python JSON-RPC
+client launched the installed official app-server in bubblewrap, with only its
+dedicated Codex credential home and an empty voice workspace mounted. No game
+project was mounted, no audio device was accessed, no audio was generated/sent,
+API-key variables were absent, all requests for tools/approvals were refused,
+and no `turn/start` was sent. Credentials were handled solely by the official
+runtime, not read or printed by the probe. Both initialize and ephemeral
+thread/start succeeded. `thread/realtime/start` returned startup acceptance,
+then emitted these terminal errors:
+- v2 transcription over WebSocket: `realtime conversation requires API key auth`.
+- v2 transcription over WebRTC: `AVAS realtime calls require realtime v1 or v3`.
+Each probe stopped the realtime attempt and terminated the child. Startup
+acceptance is explicitly not a successful voice session or transcript.
+
+**Latest-source cross-check:** the same auth gate and WebRTC validation remain
+in the pinned stable 0.171.0 source. Development main at the separately recorded
+pin still contains the API-key gate. Both inspected stable/development protocol
+`common.rs` files expose realtime requests/notifications, but no dedicated
+standalone file-dictation request. The checked-in stable JSON schema omits
+experimental methods; conclusions about the experimental surface therefore use
+the protocol source, not just absence in that generated stable schema.
+
+**Important new finding:** stable 0.171.0 and the pinned main backend-client
+`client.rs` expose internal Rust `Client::transcribe_audio(mime, bytes)`, which
+posts a multipart recording to the backend client's `/transcribe` route and
+returns text. This is separate from the realtime conversation API. It is evidence
+that Codex has a file-dictation client, not evidence that it is exposed through
+a supported external CLI/app-server method or covered for arbitrary third-party
+use by the Owner's subscription. No direct HTTP request, token extraction,
+credential copying or client-code reuse was attempted. Installed desktop bundle
+inspection was limited to package file names and bounded source references;
+no user session/configuration store or credentials were inspected.
+
+**Conclusion / current limitation:** no supported path to transplant the Codex
+app's dictation into Tauros using only the existing ChatGPT sign-in was verified.
+No placeholder provider option or broken transcription integration was added.
+The current offline implementation is unchanged, and its quality remains
+unaccepted. A separately authorised public speech API integration or a stronger
+local model would be a different engine decision, not evidence that the native
+Codex app dictation was reused. The Owner's API spending deferral remains in force.
+AGT-004 stays In progress; APP-006 is not started.
+
+Official documentation consulted: app-server embedding/schema/experimental
+opt-in at https://learn.chatgpt.com/docs/app-server and desktop voice versus
+dictation settings at https://learn.chatgpt.com/docs/config-file/config-reference.
+These do not document an external subscriber dictation API; code and actual
+protocol errors above supply the version-specific evidence. No new paid test,
+provider audio upload, physical microphone test, game write, application-code
+change, commit or push occurred in this deeper research. The public source pins
+and data-only inspection policy are recorded above.
+
+
+## Claude and Antigravity dictation investigation (2026-11-23)
+
+**Accepted Owner direction:** extend the deeper Codex dictation investigation to
+Claude first and Antigravity second. Seek a reusable speech-to-editable-draft
+path through the existing provider sign-in. This does not change the deferral
+of separately billed API work or the requirement for review before Send.
+
+**Verified Claude evidence:** inspected the installed Claude Code 2.1.304
+executable as static vendor data, without executing embedded code or reading
+account stores. SHA-256:
+`ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912`.
+Its voice command descriptor explicitly sets `supportsNonInteractive: false`
+and limits availability to claude-ai. The embedded voice client sends mono
+16 kHz linear PCM through a dedicated WebSocket speech stream, with interim
+and final transcript callbacks and explicit stream finalization. The route is
+`/api/ws/speech_to_text/voice_stream`; the client obtains OAuth through the
+product's own account machinery. This identifies the product implementation;
+it is not a documented external speech API or authorization to reuse that route.
+No credential extraction, direct endpoint request or vendor code copying occurred.
+
+Inspected the locally installed Agent SDK 0.3.328 declarations (`Query`,
+`SDKControlRequestInner`, `SDKMessage`, settings) and distributed JavaScript.
+The package revision/integrity is already pinned by the sidecar lock file.
+`voice` and `voiceEnabled` are settings; the inspected control-request union
+and public Query methods expose no audio input/start/stop/transcription method,
+and the message union supplies no dedicated dictation events. Do not interpret
+ordinary conversation transcripts, generic streaming input or local-command
+output as a speech interface. The official TypeScript reference was also checked.
+This is a version-bounded negative finding, not proof that a future SDK cannot
+add speech.
+
+Official Claude dictation documentation confirms server-side recognition,
+claude.ai authentication, Italian support, and no charge against message/token
+usage limits for that product feature. Hold mode can leave text awaiting manual
+Send; tap mode automatically submits sufficiently long transcripts and would
+need to be avoided for a draft-only bridge. Claude web/Desktop voice conversation
+is a separate feature and consumes normal usage; its help page supplies no
+external dictation interface. No installed Claude desktop or VS Code extension
+was available for equivalent local bundle inspection.
+
+**Verified Antigravity evidence:** inspected the existing pinned CLI 1.5.11
+binary under TAUROS_DATA. SHA-256:
+`01b063665007b7098116ac98015954d97ff49b7e3147086d75849c16e952ee0e`.
+Static Go symbols distinguish the interactive input model's StartDictation,
+the audiotranscribe session implementation and internal language-server
+GetTranscription/StreamAudioTranscription messages from ACP request handlers.
+Symbols alone do not prove those methods work or are publicly supported.
+The installed desktop ASAR package identifies version 2.31.2; bounded static
+inspection of its Electron shell and packaged file inventory did not find an
+exported speech API. No account/profile files were inspected and the app was
+not launched by this investigation.
+
+An original temporary Python probe ran the unmodified installed executables
+inside bubblewrap with network isolation, an empty temporary HOME/workspace,
+no credentials, no game-project mounts and no microphone device. Claude
+`--help`, Antigravity `--help` and `acp --help` all exited 0. A real Antigravity
+ACP `initialize` response reported server version 1.5.11 and
+`promptCapabilities: {image: true, audio: false, embeddedContext: true}`.
+Its advertised metadata did not include a dictation extension. No authenticate,
+session/prompt or model turn was requested. The outer restricted sandbox first
+prevented bubblewrap network-namespace setup; the approved execution outside
+that outer sandbox passed while retaining the inner isolation. No provider
+network request or audio upload was possible in this probe.
+
+Official Antigravity docs describe interactive draft-only dictation, disable it
+in print mode, and document `mic-serve` / `ANTIGRAVITY_MIC` for microphone
+forwarding into the official CLI. That socket transports audio to the CLI;
+it does not export recognized text to Tauros or enable ACP audio. The docs also
+warn that older sign-ins may need refreshed permissions and that dictation is
+unavailable for business/enterprise accounts. Account eligibility, speech quality
+and dictation billing were not tested here. The SDK overview/multimodal guide
+and ACP integration docs did not document a standalone transcription method.
+
+**Additional candidate, not implemented or verified:** both official CLIs can
+open the unsent prompt in an external editor with Ctrl+G. An explicit helper
+could potentially use the official interactive dictation UI and a Tauros-owned
+editor callback to transfer only that draft to Tauros, then close the CLI
+without submitting it. This would use interactive CLI automation rather than a
+speech API. End-to-end draft extraction, avoiding all automatic submission,
+cancellation, startup/auth dialogues, background requests, subscription terms,
+quality and resilience to CLI changes all remain unverified. The documented
+individual features do not establish a supported combined third-party bridge.
+It is a narrower remaining experiment, not successful AGT-004 delivery.
+
+**Result:** neither examined integration protocol currently supplies a verified
+standalone subscription speech path for Tauros. This strengthens the earlier
+research with the actual Claude command restriction and a real Antigravity ACP
+capability response; it does not prove that every possible UI-based bridge is
+impossible. AGT-004 remains In progress and quality remains unaccepted. No
+application implementation was changed, model turn run, paid API used, real
+microphone opened, external code installed/copied, game file edited, commit
+created or push performed during this investigation.
+
+Official sources read on 2026-11-23:
+- https://code.claude.com/docs/en/voice-dictation
+- https://code.claude.com/docs/en/agent-sdk/typescript
+- https://code.claude.com/docs/en/interactive-mode
+- https://support.claude.com/en/articles/11101966-use-voice-mode
+- https://antigravity.google/docs/cli/commands/voice/
+- https://antigravity.google/docs/voice-mode/
+- https://antigravity.google/docs/cli/acp
+- https://antigravity.google/docs/ide/extensions/acp
+- https://antigravity.google/docs/sdk/overview/
+- https://antigravity.google/docs/sdk/structured-output
+- https://antigravity.google/docs/cli/using
+
+**Repository verification for this research update:** 2026-11-23 UTC:
+`python3 -m unittest discover -s tests -v` passed all 56 tests;
+`check_roadmap.py --write-graph` followed by plain validation passed;
+`check_private.py --all` and `git diff --check` passed. These validate the
+repository update, not voice quality or the proposed interactive handoff.
+
+
+## Experimental Claude interactive draft bridge (2026-11-23)
+
+**Accepted Owner direction:** try the interactive CLI dictation/external-editor
+handoff proposed above. This authorizes an explicitly selected experimental
+cloud engine while retaining offline transcription and manual review before
+Send. It does not turn the composition into a supported vendor speech API.
+
+**Verified draft experiment:** an original Python PTY probe ran the pinned
+Claude Code 2.1.304 in bubblewrap without network, credentials or audio devices.
+The only ordinary input was an original synthetic draft, never submitted.
+Ctrl+G invoked an original editor callback which read the temporary prompt and
+returned the exact draft. An additional offline probe mounted the official
+runtime's existing credential file read-only (not read or copied by Tauros) and
+also recovered the exact synthetic draft. No provider request was possible in
+these offline probes. A deliberate offline test showed that unbinding Enter
+was not a reliable submission barrier: the subsequent exported draft was empty.
+No actual provider turn was possible with network isolation. The delivered
+helper therefore never sends Enter or relies on unbinding it.
+
+**Implementation:** `scripts/claude_dictation.py` checks the exact installed
+executable hash before launch. It creates its own empty workspace/settings,
+trust entry and modifier binding; mounts only the official credential file and
+necessary system/audio facilities; and exposes no game project, tools, MCP
+servers, user plugins, settings or hooks. The host does not read or copy account
+credentials or call a private speech endpoint. Hold mode and autoSubmit false
+are fixed. Modifier recording avoids the pinned runtime's default Space
+post-dictation double-tap-to-submit path. No user key, transcript, slash command
+or submit key is forwarded. A synthetic editor handshake must succeed before
+recording keys are sent. Ctrl+U clears that marker before recording. On finish,
+the helper releases the hold, waits for bounded CLI finalization, uses Ctrl+G
+and returns only the private unsent prompt. An error or empty/marker-containing
+draft is rejected. Startup, recording and export are bounded; cleanup supervises
+the runtime and removes temporary data on normal completion/cancellation.
+
+The Rust supervisor exposes separate start/finish/cancel commands; the app
+selects **Claude CLI · experimental cloud** explicitly and explains that audio
+goes to Anthropic. Returned text uses the existing append/review path and may
+be sent to any selected chat provider. Italian is fixed for this experiment.
+Offline voice remains available. Cancel suppresses late text. The helper uses
+an installed vendor runtime, not redistributed/copied vendor code, and the
+revision/hash and vendor terms are recorded in the voice manifest. Credentials
+are mounted read-only; renewal may require using the official CLI outside the
+experiment. No user's Claude configuration was modified.
+
+**Metadata/UI activation probe:** the official runtime was also started with
+network access, read-only runtime-managed sign-in, and no mounted audio devices.
+The modifier key produced the CLI's listening/recording indicator. This is only
+UI activation evidence: the pinned client sets recording state before completing
+microphone checks, so this does not establish actual capture, a successful cloud
+speech session, entitlement or transcript quality. No audio was recorded,
+generated or uploaded, no model prompt was sent, and no API key was supplied.
+A first probe stopped on closed stdin; the corrected availability-only probe
+ignores stdin. These probes do not satisfy Owner speech acceptance.
+
+**Verification:** the opt-in `TAUROS_CLAUDE_DRAFT_PROBE=1 python3 -m unittest
+discover -s tests -p test_claude_dictation.py -v` passed all three tests, including
+real offline draft export, termination/temp cleanup, Unicode preservation and
+rejection of symlink/oversized editor input. `node tests/voice_ui.cjs` passed
+both offline and Claude routes for review-only delivery, preserved concurrent
+typing, errors, cancellation and stale-result suppression. `cargo test -p
+tauros-app --test voice` passed three offline process tests; synthetic Whisper
+inference remained ignored in this run. `cargo clippy -p tauros-app --tests --
+-D warnings` and `cargo build -p tauros-app` passed. The real draft probe also
+passed directly via `--probe-draft`. Python compilation and diff whitespace
+checks passed.
+
+**Limits / pending acceptance:** this is a runnable experimental prototype,
+not verified cloud dictation end to end. The Owner must restart the rebuilt app,
+select the cloud dictation engine, record a spoken Italian sentence, stop,
+verify the returned draft, and only then Send if desired. Native microphone
+access, service connectivity, transcript completeness/quality and native app
+interaction remain unverified. Startup cancellation is not exposed while the
+bounded CLI handshake runs. Forced process crashes can leave private temporary
+files until OS cleanup. No game project was modified, no paid API used, and no
+commit/push performed. AGT-004 stays In progress; APP-006 remains deferred.
+
+**Final repository checks for the prototype:** 2026-11-23 UTC:
+`python3 -m unittest discover -s tests -v` ran 59 tests: 58 passed and the
+opt-in runtime probe was skipped in the default suite (its separate opt-in run
+passed above). Tracked-file privacy check, direct privacy scan of untracked
+source files, JavaScript syntax/UI checks, Python compilation and diff whitespace
+checks passed. Roadmap regeneration and validation passed. The final helper
+also rejects repeated modifier-key letters as a non-transcript result. No new
+microphone or cloud transcription acceptance is claimed by these checks.
+
+
+## Claude dictation startup failure and sign-in preflight (2026-11-23)
+
+**Owner report:** the native app's cloud dictation trial failed with "Claude did
+not start dictation. Verify /voice and sign-in in the official CLI." No successful
+spoken transcript or quality acceptance was reported.
+
+**Verified diagnosis:** repeated audio-free activation probes reproduced the
+failure. Bounded, filtered runtime diagnostics confirmed that the two original
+keybindings loaded without warnings, but those attempts did not initialize the
+voice module. Supplying the same settings from a private user-settings file did
+not change that result. An additional disposable, network-isolated diagnostic
+submitted only the known `/voice hold` local-command candidate; it was reported
+as unknown in that environment. No provider request was possible in that probe.
+That diagnostic submission key is not used by the delivered draft bridge.
+
+The exact pinned official runtime's `claude auth status` was then invoked both
+normally and in the isolated environment. Both exited 1 and reported
+`loggedIn: false`, `authMethod: none`, `apiProvider: firstParty` and a null
+subscription type. Only those four public status fields were retained; account
+identifiers were discarded and no credential contents were read or copied by
+Tauros. This establishes an absent runtime sign-in in the environment inspected,
+not an account subscription cancellation or a microphone fault. It is a concrete
+blocker before testing the speech integration. The historical credential-file
+mount and occasional recording indicator above did not establish an active
+login or a working voice session; any interpretation that they did is superseded.
+Whether additional integration issues remain after login is unverified.
+
+**Correction:** before launching the interactive CLI, the helper now runs the
+same runtime's public `auth status` with neither network nor audio devices
+available. It requires `loggedIn: true` and `authMethod: claude.ai`. Missing,
+logged-out or API-key/standalone-token authentication returns a specific message
+with `claude auth login --claudeai`, rather than waiting for a generic dictation
+timeout. Invalid status output and timeout produce a bounded diagnostic directing
+the user to `claude auth status --text`. The check never echoes account fields.
+Offline draft probes are unchanged and require no account.
+
+**Verification:** the real corrected `--probe-availability` exited 1 immediately
+with the expected subscription-login instruction, before TUI/audio startup.
+Three targeted Python tests passed, with the opt-in real draft test skipped in
+that run; they cover logged-out, API-key and standalone-token rejection, valid
+subscription status and non-disclosure of extra account fields, plus the existing
+editor boundaries. The actual voice UI harness, Python compilation and diff
+whitespace checks passed. The installed `claude auth login --help` confirms that
+`--claudeai` selects subscription sign-in; official CLI reference checked at
+https://code.claude.com/docs/en/cli-reference documents status exit codes and
+methods. No login was initiated or completed for the Owner, no audio device
+opened or recording uploaded, no model request, paid API, game write, commit or
+push occurred. The next required user action is official CLI login followed by
+another native recording trial. AGT-004 remains In progress.
+
+
+## Empty Claude transcript: audio routing and retained diagnostics (2026-11-23)
+
+**Owner report:** after the login instruction, a native attempt progressed to
+"No speech returned. Check Claude voice availability and microphone in its CLI."
+The screenshot does not establish successful capture or service transcription.
+No directory from that completed bridge attempt remained in temporary storage.
+The old helper removed its temporary files and the Rust supervisor discarded
+stderr, so no persistent log can reconstruct that specific attempt.
+
+**Verified diagnosis:** filtered pinned-runtime debug output from an audio-free
+probe showed a capture start followed within milliseconds by stop and a final
+transcript of zero characters. Repeated modifier keys retried that failed capture
+and triggered the CLI's early-failure circuit breaker. The client emitted its
+listening state before usable capture; that transient state was an insufficient
+startup criterion. No audio devices were mounted in this probe, so its failed
+capture is expected and does not prove the cause of the Owner's actual failure.
+The runtime now passed subscription authentication, unlike the previous report.
+
+A separate network-isolated, non-recording `arecord -L` experiment compared PCM
+enumeration. In the original audio sandbox, the exact PCM names `default`,
+`pipewire` and `pulse` were all absent. Exposing the system `/etc/alsa` and
+`/etc/pipewire` configuration plus the exact PipeWire socket restored all three;
+all commands exited 0. The delivered corrected sandbox was independently
+re-enumerated and exposed all three as well. This establishes a concrete audio
+routing omission in Tauros and a plausible cause of failed real capture, not an
+end-to-end microphone/transcription acceptance. The client's pinned Linux audio
+code was inspected as vendor data: it selects native ALSA or arecord, then SoX;
+its fallback recorder stderr is not surfaced as an ordinary chat error.
+
+**Correction:** expose the system audio configuration and PipeWire socket using
+`PIPEWIRE_RUNTIME_DIR`, while retaining the existing exact PulseAudio socket,
+optional cookie and sound-device mounts. No whole user runtime/profile directory
+or game project is mounted. The PipeWire client/install documentation confirms
+ALSA plugin configuration and runtime socket selection:
+https://docs.pipewire.org/page_man_pipewire-client_conf_5.html and
+https://pipewire.pages.freedesktop.org/pipewire/page_man_pipewire_1.html.
+
+The official client's `--debug-file /dev/stderr` now routes diagnostics into a
+separate in-memory pipe. Only allowlisted fixed event names and bounded numeric
+counters are retained. No raw debug file, transcript text, account identifier,
+credential or recording is persisted by Tauros diagnostics. Files under
+TAUROS_DATA/logs/voice are created private (directory 0700, files 0600), atomically
+replaced and bounded to one summary for each of app dictation, offline draft
+probe and audio-free availability probe. The JSON records operation, UTC time,
+phase, result, last 24 event codes and capture/stream/audio-byte/transcript-char
+counters. Expected and unexpected helper failures both write a safe summary.
+Probe summaries are separate so they cannot replace the next real app failure.
+
+Startup now requires both an open speech stream and at least 3200 bytes of PCM
+sent by the client, rather than its listening indicator. Capture errors/stops or
+speech errors before requested Stop fail immediately. This prevents repeated
+failed capture from being presented as an active microphone and avoids another
+empty-draft error masking a known early stop. The bridge still sends no prompt
+submission key and keeps text for explicit review.
+
+**Verification:** the real audio-free probe now exited 1 immediately with a
+recorder-stopped diagnostic, instead of declaring recording active. Its retained
+summary contains subscription_auth_ok=1, capture_start=1, capture_stop=1,
+final_transcripts=1 and final_chars=0, with no audio-byte or stream-open event.
+The opt-in real offline runtime suite passed all five tests, including exact
+unsent-draft export, cancellation cleanup, account-status boundaries, editor
+boundaries and the new diagnostic filtering/private-permissions check. The
+standard Python suite ran 61 tests: 60 passed and the opt-in runtime test was
+skipped there. The actual voice UI harness, Python compilation and whitespace
+checks passed. This change is in the Python helper loaded per recording, so it
+does not require rebuilding or restarting the current app. No physical microphone
+was opened, audio generated/uploaded, model prompt submitted, paid API used,
+game project edited, commit created or push performed. The next Owner spoken
+trial must verify real capture, transcription and quality; AGT-004 remains open.
+
+
+## Claude dictation onset warm-up (2026-11-23)
+
+**Owner report:** dictation now works, but approximately two seconds at the start
+are lost. The Owner requested a fix followed by a quick spoken retry before
+closing AGT-004; final acceptance has not yet been given.
+
+**Implemented:** readiness now requires an open speech connection and two seconds
+of warm-up with at least 64,000 fresh PCM bytes after the initial audio threshold.
+Buffered startup chunks or elapsed time without new audio cannot announce readiness.
+The UI says Wait before speaking during startup and Speak now after readiness.
+The backend's 60-second allowance starts at readiness, matching the UI timer.
+A completed transcript diagnostic is saved before replying so supervisor shutdown
+cannot overwrite a successful result with cancelled.
+
+**Verification:** 2026-11-23 UTC: Python suite ran 62 tests (61 passed, one explicit
+runtime opt-in skipped), including readiness with delayed connection, buffered
+audio and stalled PCM. The actual UI harness passed both engines' success, failure
+and cancellation cases and now checks that startup cannot enable Stop, announce
+Speak now or start the timer prematurely. Python compilation, JavaScript syntax,
+`cargo build -p tauros-app` and `git diff --check` passed. No microphone/provider
+call was made for this fix. Rebuild completed; restart the app for updated UI.
+Real onset preservation still requires the Owner's spoken retry. AGT-004 remains
+In progress until that retry and the existing Completion criteria are accepted.
+
+
+## Claude preparation and ready cue clarification (2026-11-23)
+
+**Owner report:** the next spoken trial still omitted the opening phrase. When
+asked whether speech began after Speak now or immediately after Record, the Owner
+explicitly answered immediately after Record. This trial does not establish
+whether speech after readiness is preserved. The last content-free log reports
+completed, one capture/stream, speech_ready=1 and final_chars=167, without capture
+or connection errors; it cannot reconstruct missing speech or its timing.
+
+**Implemented:** the cloud button now says Prepare microphone while idle and
+Wait — preparing during startup. Instructions explicitly request waiting for the
+beep and Speak now. A short local Web Audio tone is played only after the backend
+confirms readiness; its context is resumed in the original click gesture. Missing
+or failing sound output leaves visual readiness and dictation working. This is
+a readiness UX correction, not immediate-click capture: the experimental CLI
+still takes time to start and cannot recover words spoken before capture begins.
+
+**Verification:** 2026-11-23 UTC: `node tests/voice_ui.cjs` passed 18 scenarios
+covering both engines, draft success, failure, cancellation, available/missing/
+failing cue output; assertions confirm no beep or timer during startup, one
+cloud beep after readiness when output works, and no automatic Send. JavaScript
+syntax, `cargo build -p tauros-app`, whitespace and roadmap checks passed. No
+physical audio or cloud speech test was performed. Restart for updated UI; spoken
+retry after the ready cue and final AGT-004 acceptance remain pending.
+
+
+## AGT-004 accepted and closed by the Owner (2026-11-23)
+
+**Accepted decision:** following working real Claude dictation, the onset-loss
+clarification and the explicit preparation/ready cue correction, the Owner said
+“chiudila committ e push”. This accepts task closure with the documented startup
+wait and experimental pinned CLI route for personal local use, superseding the
+original offline-only/supported-API completion requirement and historical pending
+acceptance statements above. Offline Whisper remains available. No supported
+public speech integration, new post-cue spoken trial, manual Send or fresh cost
+verification is inferred from this acceptance. The last observed spoken trial
+produced a reviewable Italian draft; input before capture startup is not buffered.
+
+**Verification:** 2026-11-23 UTC: Rust voice/history tests passed five tests with
+one installed-engine test ignored; the Python suite passed 61 tests with one
+runtime opt-in skipped. The actual voice UI harness passed 18 mocked scenarios,
+including readiness and sound-output failure; JavaScript syntax, Python compilation,
+roadmap and whitespace checks passed. The app build passed in the preceding cue
+change. Previous real-runtime/synthetic checks and their limits remain recorded
+above. This closure adds no microphone recording, provider call or game edit.
+AGT-004 is Done; APP-006 is the next planned UX foundation task, not started here.
