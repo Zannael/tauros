@@ -505,13 +505,24 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Display the AI-Generated / AI-Assisted / Human label of every changed entity in the change history and editors, let the human promote a label when they intervene, and export a per-project provenance report suitable for a release note. Per master.md "Provenance labels (DEC-003)". Refs: plan §"Risks and community notes" (Positioning).
   Completion: Tests show labels follow the definitions (an AI change becomes AI-Assisted after a human edit, never back to AI-Generated); the export lists every labelled entity with its label and commit.
 
+## Graphics asset research
+
+- [x] **Done** **RES-004** Evaluate reusable Gen 3 assets and DS-style tilesets for agent-driven environments.
+  Depends on: `FND-002`, `G3-003`.
+  Responsible: Agent
+  Owner: Codex
+  Note: Research completed; Team Aqua winter/Gen 4 packages, CinnaYva, Ekat, Alistair and additional candidates evaluated. No asset import or engine switch; APP-006 retains implementation priority.
+  Scope: Owner request 2026-11-23: evaluate available overworld tilesets and complementary graphics already adapted to GBA/Emerald, including DS-style community work, Team Aqua, winter/snow environments and the distinction between Unbound/CFRU/DPE and reusable asset libraries. Compare content, visual coherence, target format, author credits/terms, version evidence and integration limits on the pinned expansion. Propose an agent-searchable asset catalogue and a concrete snowy-city workflow; record follow-up requirements under GFX tasks without implementing or reordering the accepted APP-006 work. Do not copy game assets into this repository or execute third-party scripts. Refs: plan §"Graphics assets and visual enhancements", plan §"Rules for the agents writing the code" (No Nintendo assets, Licenses), plan §"Risks and community notes" (Legal).
+  Completion: Primary-source-backed shortlist identifies at least one concrete winter candidate, distinguishes ready decomp tilesets from raw sheets and battle sprites, records source-specific credit/format uncertainties, and explains the required selection/remapping/validation/preview steps. Findings and scope updates are recorded in master/TODO with no unperformed build/import claimed.
+  Verification: 2026-11-23 UTC: located prior graphics requirements and read primary upstream asset READMEs, credits, author resource/update pages and Skeli's original Unbound thread. GitHub API tree/HEAD checks recorded Team Aqua 3e06f6f9fa3639da51f42ca486046ced58b1ee47 and Retro Platinum e74208ef7922bb252ac585c07e73ddae5f3ee42d; inspected winter and Gen 4 Cave file listings. Local read-only source inspection confirmed pinned expansion 3796c722, two-layer metatiles, primary/total palette/tile constants and existing snow weather functions. Master records the ranked shortlist, provenance/format uncertainties, Unbound engine-versus-art distinction, semantic catalogue proposal and snowy-city acceptance workflow. GFX-001/GFX-004 scopes updated; no UI reprioritization. Python suite passed 61 tests with one opt-in skipped; roadmap and whitespace checks passed. Limits: no graphical pack downloaded, external scripts executed, assets copied into the repository, game changes, import/build/preview or exhaustive visual-quality comparison; candidates remain unverified on the pinned engine.
+
 ## Phase 6 — Graphics
 
 - [ ] **Not started** **GFX-001** Asset pipeline with palette and VRAM validator.
   Depends on: `FND-002`, `G3-003`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. Refs: plan §"Graphics assets and visual enhancements" (proposed pipeline), plan §"Layered roadmap toward the beta" (Phase 6).
+  Scope: Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. RES-004 follow-up: validate the pinned engine's two-layer metatiles against packages requiring triple-layer support, primary/secondary palette sharing and per-map variants; include metatile/collision/behaviour remapping and isolated shared-tileset updates in import validation. Refs: plan §"Graphics assets and visual enhancements" (proposed pipeline), plan §"Layered roadmap toward the beta" (Phase 6).
   Completion: Validator tests catch each violation class on synthetic fixtures; a valid tileset compiles and builds.
 
 - [ ] **Not started** **GFX-002** Pixel panel in the app.
@@ -528,11 +539,19 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §"Young projects to take ideas from" (Aseprite MCPs), plan §"Layered roadmap toward the beta" (Phase 6).
   Completion: An agent-created Aseprite file passes the validator and builds.
 
+- [x] **Done** **GFX-005** Build the local searchable catalog of reusable environment assets (dataset only).
+  Depends on: `RES-004`.
+  Responsible: Agent
+  Owner: Claude Code
+  Scope: Owner request 2026-11-23: produce, outside the repository under `$TAUROS_DATA/assets/catalog/`, a dataset of reusable Gen 3 environment graphics from Team Aqua's Asset Repo / Great Tileset Exchange, CinnaYva Gen 3 Snow Tileset, Ekat's Public Gen 3 Tilesets and Alistair Gen III Johto, treating all external content as data. Deliver versioned source records (URL, revision/hash, authors, reuse terms), a JSONL catalog with stable IDs and short English descriptions/tags, per-item type, biome, style, relative path, image region, size, palette and verified/unverified compatibility, indexed previews, coherent combinable groups (ground, edges, trees, roofs, buildings, doors) and a compact local search. Distinguish single components, composite objects and complete tilesets; never invent meanings, coordinates or compatibility; do not call an asset Emerald-ready without verifying format, palette and metatile layers. First acceptance query: snowy town must return a coherent set and explicitly list missing components. Measure response sizes and sample-query quality, not token savings. Only scripts and concise setup/command/result/limit documentation enter this repository; no dataset, image, archive or index is committed. No app integration, game change, commit or push. Refs: plan §"Graphics assets and visual enhancements", plan §"Rules for the agents writing the code" (Licenses), README External sources.
+  Completion: Reproducible build and check commands regenerate the catalog from pinned sources; the validator confirms schema, unique stable IDs, existing paths/regions and previews; the snowy-town query returns a compact coherent set with missing components flagged; sample-query results and response sizes are measured and recorded with their limits.
+  Verification: 2026-11-23 UTC: `scripts/asset_catalog.py fetch` pulled the four sources at pinned git revision/sha256 (Team Aqua 3e06f6f9; CinnaYva, Ekat, Alistair archives); `build` produced 424 items and 4 kits with previews; `check --deep` 0 errors; a fresh fetch+build in an empty data directory gave byte-identical items.jsonl, groups.jsonl and previews. `python3 -m unittest discover -s tests -p test_asset_catalog.py` 14 tests OK. `measure` ran 12 sample queries: responses 133-2852 bytes (median 1045), 8-14 ms; snowy-town queries return grp/cinnayva-snow-town with roof-only-in-composites and no-metatile-data flags, Emerald-ready no; an unmatched query returns no entry. Region previews were reviewed by eye and several boxes corrected. Limits: regions judged visually, only snow-relevant sheets/Alistair/few Ekat sheets annotated, precision predicates use catalog metadata, no token saving measured, no asset imported, built or tested in a game, no app integration, no commit.
+
 - [ ] **Not started** **GFX-004** Catalog of graphical upgrades.
-  Depends on: `GFX-001`.
+  Depends on: `GFX-001`, `RES-004`.
   Responsible: Agent
   Owner: unassigned
-  Scope: Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Refs: plan §"Graphics assets and visual enhancements" (what already exists), plan §"Risks and community notes" (Legal).
+  Scope: Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. Do not reorder APP-006. Refs: plan §"Graphics assets and visual enhancements" (what already exists), plan §"Risks and community notes" (Legal).
   Completion: At least one entry per listed kind can be applied to the pinned project, builds and shows in preview; credits recorded per asset.
 
 ## Beyond Gen 3
@@ -569,7 +588,7 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Rules for the agents writing the code": `GOV-002`, `AGT-008`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
-- plan §"Graphics assets and visual enhancements": `GFX-001`, `GFX-002`, `GFX-004`.
+- plan §"Graphics assets and visual enhancements": `RES-004`, `GFX-001`, `GFX-002`, `GFX-004`, `GFX-005`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
 - plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
 - plan §"Next steps": `GOV-001`, `FND-001`, `FND-002`, `RES-001`, `RES-002`.

@@ -123,6 +123,41 @@ executed without review. Upstream build systems of the pinned decomp bases
 
 No Nintendo assets, ROMs or saves are ever part of this repository.
 
+## Local graphics asset catalog (GFX-005)
+
+A dataset-only catalog of reusable Gen 3 environment graphics (Team Aqua's Asset
+Repo / Great Tileset Exchange, CinnaYva's Gen 3 Snow Tileset, Ekat's Public Gen 3
+Tilesets, Alistair's Gen III Johto set). Everything lives under
+`$TAUROS_DATA/assets/catalog/` and is never committed; the repository holds only
+`scripts/asset_catalog.py` (stdlib, Python 3.10+). It is not wired into the app.
+
+```sh
+python3 scripts/asset_catalog.py fetch      # pinned sources: git revision / archive sha256
+python3 scripts/asset_catalog.py build      # items.jsonl, groups.jsonl, previews/ (~40 s)
+python3 scripts/asset_catalog.py check      # schema, ids, paths, regions, pins (--deep decodes pixels)
+python3 scripts/asset_catalog.py search "città innevata"   # compact answer (--json, --groups N, --items N)
+python3 scripts/asset_catalog.py show cinnayva/customtilesetsnow/house-grey
+python3 scripts/asset_catalog.py measure    # sample queries, response sizes -> reports/measure.json
+```
+
+Layout: `sources.json` (URL, pinned revision/hash, authors, reuse terms per source),
+`sources/` (raw files, treated as data and never executed), `annotations/` (visual
+review of regions and kit definitions, the only hand-made input), `items.jsonl`,
+`groups.jsonl`, `previews/`, `reports/`. Items are `component`, `composite` or
+`tileset`; each records role, biome, style, path, image region, size, palette facts,
+credits and a `compat` block. `compat.status` is `verified` only when static checks
+of format, palettes and metatile layers against the pinned expansion all pass (it
+still means no build or in-game test); raw sheets are `conversion-required`, unknown
+layouts `unverified`. Biome and role come from file names or from a recorded visual
+review with a confidence level; low-confidence regions are marked `?` in results.
+Search answers list a coherent kit per role and state missing roles, roles that
+exist only inside composite objects, and absent metatile data.
+
+Limits: regions were reviewed by eye and may be a tile or two off; Ekat's and the
+Team Aqua "Other" sheets are indexed at sheet level only; reuse terms are stated only
+by Team Aqua and Alistair (credit) and unspecified for the others; sources hosted on
+Google Drive/Mediafire are pinned by sha256 and the link resolvers may break.
+
 ## Credits and prior art
 
 Tauros learns from two earlier projects. No code or dependency is taken from either;

@@ -2524,3 +2524,182 @@ non-opt-in Python tests passed. Clippy with warnings denied, the app build, voic
 UI and whitespace checks passed; the working-file privacy scan found no issues.
 APP-007 is Done. The Owner subsequently requested commit and push of the
 completed fix; APP-006 remains the next planned activity.
+
+
+## Reusable environment assets and DS-style Gen 3 graphics (RES-004, 2026-11-23)
+
+**Owner direction:** evaluate existing graphics libraries before asking an agent
+to draw missing assets. The motivating request is a fully snowy Emerald city,
+including the environment rather than only falling snow. This is research and
+catalogue planning; it does not move graphics implementation ahead of APP-006.
+
+**Prior plan located:** `romhack-editor-reuse-plan.md`, Graphics assets and visual
+enhancements, already names Team Aqua's Asset Repo / Great Tileset Exchange,
+DS-style battle sprites and the asset conversion/validation pipeline. GFX-001
+and GFX-004 cover the eventual implementation. No asset catalogue is implemented
+by this research.
+
+**Verified primary-source shortlist, accessed 2026-11-23:**
+
+| Source | Observed content / version | Evaluation for Tauros |
+| --- | --- | --- |
+| [Team Aqua Great Tileset Exchange](https://github.com/TeamAquasHideout/Team-Aquas-Asset-Repo/wiki/The-Great-Tileset-Exchange) | Decomp-oriented entries with per-entry credits. GitHub HEAD observed through API: `3e06f6f9fa3639da51f42ca486046ced58b1ee47`, committed 2026-11-15. | Preferred initial source because folder structure and metadata support deterministic imports. Compatibility still needs validation. |
+| [Vanilla With Snow / Emerald Slide](https://github.com/TeamAquasHideout/Team-Aquas-Asset-Repo/tree/3e06f6f9fa3639da51f42ca486046ced58b1ee47/Tilesets/The%20Great%20Tileset%20Exchange/Full%20Tilesets/Emerald%20Slide) | README credits Ryu's winter theme, Archie's project and Pawkkie's changes. Tree contains three replacement palettes, an optional tile image and metatiles, plus a demo. | Lowest-adaptation candidate for an Emerald-style winter prototype. It extends a copied primary General set; it is not a self-contained full snowy city with every roof. |
+| [Gen 4 Cave Secondary](https://github.com/TeamAquasHideout/Team-Aquas-Asset-Repo/tree/3e06f6f9fa3639da51f42ca486046ced58b1ee47/Tilesets/The%20Great%20Tileset%20Exchange/Full%20Tilesets/Gen%204%20Cave%20Secondary) | Tree includes tiles, palettes, metatiles, attributes, example and credits. Credits name Kyledove, Ghoulslash and Rahtak; README also requires the conversion/submission credit. | Concrete DS-style environment adapted for a Gen 3 workflow, not merely Pokémon battle sprites. The tree also lists a Gate Platinum Secondary package. |
+| [CinnaYva Gen 3 Snow Tileset](https://eeveeexpo.com/resources/1631/) | Resource last updated 2026-06-07; update discussion describes deeper snow, partially covered trees and added doors. Credits are supplied with the pack. | Strong candidate for a richer coherent winter environment. This inspection did not download the archive or establish indexed palettes, Emerald metatiles or collision data; classify as conversion required until examined. |
+| [Ekat's Public Gen 3 Tilesets 4.0](https://eeveeexpo.com/resources/621/) | Author describes 81 sets, 1x artwork and individual credits; last update 2022-03-01. The update page includes winter, ruins, village and volcano themes. | Broad environment vocabulary and complementary objects; age alone does not determine usefulness. Raw/Essentials-oriented sheets are not automatically GBA-ready. |
+| [Alistair Gen III Johto Tile Set 0.1](https://eeveeexpo.com/resources/1858/) | Last update 2026-02-17. Author reinterprets HGSS maps in FRLG style, explicitly considering GBA limits; supplied as loose tiles. Credits include Alistair and Spherical Ice. | Recent example of Gen 4 locations redrawn coherently for Gen 3; useful for Johto architecture, but still needs packing, palettes and metatile integration. |
+| [Emerald Snow Tiles 1.0](https://eeveeexpo.com/resources/1659/) | 2025-03-29 recolours; author lists Heartlessdragoon, Base Essentials and glassbetelgeuse for credits. | Additional Emerald-style snow components. Published tiles/overlay ideas do not establish a drop-in decomp package. |
+| [Retro Platinum / pokeemerald-platinum](https://github.com/sinnoh-remakes/pokeemerald-platinum) | Repository identifies a Platinum demake based on RHH expansion. API HEAD `e74208ef7922bb252ac585c07e73ddae5f3ee42d`, committed 2026-11-20; tree contains maps/tilesets and a project credits file. | Reference for a larger DS-to-GBA demake, not a general asset library or a compatible base replacement. No completed snow region, per-asset reuse permission or compatibility with Tauros's older pin was established. |
+
+**Unbound clarification:** [Skeli's original project thread](https://www.pokecommunity.com/threads/pok%C3%A9mon-unbound-completed.382178/)
+identifies a FireRed hack with Gen 4 overworld graphics and credits many tile
+contributors, including part of Neti's Snow ROM Base. Its engine uses
+[CFRU](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) and
+[DPE](https://github.com/Skeli789/Dynamic-Pokemon-Expansion). These engine/Pokémon
+expansions are distinct from a reusable city-tileset catalogue. Public source or
+a credit listing does not establish blanket permission to extract Unbound's art;
+use original asset releases and their particular terms. No Unbound assets were
+extracted.
+
+**Compatibility evidence:** read-only inspection of the local pristine expansion
+confirmed HEAD `3796c72237d2ebf0361c6f4a1b4be551d8858904` (1.16.4).
+`include/fieldmap.h` defines 8 tile entries per metatile, 512 primary tiles,
+512 primary metatiles, 6 primary palettes and 13 total map palettes. The Exchange
+insertion documentation mentions triple-layer metatiles: classify that engine
+prerequisite per package, rather than asserting that every entry can be copied
+unchanged. Older measurements in this master already established the shared
+General set was full. New content must replace/repack a local variant or use a
+validated allocation; do not just append arbitrary tiles. Local weather source
+contains `WEATHER_SNOW` and Snow initialization/update functions. Falling snow
+and a snow-covered environment are separate changes.
+
+**Recommended design / not yet implemented:** catalogue records need biome,
+visual family, primary/secondary role, object roles such as roof/tree/door,
+preview/contact sheet, exact source version and hashes, authors/terms, original
+format, palette/tile/layer constraints, required engine features, compatible
+partners, animations, and an explicit verified/conversion-required/unverified
+status. An agent should search by intent and see a small visual shortlist rather
+than receive an unlabelled dump of images. Prefer coherent reusable components;
+use generated or hand-drawn art only for identified gaps. Permission/attribution
+and format readiness must remain separate fields, not inferred from “public”.
+
+**Snowy Petalburg acceptance proposal / not executed:** snapshot the game first;
+select a verified winter family; create map-specific primary/secondary variants
+so other cities sharing General are unaffected; cover ground, tree/canopy edges,
+roofs, paths and transitions; preserve or explicitly map metatile identifiers,
+collision, elevation, behaviours, doors/warps and animations. Add optional falling
+snow separately. Validate two/triple-layer compatibility and palette/tile limits,
+then build and compare emulator screenshots before/after, walk routes and test
+doors/events. The palette-only General variant is the first low-adaptation probe;
+full-city coverage may require additional existing secondary tiles or conversion.
+No source here has yet passed this complete Tauros acceptance.
+
+**Verification and limits:** primary author pages, upstream READMEs/credits and
+GitHub metadata/tree listings were read; exact repository heads were recorded.
+Only metadata and documentation were retrieved, no external code was executed,
+no graphics pack installed, no game source changed and no asset imported, built
+or previewed. The shortlist ranks suitability for this project, not an exhaustive
+objective ranking of every publicly available tileset. Findings are recorded in
+the authoritative backlog and this master; APP-006 remains next in implementation
+sequence.
+
+## Local graphics asset catalog (GFX-005, 2026-11-23)
+
+**Verified (executed 2026-11-23):** `scripts/asset_catalog.py` fetched four sources at
+pinned revisions/hashes into `$TAUROS_DATA/assets/catalog/sources/` and built a catalog of
+424 items (50 composites, 61 components, 313 tilesets/sheets) and 4 kits. Sources: Team
+Aqua's Asset Repo `Tilesets/` at `3e06f6f9fa3639da51f42ca486046ced58b1ee47` (git, sparse),
+CinnaYva Gen 3 Snow Tileset (zip sha256 `6235268b…`, page last update 2026-06-07), Ekat's
+Public Gen 3 Tilesets 4.0 (zip sha256 `5f35aaa4…`) and Alistair Gen III Johto 0.1 (PNG
+sha256 `314fa6d3…`). A second build from a fresh fetch into an empty data directory produced
+byte-identical `items.jsonl`, `groups.jsonl` and previews; `check --deep` reports 0 errors.
+
+**Verified facts about the sources:**
+- CinnaYva's main sheet is a 256x5792 RGBA image that is an exact 2x enlargement of a
+  128-wide sheet; it has no metatiles, attributes or palette assignment. Its snow set
+  provides ground, paths, cliff/ice borders, pines, round trees, snow-roofed houses, shops,
+  Center/Mart-style buildings, door frames and three reference example maps. Roofs exist
+  only inside composite buildings.
+- Ekat's pack is 178 sheets (1x, RGBA/indexed PNG, 128 wide) plus autotiles; its snow
+  coverage is terrain only (Gen 3 Snow), a winter Pokemon Center interior and Snowpoint.
+- Alistair's set is one 1280x512 RGBA sheet; the sheet itself carries a "Credit Required"
+  label. It has no snow variant.
+- Team Aqua: 97 folders have `metatiles.bin`. Of 70 Great Tileset Exchange folders (incl.
+  nested projects), 35 folders use triple-layer metatiles (24-byte metatiles), which the
+  pinned expansion (two-layer, 2-byte attributes) does not read; Emerald Slide has no
+  `metatile_attributes.bin`, so its layer count cannot be determined. Decomp tilesets ship
+  16 palette files; only metatile references above palette 12 are a defect.
+- Exactly one item passes every static check (a Gen 2 port primary tileset, 2-layer, 512
+  metatiles, 320 tiles); none of the snow candidates does. "Verified" in the catalog means
+  static format/palette/layer checks only; no build, import or in-game test was run.
+- Reuse terms: Team Aqua states free use/edit with credit and per-entry exceptions (no
+  LICENSE file); Alistair asks for credit; CinnaYva and Ekat state no licence (credits
+  only). Reuse beyond credit is not established for those two.
+
+**Search measurements (12 sample queries, local, Python 3.10):** rendered responses are
+133-2852 bytes (median 1045), 8-14 ms each; `items.jsonl` is 785,938 bytes and the source
+trees hold 4095 files (1144 PNG). "città innevata" and "snowy town" return one coherent kit
+(`grp/cinnayva-snow-town`) with coverage per role, "roof only inside composites", no
+metatile data, not Emerald-ready; the Ekat terrain kit is dropped because it lacks
+buildings. Unknown concepts return "No relevant entry" ("neon cyberpunk skyline"); "space
+station" returns only the space-meteor tileset (partial match). Precision figures use
+predicates over the catalog's own metadata, so they measure retrieval consistency, not an
+independent ground truth. No token saving is claimed or measured.
+
+**Decisions:** items distinguish `component`, `composite` and `tileset`; region and
+biome/role claims from visual review carry a confidence and are never inferred beyond what
+was seen; names alone only set biome/tags (`meta_basis` records the basis). The catalog is
+a local dataset under `$TAUROS_DATA`, not an app feature; integration remains in GFX-004.
+
+**Limits / not done:** region boxes were judged by eye on grid overlays (a tile or two of
+error possible); only the snow-relevant sheets, Alistair's sheet and a few Ekat sheets have
+region annotations; Ekat's remaining sheets and Team Aqua "Other Tilesets" are sheet-level;
+animations and tile-level palette assignment were not analysed; no asset was imported into
+a game or built.
+
+**Addendum 2026-11-24 (GFX-005 follow-up):** added Zygoat's Banished Platinum Outdoor
+Tileset (Eevee Expo resource 876, 2022-02-20; six images fetched from the catbox.moe links
+on the page and pinned by sha256; 430 items now). The main sheet is 256x30528 RGBA at 1x
+with 3529 colours, i.e. DS scale, not GBA scale, so it needs redrawing or downscaling and
+palette work; terms are not stated and it embeds LotusKing's upscaled Gen 4 buildings.
+AlchemyBats' DPP Style Sinnoh Overworld Tileset V.2 (DeviantArt, 2025-06-15, 256x29888, for
+RPG Maker XP) states: free for non-commercial hobby use, credit banners kept on
+redistribution, no commercial use; its download requires a DeviantArt login and was not
+fetched. Justin8964's set was not located.
+
+**Addendum 2026-11-24 (2):** added AlchemyBats' DPP Style Sinnoh Overworld Tileset V.2
+(256x29888) and Grander Underground Tileset V.1 (256x18816), both RGBA sheets for RPG Maker
+XP, saved from the artist's DeviantArt pages (login-gated download; the full-size file URL
+shown in the logged-in page was fetched and pinned by sha256; `fetch` verifies the pins and
+asks for a manual save if missing). Stated terms: free for hobby projects that make no
+profit, credit required, credit banners kept in compilations. Justin8964's "DPPt and HGSS
+Tileset" (4096x2048, published 2023-09-20) is described as tiles by Alucus, Kyle Dove,
+Dewitty, SirMalo and CNC, collected by zetavares852, with SirMalo's tiles edited; it contains
+HGSS-derived art, so it is a Nintendo-derived rip collection and must stay local, never in the
+repository. The original 4096x2048 file was saved by the owner's browser and is now in the catalog
+(pinned by sha256, 433 items). Downscaling to GBA scale remains for GFX-001/GFX-004.
+
+**Addendum 2026-11-24 (3, region annotation of the Gen 4 sheets):** AlchemyBats V.2 and
+Grander Underground V.1, and Justin8964's DPPt/HGSS sheet now have visually reviewed regions
+(503 items, 7 kits). AlchemyBats V.2 is the strongest Gen 4 snow candidate seen so far: it
+contains snow ground and ice autotiles, snow-covered trees, snow-roofed lodge/shop/cottage/
+chalet buildings, an igloo, stall and props (kit `grp/alchemybats-gen4-snow-town`; doors
+only inside composite buildings). Justin8964's sheet is a 4096x2048 library of hundreds of
+buildings with a baked checkerboard instead of transparency, 16221 colours, no snow variant
+identified; its regions are whole bands (low confidence), not single buildings. The
+Underground sheet has cave floors in stone, dirt, sand, ice, volcanic, mushroom and
+crystal palettes. All three are DS-scale RGBA, so none is GBA-ready.
+
+**Addendum 2026-11-24 (4, multi-author Gen 4 kits):** Zygoat's sheet was annotated by region
+(trees including snow-covered ones, ground blocks, building bands with cast shadows) and two
+mixed kits added: `grp/gen4-mixed-town` (Zygoat + Justin8964 + AlchemyBats) and
+`grp/gen4-mixed-snow-town` (AlchemyBats snow kit + Zygoat snowy trees + Underground ice cave
+walls); 515 items, 9 kits. Measured on region pixels (colour-histogram cosine, saturation,
+dark-outline share): Zygoat and Justin8964 are close (buildings 0.81, trees 0.58) because both
+carry game-derived Gen 4 art; AlchemyBats differs (0.21-0.48; saturation 0.50 vs 0.35-0.37,
+dark outline 0.11 vs 0.04), consistent with a redraw with bolder outlines. Recommendation
+recorded in the kits: base on Zygoat + Justin8964, use AlchemyBats for snow, expect a
+colour/outline pass before mixing in one map. Side-by-side tree and building crops were
+reviewed by eye. Limits: histogram similarity is a rough proxy, building entries are bands
+not single houses, no scale/palette conversion was attempted (all DS-scale RGBA).
