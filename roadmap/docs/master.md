@@ -2703,3 +2703,160 @@ recorded in the kits: base on Zygoat + Justin8964, use AlchemyBats for snow, exp
 colour/outline pass before mixing in one map. Side-by-side tree and building crops were
 reviewed by eye. Limits: histogram similarity is a rough proxy, building entries are bands
 not single houses, no scale/palette conversion was attempted (all DS-scale RGBA).
+
+## Gen 4 environment art: DS-scale to GBA conversion plan (RES-005, 2026-11-24)
+
+Planning only: nothing was converted, imported, built or integrated. Sections are labelled
+**Verified** (measured or read this day), **Proposed** (recommendation, not accepted) and
+**Open** (Owner decisions, tracked in DEC-004).
+
+**Verified (measured 2026-11-24 on the local catalog sources, Python/Pillow/numpy, read-only):**
+- The sheets are 2x enlargements of art on a 16 px grid, not native "DS-scale" art. Share of
+  visible 2x2 blocks (aligned to the sheet origin) that are uniform: Zygoat 1.000 (only 3
+  non-uniform blocks, all fully transparent with differing hidden RGB, i.e. an exact 2x
+  enlargement), AlchemyBats DPP V.2 0.963, Grander Underground 0.977, Justin8964 0.723. Any
+  other offset or factor 3/4 scores 0.46-0.72, so the origin is the grid. Halving gives a
+  16 px grid, the size of one Emerald metatile (2x2 tiles of 8x8).
+- AlchemyBats' non-uniform blocks (3.7%) mostly differ by 24-64 per channel: 1 px detail
+  drawn on top of 2x art, concentrated in some bands (up to 12% per 128 px band, median 2.3%).
+  Justin8964's 27.7% non-uniform blocks are spread across the whole sheet and 31% of them
+  differ by more than 64: mixed-resolution content, so plain halving loses real detail there.
+- Colours: AlchemyBats V.2 has 156 opaque colours in the whole sheet, Underground 109; Zygoat
+  3529 and Justin8964 16221 (the "thousands of colours" applies only to those two). Share of
+  RGB555-exact opaque pixels: AlchemyBats 0.097, Justin8964 0.274; every sheet needs an RGB555
+  snap.
+- Semi-transparency: AlchemyBats V.2 201,140 pixels with 5 alpha levels, Underground 17,876
+  (3 levels), Zygoat 630,544 (50 levels, mostly cast shadows), Justin8964 116,464 (30 levels).
+  Emerald map backgrounds have one transparent index per palette and no partial alpha.
+- Sample items halved with nearest sampling at the sheet origin (catalog regions are
+  eye-judged and not grid-aligned, so tile counts are upper bounds): AlchemyBats cottage
+  96x80, 18 RGB555 colours, max 6 per 8x8 tile, 78 unique tiles (flip-aware), 2 palettes by
+  greedy 15-colour packing; snow shop 20 colours/2 palettes; snow lodge 16/2; large snowy
+  tree 70x70, 11 colours, 1 palette; snow trees group 24/3; snow ground 14/1. Zygoat snowy
+  trees 21 colours/3 palettes; Zygoat building band A 914 colours, up to 26 per tile, 203
+  palettes by naive packing; Justin8964 trees band 259 colours, 44 palettes. AlchemyBats is
+  therefore close to GBA limits after halving; Zygoat buildings and Justin8964 need real
+  colour quantisation.
+- Budgets in the pinned 1.16.4 base `include/fieldmap.h`: primary 512 tiles, 512 metatiles,
+  6 palettes; totals 1024 tiles, 1024 metatiles, 13 palettes; so a secondary has 512 tiles,
+  512 metatiles and 7 palettes of 15 colours plus transparency. Porytiles is not installed
+  locally; its dual-layer support was not checked here.
+- Catalog defect: `detect_upscale` in scripts/asset_catalog.py compares RGB under alpha 0,
+  so Zygoat's exact 2x sheet is recorded as `native_scale: 1`. Fix scheduled in GFX-007.
+
+**Hypotheses (to test in GFX-006, not facts):** halved Gen 4 objects have Gen 3-compatible
+proportions next to Emerald's 16x32 player and door metatiles; the 32 px RMXP grid of each
+sheet coincides with object placement, so halved objects fall on whole metatiles.
+
+**Proposed design, with options and recommendation per question:**
+
+1. *Scale reduction.* Options: (a) 2x decimation at the sheet origin with a per-tile residual
+   report; (b) area/box or other smoothing resampling followed by quantisation; (c) native
+   redraw by hand using the source as reference; (d) keep 32 px objects spanning 2x2
+   metatiles. Recommended: (a) for Zygoat (lossless) and AlchemyBats; in residual blocks pick
+   the darkest colour when the block contains an outline colour, else the majority colour,
+   and list each such tile for review. (b) only as a starting point for Justin8964 plus
+   (c) for what it loses. Reject (d): it doubles every object against the Emerald player
+   and quarters the tile budget. Never resample by non-integer factors.
+2. *Transparency and shadows.* Threshold anti-aliasing at alpha 128. Cast shadows: drop,
+   bake into darker ground-variant tiles (Gen 3 practice), or keep only where Emerald has an
+   equivalent. Recommended: drop for the first sample, decide in DEC-004 (taste).
+3. *Palette strategy.* Options: per-object palettes (exhausts 7 secondary palettes after 3-4
+   buildings); per-kit joint quantisation with tile-to-palette assignment; one global Gen 4
+   ramp set for all kits. Recommended: per-kit joint quantisation into a map-specific pair,
+   mirroring Emerald: a snow primary variant (ground, edges, trees, shared ramps) and a town
+   secondary (buildings, props), each with at least 1 spare palette. A global ramp set is
+   the harmonisation target, not a hard constraint. Snap to RGB555 before counting colours.
+4. *Style harmonisation.* Options: single-author kit; recolour game-derived art toward
+   AlchemyBats; recolour AlchemyBats toward the game-derived look; leave mixed. Recommended:
+   single-author AlchemyBats kit for the first snow town (it has the only Gen 4 snow
+   buildings and the clearest terms); joint quantisation already pulls mixed sources onto
+   shared ramps; outline weight needs a human pass. Measure with the GFX-005 metrics on
+   converted tiles. The direction is the Owner's taste (DEC-004).
+5. *Manual vs automatable.* Automatable: grid snap, decimation and residual report, alpha,
+   RGB555, quantisation, 8x8 split with flip-aware deduplication, palette packing, budget
+   checks, contact sheets, Porytiles input layout. Agent-proposed, human-confirmed: residual
+   fixes, layer split (roofs/crowns above the player), collision/behaviours, door
+   extraction from composite buildings. Manual: final pixel retouch and colour taste, and
+   all Justin8964 cleanup. Deterministic conversion is not AI-generated art; agent retouch is
+   AI-Assisted per DEC-003.
+6. *Validation and preview.* Before/after contact sheet per kit: source crop, decimated (2x
+   and 3x view), quantised, changed-pixel diff map, palettes, and a scale reference (Emerald
+   player and a house door taken from the local decomp, never committed). Numeric report:
+   residual share per tile, colour error, colours per tile, palettes, unique tiles, budget
+   use. In-game preview (mGBA before/after screenshots) belongs to the GFX-004 snowy-city
+   acceptance, not to conversion.
+7. *Fit with GFX-001 and GFX-004.* The converter (GFX-007) produces Porytiles-ready layered
+   PNGs and runs GFX-001's validator, which gains converted-art checks (no partial alpha,
+   RGB555, size multiple of 16, primary/secondary budgets). GFX-004 receives converted kits
+   as catalog entries with recipe, source/output sha256, credits and status
+   (converted-unverified until built). Outputs and recipes stay under `$TAUROS_DATA`.
+
+**Proposed sample experiment (GFX-006, not run; needs Owner approval):** AlchemyBats V.2
+`cottage-snow-red-door` and `tree-snowy-large`, plus Zygoat `trees-snowy` (one tree) as the
+exact-2x control, converted jointly. Acceptance checks:
+- A1 grid: regions snapped to the 32 px source grid; outputs are multiples of 16 px.
+- A2 decimation residual: non-uniform 2x2 blocks <= 5% per AlchemyBats object and 0 for the
+  Zygoat control; each affected tile listed.
+- A3 format: every 8x8 tile uses one palette with <= 15 opaque colours; all colours
+  RGB555-exact; no alpha other than 0/255.
+- A4 budget: <= 3 palettes for the three objects together (greedy upper bound measured: 2+1
+  for AlchemyBats, 3 for the Zygoat band) and unique tiles reported (upper bound 152 for
+  the two AlchemyBats objects).
+- A5 colour fidelity: mean CIE76 Delta E between decimated and quantised opaque pixels <= 2,
+  max <= 10.
+- A6 scale: halved door and tree measured in metatiles next to the Emerald player and a
+  house door; pass if the cottage door is 1 metatile wide and 1-2 metatiles tall.
+- A7 determinism: two runs give byte-identical outputs.
+- A8 Owner review: Simone's verdict on the contact sheet at 2x/3x (taste, recorded in DEC-004).
+- Optional, only if Porytiles is pinned under `$TAUROS_DATA` by then: the output compiles as a
+  dual-layer secondary; otherwise reported as not run.
+
+**Open (Owner, DEC-004):** visual verdict; harmonisation direction; whether game-derived
+Zygoat/Justin8964 art may appear in hacks he distributes or only in private tests
+(AlchemyBats allows non-profit hobby use with credit); shadow policy.
+
+**GFX-006 sample run (Verified, executed 2026-11-24 with Owner approval in chat).** A
+throwaway prototype (Pillow, stdlib otherwise) and all outputs live under
+`$TAUROS_DATA/assets/experiments/gfx-006/`; nothing was added to the repository or a game.
+Crops were snapped to the 32 px source grid by visual review, because the catalog regions
+are not grid-aligned: AlchemyBats cottage (0,26208)-(192,26368), large snowy tree
+(0,25696)-(160,25856), Zygoat snowy tree column (0,1632)-(96,1824). Results against the
+acceptance checks:
+- A1 pass: native 96x80 (6x5 metatiles), 80x80 (5x5), 48x96 (3x6).
+- A2 pass: 0 residual 2x2 blocks in all three. The 2.3% first measured on the tree came
+  entirely from two RMXP filler cells (32x32, only colours (141,8,53) and (93,33,53), a
+  crossed square) inside the crop; they are now masked automatically.
+- A3 pass: alpha only 0/255, every 8x8 tile in one palette, at most 6/6/10 colours per tile.
+  AlchemyBats' only partial alpha in these crops is a black shadow at alpha 82, dropped by
+  the threshold. Zygoat's light-green ground halo is opaque in the source (a baked shadow)
+  and survives: it is drawn for grass, not snow (shadow policy, DEC-004).
+- A4 pass: 3 palettes (15+15+10 colours) for 36 distinct RGB555 colours; 167 unique
+  flip-aware tiles combined (77+69+24 per object). Cost: 6 colour merges, including a
+  window highlight (6 px, Delta E 23.8) and a dark red (5 px, 21.8). With 4 palettes there
+  are 0 merges.
+- A5 FAIL as written: mean/max CIE76 Delta E against the decimated image are cottage
+  2.98/23.0, tree 3.44/5.5, Zygoat 1.79/6.0. RGB555 rounding alone gives 2.92/5.5,
+  3.46/5.5, 1.75/2.6, so a mean of 2 or less is unreachable for AlchemyBats' non-RGB555
+  colours on GBA. Palette reduction itself adds 0.06 or less to the mean; the max comes
+  from the merges above.
+- A6 pass for the door: the cottage door is 12x12 px inside one metatile (column 2, row 3),
+  next to Emerald's 16x32 door frame and Brendan's 14x21 visible pixels. Not a criterion
+  but measured: the AlchemyBats large tree is 5x5 metatiles, against Emerald's 2x2 trees.
+- A7 pass: two runs gave byte-identical outputs (sha256 of all 9 files).
+- A8 pass: contact sheets shown to Simone on 2026-11-24; he accepted the result (see the DEC-004 decisions below).
+- Optional Porytiles compile: not run (Porytiles not installed or pinned).
+
+**Proposed after GFX-006 (not accepted):** GFX-007 should measure palette-reduction error
+against the RGB555-snapped image and report the RGB555 rounding error separately, instead
+of the A5 threshold above. It should also mask RMXP filler cells, prefer a spare palette
+over merging colours that are small but distinctive, and take crop boxes from grid-snapped
+catalog regions. Whether very large Gen 4 trees are acceptable in Emerald maps is a taste
+and level-design question for DEC-004 (answered below: yes).
+
+**Owner decisions (DEC-004, Simone in chat, 2026-11-24), after reviewing the GFX-006
+contact sheets:** (1) the converted sample is accepted; (a) the 3-palette budget with
+colour merges is preferred over a spare palette when it saves space, so the GFX-007 default
+minimises palettes and reports each merge; (b) large Gen 4 trees (5x5 metatiles) are
+welcome in Emerald maps. Still open: harmonisation direction for mixed kits, use of
+game-derived Zygoat/Justin8964 art in distributed hacks, and the cast-shadow policy.

@@ -1,6 +1,7 @@
 {
   "active_ids": [
-    "APP-003"
+    "APP-003",
+    "DEC-004"
   ],
   "ready_ids": [
     "G3-010",
@@ -1242,10 +1243,52 @@
       "verification": "2026-11-23 UTC: located prior graphics requirements and read primary upstream asset READMEs, credits, author resource/update pages and Skeli's original Unbound thread. GitHub API tree/HEAD checks recorded Team Aqua 3e06f6f9fa3639da51f42ca486046ced58b1ee47 and Retro Platinum e74208ef7922bb252ac585c07e73ddae5f3ee42d; inspected winter and Gen 4 Cave file listings. Local read-only source inspection confirmed pinned expansion 3796c722, two-layer metatiles, primary/total palette/tile constants and existing snow weather functions. Master records the ranked shortlist, provenance/format uncertainties, Unbound engine-versus-art distinction, semantic catalogue proposal and snowy-city acceptance workflow. GFX-001/GFX-004 scopes updated; no UI reprioritization. Python suite passed 61 tests with one opt-in skipped; roadmap and whitespace checks passed. Limits: no graphical pack downloaded, external scripts executed, assets copied into the repository, game changes, import/build/preview or exhaustive visual-quality comparison; candidates remain unverified on the pinned engine."
     },
     {
+      "completion": "Master records measured source facts separately from the proposed design and open Owner decisions; follow-up tasks with scope, completion and dependencies exist in this file; the sample experiment is specified with pass/fail thresholds and not run without Owner approval.",
+      "dependents": [
+        "GFX-006"
+      ],
+      "id": "RES-005",
+      "incomplete_prerequisites": [],
+      "note": "Plan recorded; sample experiment GFX-006 awaits Owner approval; Owner decisions in DEC-004.",
+      "owner": "Claude Code",
+      "prerequisites": [
+        "GFX-005"
+      ],
+      "responsible": "Agent",
+      "scope": "Owner request 2026-11-24, planning only: analyse scale reduction, palette strategy per tileset/kit, style harmonisation across AlchemyBats/Zygoat/Justin8964, manual versus automatable steps, before/after validation and preview, and the fit with GFX-001's validator and GFX-004's catalog; present options with a recommendation each, measure rather than assume, propose follow-up tasks and one small sample experiment with objective acceptance checks. No implementation, conversion output, game change, app integration or commit; external sheets stay local. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Risks and community notes\" (Legal, Positioning).",
+      "section": "Tauros roadmap / Graphics asset research",
+      "source_line": 519,
+      "status": "Done",
+      "title": "Plan the DS-scale to GBA conversion of Gen 4-style environment art.",
+      "verification": "2026-11-24 UTC: read master RES-004/GFX-005 and addenda, GFX-001/004/005 and the plan's graphics section; ran `asset_catalog.py search \"gen 4 snow town\"`. Read-only measurements with Pillow/numpy in a scratch directory on the four Gen 4 sheets: 2x2-uniform share per offset and factor (Zygoat 1.000, AlchemyBats 0.963/0.977, Justin8964 0.723), residual magnitude and band distribution, opaque colours, RGB555 exactness, alpha levels; halved-sample colours, colours per 8x8 tile, flip-aware unique tiles and greedy palette counts for nine catalog items; confirmed the catalog's `detect_upscale` false negative on Zygoat (3 fully transparent blocks); read palette/tile constants in the local 1.16.4 base `fieldmap.h`. Master section and DEC-004, GFX-006, GFX-007, GFX-008 written; GFX-001/GFX-004 scopes amended; roadmap graph regenerated and validated. Limits: catalog regions are not grid-aligned so tile/palette counts are upper bounds; no conversion, quantisation, Porytiles run (not installed), build or visual review of converted art; proportions versus Emerald remain hypotheses for GFX-006."
+    },
+    {
+      "completion": "Each of the four decisions is recorded in master.md as an Owner decision with date; GFX-007 and GFX-008 scopes are updated to match.",
+      "dependents": [
+        "GFX-007",
+        "GFX-008"
+      ],
+      "id": "DEC-004",
+      "incomplete_prerequisites": [],
+      "note": "(owner: Simone, decision 1 taken 2026-11-24 with the palette budget and large trees; decisions 2-4 open)",
+      "owner": "Simone",
+      "prerequisites": [
+        "GFX-006"
+      ],
+      "responsible": "Owner",
+      "scope": "After reviewing the GFX-006 before/after sheet, Simone decides: (1) visual verdict on the converted sample (accept, accept with retouch, reject); (2) harmonisation target for mixed kits: single-author AlchemyBats kit for the first snow town (recommended), recolour game-derived art toward AlchemyBats, or recolour AlchemyBats toward the game-derived look; (3) whether game-derived sources (Zygoat, Justin8964) may appear in hacks he distributes or only in private local tests; (4) cast-shadow policy (drop, bake into ground variants, keep only where an Emerald equivalent exists). Options and recommendations per master.md \"Gen 4 environment art: DS-scale to GBA conversion plan (RES-005)\". Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal, Positioning).",
+      "section": "Tauros roadmap / Graphics asset research",
+      "source_line": 528,
+      "status": "In progress",
+      "title": "Owner decisions on Gen 4 environment conversion style and scope.",
+      "verification": null
+    },
+    {
       "completion": "Validator tests catch each violation class on synthetic fixtures; a valid tileset compiles and builds.",
       "dependents": [
         "GFX-002",
         "GFX-003",
+        "GFX-007",
         "GFX-004"
       ],
       "id": "GFX-001",
@@ -1257,9 +1300,9 @@
         "G3-003"
       ],
       "responsible": "Agent",
-      "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. RES-004 follow-up: validate the pinned engine's two-layer metatiles against packages requiring triple-layer support, primary/secondary palette sharing and per-map variants; include metatile/collision/behaviour remapping and isolated shared-tileset updates in import validation. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6).",
+      "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. RES-004 follow-up: validate the pinned engine's two-layer metatiles against packages requiring triple-layer support, primary/secondary palette sharing and per-map variants; include metatile/collision/behaviour remapping and isolated shared-tileset updates in import validation. RES-005 follow-up: for converted Gen 4 art also reject semi-transparent pixels, non-RGB555 colours and images whose size is not a multiple of 16, and report palette/tile/metatile use against the primary (6/512/512) and secondary (7/512/512) budgets so GFX-007 can run it on its output. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 521,
+      "source_line": 539,
       "status": "Not started",
       "title": "Asset pipeline with palette and VRAM validator.",
       "verification": null
@@ -1280,7 +1323,7 @@
       "responsible": "Agent",
       "scope": "Palette-aware pixel editing of sprites and tiles with validator feedback and build-and-preview. Refs: plan §\"Graphics assets and visual enhancements\" (step 4), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 528,
+      "source_line": 546,
       "status": "Not started",
       "title": "Pixel panel in the app.",
       "verification": null
@@ -1301,14 +1344,16 @@
       "responsible": "Agent",
       "scope": "Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §\"Young projects to take ideas from\" (Aseprite MCPs), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 535,
+      "source_line": 553,
       "status": "Not started",
       "title": "Aseprite MCP integration for agent sketches.",
       "verification": null
     },
     {
       "completion": "Reproducible build and check commands regenerate the catalog from pinned sources; the validator confirms schema, unique stable IDs, existing paths/regions and previews; the snowy-town query returns a compact coherent set with missing components flagged; sample-query results and response sizes are measured and recorded with their limits.",
-      "dependents": [],
+      "dependents": [
+        "RES-005"
+      ],
       "id": "GFX-005",
       "incomplete_prerequisites": [],
       "note": null,
@@ -1319,10 +1364,78 @@
       "responsible": "Agent",
       "scope": "Owner request 2026-11-23: produce, outside the repository under `$TAUROS_DATA/assets/catalog/`, a dataset of reusable Gen 3 environment graphics from Team Aqua's Asset Repo / Great Tileset Exchange, CinnaYva Gen 3 Snow Tileset, Ekat's Public Gen 3 Tilesets and Alistair Gen III Johto, treating all external content as data. Deliver versioned source records (URL, revision/hash, authors, reuse terms), a JSONL catalog with stable IDs and short English descriptions/tags, per-item type, biome, style, relative path, image region, size, palette and verified/unverified compatibility, indexed previews, coherent combinable groups (ground, edges, trees, roofs, buildings, doors) and a compact local search. Distinguish single components, composite objects and complete tilesets; never invent meanings, coordinates or compatibility; do not call an asset Emerald-ready without verifying format, palette and metatile layers. First acceptance query: snowy town must return a coherent set and explicitly list missing components. Measure response sizes and sample-query quality, not token savings. Only scripts and concise setup/command/result/limit documentation enter this repository; no dataset, image, archive or index is committed. No app integration, game change, commit or push. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Rules for the agents writing the code\" (Licenses), README External sources.",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 542,
+      "source_line": 560,
       "status": "Done",
       "title": "Build the local searchable catalog of reusable environment assets (dataset only).",
       "verification": "2026-11-23 UTC: `scripts/asset_catalog.py fetch` pulled the four sources at pinned git revision/sha256 (Team Aqua 3e06f6f9; CinnaYva, Ekat, Alistair archives); `build` produced 424 items and 4 kits with previews; `check --deep` 0 errors; a fresh fetch+build in an empty data directory gave byte-identical items.jsonl, groups.jsonl and previews. `python3 -m unittest discover -s tests -p test_asset_catalog.py` 14 tests OK. `measure` ran 12 sample queries: responses 133-2852 bytes (median 1045), 8-14 ms; snowy-town queries return grp/cinnayva-snow-town with roof-only-in-composites and no-metatile-data flags, Emerald-ready no; an unmatched query returns no entry. Region previews were reviewed by eye and several boxes corrected. Limits: regions judged visually, only snow-relevant sheets/Alistair/few Ekat sheets annotated, precision predicates use catalog metadata, no token saving measured, no asset imported, built or tested in a game, no app integration, no commit."
+    },
+    {
+      "completion": "Every acceptance check A1-A8 listed in master.md is executed and reported with its measured value and pass/fail; a before/after contact sheet (source, decimated, quantised, diff map, palettes, scale reference) is shown to Simone and his verdict feeds DEC-004; checks not executed are reported as not run.",
+      "dependents": [
+        "DEC-004",
+        "GFX-007"
+      ],
+      "id": "GFX-006",
+      "incomplete_prerequisites": [],
+      "note": "Owner accepted the sample on 2026-11-24; A5 failed as written (threshold below RGB555 rounding), amended in GFX-007.",
+      "owner": "Claude Code",
+      "prerequisites": [
+        "RES-005"
+      ],
+      "responsible": "Agent",
+      "scope": "Run only after Simone approves in chat. Convert AlchemyBats V.2 `cottage-snow-red-door` and `tree-snowy-large` (control: Zygoat `trees-snowy`, one tree) with the default recipe in master.md \"Gen 4 environment art: DS-scale to GBA conversion plan (RES-005)\": snap regions to the 32 px source grid, 2x decimation at the sheet origin with a residual report, alpha threshold, RGB555 snap, joint quantisation into 15-colour palettes, 8x8 split with flip-aware deduplication. Throwaway prototype code and all outputs stay under `$TAUROS_DATA/assets/experiments/gfx-006/`; nothing enters the repository except the master/TODO record. No game, decomp or app change. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline, steps 2-3).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 568,
+      "status": "Done",
+      "title": "Sample DS-scale to GBA conversion experiment (one building, one tree).",
+      "verification": "2026-11-24 UTC: after Owner approval in chat, ran a throwaway prototype under `$TAUROS_DATA/assets/experiments/gfx-006/` on AlchemyBats cottage-snow-red-door and tree-snowy-large plus one Zygoat snowy tree column, with source sha256 checked against the catalog. A1 pass (6x5, 5x5, 3x6 metatiles); A2 pass (0 residual blocks after masking two RMXP filler cells); A3 pass (alpha 0/255, one palette per tile, max 10 colours); A4 pass (3 palettes, 167 unique flip-aware tiles, 6 colour merges); A5 fail (mean Delta E 2.98/3.44/1.79 vs threshold 2; RGB555 rounding alone 2.92/3.46/1.75); A6 pass (door 12x12 px in one metatile); A7 pass (two runs byte-identical on 9 files); A8: contact sheets for 3 and 4 palettes shown, Simone accepted the result, the 3-palette budget with merges and the large trees. Limits: crops snapped by visual review; optional Porytiles compile not run (not installed); no build, game change or in-game preview; prototype code not in the repository."
+    },
+    {
+      "completion": "Synthetic-fixture tests cover exact 2x, residual blocks, semi-alpha, more than 15 colours per tile and over-budget kits; converting `grp/alchemybats-gen4-snow-town` twice gives byte-identical outputs that pass the GFX-001 validator and compile with the pinned Porytiles; the report lists every manual-review item; the catalog marks Zygoat's sheet as 2x-enlarged.",
+      "dependents": [
+        "GFX-008"
+      ],
+      "id": "GFX-007",
+      "incomplete_prerequisites": [
+        "GFX-001",
+        "DEC-004"
+      ],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-001",
+        "GFX-006",
+        "DEC-004"
+      ],
+      "responsible": "Agent",
+      "scope": "Turn the GFX-006 recipe into a repository script (stdlib-only like scripts/asset_catalog.py unless a dependency is decided and recorded) that takes a catalog kit and a recipe file and emits, under `$TAUROS_DATA`, Porytiles-ready layered PNGs for a map-specific tileset pair within budget (primary variant: 6 palettes, 512 tiles; secondary: 7 palettes, 512 tiles, 512 metatiles; two layers), a before/after contact sheet and a machine-readable report (residual blocks per tile, colour error, palettes, unique tiles, budget use, per-item credits and source sha256, output sha256). Layer split (above/below player) and behaviours are proposed, flagged for human review, never silently final. Per the GFX-006 results: mask RMXP filler cells, report palette-reduction error against the RGB555-snapped image separately from RGB555 rounding, minimise palettes and accept colour merges (Owner 2026-11-24) while listing every merge with pixel count and Delta E, and snap catalog regions to the 32 px source grid. Fix `detect_upscale` in scripts/asset_catalog.py to treat all alpha-0 pixels as equal and record the 2x-uniform share. Outputs and recipes naming external assets stay local; only code, synthetic fixtures and concise docs enter the repository. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Rules for the agents writing the code\" (Licenses, No Nintendo assets).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 577,
+      "status": "Not started",
+      "title": "Deterministic Gen 4 sheet-to-tileset converter with before/after report.",
+      "verification": null
+    },
+    {
+      "completion": "For one mixed kit the metrics move toward the target within thresholds fixed in DEC-004, the result still passes the GFX-001 validator, and Simone approves a side-by-side preview.",
+      "dependents": [],
+      "id": "GFX-008",
+      "incomplete_prerequisites": [
+        "GFX-007",
+        "DEC-004"
+      ],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-007",
+        "DEC-004"
+      ],
+      "responsible": "Agent",
+      "scope": "Following the DEC-004 target, add palette-ramp remapping and outline adjustment to the converter for mixed kits (for example `grp/gen4-mixed-snow-town`), measured before/after with the GFX-005 metrics (colour-histogram cosine, saturation, dark-outline share) on converted tiles; final pixel retouch stays human (Aseprite or the GFX-002 panel) and is labelled per DEC-003. Local outputs only. Refs: plan §\"Graphics assets and visual enhancements\" (steps 2-4), plan §\"Risks and community notes\" (Positioning).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 584,
+      "status": "Not started",
+      "title": "Style harmonisation pass for multi-author Gen 4 kits.",
+      "verification": null
     },
     {
       "completion": "At least one entry per listed kind can be applied to the pinned project, builds and shows in preview; credits recorded per asset.",
@@ -1338,9 +1451,9 @@
         "RES-004"
       ],
       "responsible": "Agent",
-      "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
+      "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. RES-005: converted Gen 4 kits (GFX-007) enter as entries with recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 550,
+      "source_line": 591,
       "status": "Not started",
       "title": "Catalog of graphical upgrades.",
       "verification": null
@@ -1360,7 +1473,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 559,
+      "source_line": 600,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1381,7 +1494,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 566,
+      "source_line": 607,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1400,14 +1513,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 573,
+      "source_line": 614,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "44492a67da86213a743df1889a95d97688a7518b50aa184f45803642a61ffdb3",
+  "todo_sha256": "b32d529490181bc8266546cef8287e311cf870e202d9f0f2696c1e0eeaaa6528",
   "topological_layers": [
     [
       "G3-010",
@@ -1416,6 +1529,7 @@
       "APP-006",
       "APP-003",
       "PROV-001",
+      "DEC-004",
       "GFX-001",
       "GB-001",
       "NDS-001"
@@ -1426,11 +1540,13 @@
       "MCP-005",
       "GFX-002",
       "GFX-003",
+      "GFX-007",
       "GFX-004",
       "GB-002"
     ],
     [
-      "APP-005"
+      "APP-005",
+      "GFX-008"
     ]
   ]
 }
