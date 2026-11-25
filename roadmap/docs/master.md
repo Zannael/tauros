@@ -428,6 +428,9 @@ Decisions (agent-owned, within the tasks' scope):
     Porymap should not edit the same project at the same time. The flatpak sees only
     folders it is granted: run it with `--filesystem=<project>` and open the project
     from the dialog; a project opened through the document portal is read-only.
+    Porymap reopens `recent_project` from its `porymap.cfg`, so a portal path
+    (`/run/user/<uid>/doc/...`) saved there stays read-only even with
+    `--filesystem`: point it back to the real project path.
   - *Limits:* growth or shrinking from the top or left, and connection offsets after
     a resize, are not handled; the tileset, region map section and music constants
     are not validated beyond tilesets (the build reports them).
