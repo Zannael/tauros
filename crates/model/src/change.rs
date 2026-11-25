@@ -1,6 +1,6 @@
 //! Change sets: the only way to modify a project through a connector.
 
-use crate::entities::{Event, EventKind, Map, Scene, Trainer};
+use crate::entities::{Event, EventKind, Extensions, Map, Scene, Trainer};
 use crate::ids::*;
 use crate::provenance::Provenance;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,27 @@ use serde::{Deserialize, Serialize};
 pub enum Change {
     UpsertTrainer { trainer: Trainer },
     RemoveTrainer { id: TrainerId },
+    /// Creates the map when its id is new. Its grid must name a layout that exists
+    /// (or one created earlier in the same change set) with the same size.
     UpsertMap { map: Map },
+    /// Creates a layout (terrain grid) of `width` x `height`; game-specific fields
+    /// (tilesets, name, fill block) travel in `properties`.
+    CreateLayout {
+        layout: LayoutId,
+        width: u16,
+        height: u16,
+        #[serde(default)]
+        properties: Extensions,
+    },
+    /// Resizes a layout, keeping its top-left corner: growth adds blocks at the
+    /// right and bottom, shrinking drops them. Every map on the layout follows.
+    ResizeLayout {
+        layout: LayoutId,
+        width: u16,
+        height: u16,
+        #[serde(default)]
+        properties: Extensions,
+    },
     AddEvent { map: MapId, event: Event },
     RemoveEvent { map: MapId, kind: EventKind, index: usize },
     UpsertScene { scene: Scene },

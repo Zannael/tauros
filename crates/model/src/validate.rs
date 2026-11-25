@@ -5,7 +5,7 @@
 //! unchanged. Connectors add their game-specific rules on top (G3-008).
 
 use crate::change::{Change, ChangeSet, Violation};
-use crate::entities::{Event, EventKind, Flag, Trainer};
+use crate::entities::{Event, EventKind, Flag, MapGeometry, Trainer};
 use crate::game::{Capabilities, ProjectSnapshot};
 
 /// Checks `changes` against `snapshot`; returns every violation found.
@@ -41,6 +41,34 @@ pub fn simulate(snapshot: &ProjectSnapshot, changes: &ChangeSet) -> Result<Proje
                     }
                 }
                 work.maps.insert(map.id.clone(), map.clone());
+            }
+            Change::CreateLayout { layout, width, height, .. } => {
+                if *width == 0 || *height == 0 {
+                    found.push(Violation::error(i, "layout.size", format!("{layout}: a layout needs at least 1x1 blocks")));
+                }
+            }
+            Change::ResizeLayout { layout, width, height, .. } => {
+                if *width == 0 || *height == 0 {
+                    found.push(Violation::error(i, "layout.size", format!("{layout}: a layout needs at least 1x1 blocks")));
+                }
+                for m in work.maps.values_mut() {
+                    let MapGeometry::Grid { layout: l, width: w, height: h } = &mut m.geometry else { continue };
+                    if l != layout {
+                        continue;
+                    }
+                    (*w, *h) = (*width, *height);
+                    if let Some(outside) = m.events.iter().find(|e| {
+                        let p = e.position();
+                        p.x >= i32::from(*width) || p.y >= i32::from(*height)
+                    }) {
+                        let p = outside.position();
+                        found.push(Violation::error(
+                            i,
+                            "layout.resize_events",
+                            format!("{}: {:?} event at ({}, {}) falls outside {width}x{height}; move or remove it first", m.id, outside.kind(), p.x, p.y),
+                        ));
+                    }
+                }
             }
             Change::AddEvent { map, event } => {
                 found.extend(check_event(&work, event, i, Some(map)));

@@ -14,7 +14,7 @@
 //! with a longest common subsequence, so inserting or removing one event leaves the
 //! others' text alone.
 
-use crate::json::{align, Array, Document, Item, Node, Object, Step};
+use crate::json::{align, Array, Document, Item, Node, Object, Scalar, Step};
 use std::collections::BTreeMap;
 use tauros_model::{Connection, Direction, Event, EventKind, Extensions, FlagId, LayoutId, Map, MapGeometry, MapId, Position, ScriptLabel, Value};
 
@@ -544,6 +544,126 @@ impl MapFile {
     }
 }
 
+/// Header keys of a new map in Porymap's order, with the defaults Porymap gives.
+pub const NEW_MAP_DEFAULTS: [(&str, &str); 11] = [
+    ("music", "MUS_DUMMY"),
+    ("region", "REGION_HOENN"),
+    ("region_map_section", "MAPSEC_NONE"),
+    ("requires_flash", "false"),
+    ("weather", "WEATHER_NONE"),
+    ("map_type", "MAP_TYPE_NONE"),
+    ("allow_cycling", "false"),
+    ("allow_escaping", "false"),
+    ("allow_running", "false"),
+    ("show_map_name", "false"),
+    ("battle_scene", "MAP_BATTLE_SCENE_NORMAL"),
+];
+
+/// `map` with every header key of a new map present, defaults filling the gaps.
+pub fn with_new_map_defaults(mut map: Map) -> Map {
+    for (key, default) in NEW_MAP_DEFAULTS {
+        map.properties.entry(key.to_owned()).or_insert_with(|| match default {
+            "true" => Value::Bool(true),
+            "false" => Value::Bool(false),
+            text => Value::Text(text.to_owned()),
+        });
+    }
+    map
+}
+
+impl MapFile {
+    /// The `map.json` of a new map, laid out like Porymap's: header keys in
+    /// [`NEW_MAP_DEFAULTS`] order, other properties after them, then the
+    /// connections and the four event arrays.
+    pub fn create(map: &Map) -> Result<Self, MapFormatError> {
+        let MapGeometry::Grid { layout, .. } = &map.geometry else { return Err(bad("Gen 3 maps are grids")) };
+        let mut pairs: Vec<(String, Node)> = vec![
+            ("id".into(), Node::string(&map.id.0)),
+            ("name".into(), Node::string(&map.name)),
+            ("layout".into(), Node::string(&layout.0)),
+        ];
+        let mut rest = map.properties.clone();
+        for (key, _) in NEW_MAP_DEFAULTS {
+            if let Some(value) = rest.remove(key) {
+                pairs.push((key.to_owned(), node_of(&value)));
+            }
+        }
+        pairs.extend(rest.iter().map(|(k, v)| (k.clone(), node_of(v))));
+        pairs.push((
+            "connections".into(),
+            if map.connections.is_empty() {
+                Node::Scalar(Scalar::null())
+            } else {
+                Node::array(map.connections.iter().map(|c| Node::object(connection_to_json(c), "  ")).collect(), "  ")
+            },
+        ));
+        for (key, kind) in EVENT_ARRAYS {
+            let events: Vec<Node> =
+                map.events.iter().filter(|e| e.kind() == kind).map(|e| Node::object(event_to_json(e), "  ")).collect();
+            pairs.push((key.to_owned(), Node::array(events, "  ")));
+        }
+        let mut text = Node::object(pairs, "").render();
+        text.push('\n');
+        Self::parse(&text)
+    }
+}
+
+/// `data/maps/map_groups.json`: the order of the groups and the maps of each.
+#[derive(Clone, Debug)]
+pub struct MapGroups {
+    pub doc: Document,
+}
+
+impl MapGroups {
+    pub fn parse(text: &str) -> Result<Self, MapFormatError> {
+        let doc = Document::parse(text).map_err(|e| bad(e.to_string()))?;
+        let root = doc.root.as_object().ok_or_else(|| bad("map_groups.json root is not an object"))?;
+        if root.get("group_order").and_then(Node::as_array).is_none() {
+            return Err(bad("map_groups.json has no group_order"));
+        }
+        Ok(Self { doc })
+    }
+
+    pub fn render(&self) -> String {
+        self.doc.render()
+    }
+
+    fn root(&self) -> &Object {
+        self.doc.root.as_object().expect("checked in parse")
+    }
+
+    /// Group names in `group_order`.
+    pub fn groups(&self) -> Vec<String> {
+        let order = self.root().get("group_order").and_then(Node::as_array).expect("checked in parse");
+        order.items.iter().filter_map(|i| i.node.as_str()).collect()
+    }
+
+    /// Directory names of the maps in `group`, in file order.
+    pub fn members(&self, group: &str) -> Vec<String> {
+        match self.root().get(group) {
+            Some(Node::Array(a)) => a.items.iter().filter_map(|i| i.node.as_str()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn contains_map(&self, name: &str) -> bool {
+        self.groups().iter().any(|g| self.members(g).iter().any(|m| m == name))
+    }
+
+    /// Appends `name` to `group`; the rest of the file keeps its text.
+    pub fn add(&mut self, group: &str, name: &str) -> Result<(), MapFormatError> {
+        let root = self.doc.root.as_object_mut().expect("checked in parse");
+        let indent = root.member_indent("");
+        let Some(Node::Array(array)) = root.get_mut(group) else { return Err(bad(format!("no map group {group}"))) };
+        let item_indent = array.item_indent(&indent);
+        if array.items.is_empty() {
+            array.tail = format!("\n{indent}");
+        }
+        array.items.push(Item { lead: format!("\n{item_indent}"), node: Node::string(name), trail: String::new() });
+        Ok(())
+    }
+}
+
 /// One entry of `layouts.json`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Layout {
@@ -558,6 +678,8 @@ pub struct Layout {
     pub secondary_tileset: String,
     pub border_filepath: String,
     pub blockdata_filepath: String,
+    /// `emerald` or `frlg`: which metatile attribute format the layout uses.
+    pub layout_version: Option<String>,
 }
 
 impl Layout {
@@ -601,6 +723,7 @@ impl Layouts {
                 secondary_tileset: field("secondary_tileset")?,
                 border_filepath: field("border_filepath")?,
                 blockdata_filepath: field("blockdata_filepath")?,
+                layout_version: text(obj, "layout_version"),
             });
         }
         Ok(Self { doc, list })
@@ -616,6 +739,42 @@ impl Layouts {
 
     pub fn get(&self, id: &str) -> Option<&Layout> {
         self.list.iter().find(|l| l.id == id)
+    }
+
+    /// Appends a new layout at the end of the array, laid out like Porymap's.
+    pub fn insert(&mut self, layout: &Layout) -> Result<(), MapFormatError> {
+        if self.get(&layout.id).is_some() {
+            return Err(bad(format!("layout {} already exists", layout.id)));
+        }
+        let root = self.doc.root.as_object_mut().ok_or_else(|| bad("layouts.json root"))?;
+        let indent = root.member_indent("");
+        let Some(Node::Array(array)) = root.get_mut("layouts") else { return Err(bad("no layouts array")) };
+        let item_indent = array.item_indent(&indent);
+        let mut pairs = vec![
+            ("id".to_owned(), Node::string(&layout.id)),
+            ("name".to_owned(), Node::string(&layout.name)),
+            ("width".to_owned(), Node::int(layout.width as i64)),
+            ("height".to_owned(), Node::int(layout.height as i64)),
+        ];
+        if let Some(w) = layout.border_width {
+            pairs.push(("border_width".to_owned(), Node::int(w as i64)));
+        }
+        if let Some(h) = layout.border_height {
+            pairs.push(("border_height".to_owned(), Node::int(h as i64)));
+        }
+        pairs.push(("primary_tileset".to_owned(), Node::string(&layout.primary_tileset)));
+        pairs.push(("secondary_tileset".to_owned(), Node::string(&layout.secondary_tileset)));
+        pairs.push(("border_filepath".to_owned(), Node::string(&layout.border_filepath)));
+        pairs.push(("blockdata_filepath".to_owned(), Node::string(&layout.blockdata_filepath)));
+        if let Some(v) = &layout.layout_version {
+            pairs.push(("layout_version".to_owned(), Node::string(v)));
+        }
+        if array.items.is_empty() {
+            array.tail = format!("\n{indent}");
+        }
+        array.items.push(Item { lead: format!("\n{item_indent}"), node: Node::object(pairs, &item_indent), trail: String::new() });
+        self.list.push(layout.clone());
+        Ok(())
     }
 
     /// Updates an existing layout's fields in place (unknown keys are kept).
@@ -836,5 +995,38 @@ mod tests {
         let attrs = MetatileAttributes::parse(&[1, 0, 0, 0x60], 1).unwrap();
         assert_eq!((attrs.bytes_per_metatile, attrs.behavior(0)), (4, Some(1)));
         assert_eq!(attrs.to_bytes(), [1, 0, 0, 0x60]);
+    }
+
+    #[test]
+    fn a_new_map_file_reads_back_as_the_same_map() {
+        let (_, mut map, layouts, warps) = load();
+        map.id = MapId::from("MAP_B");
+        map.name = "B".into();
+        let created = with_new_map_defaults(map);
+        let file = MapFile::create(&created).unwrap();
+        let text = file.render();
+        assert!(text.starts_with("{\n  \"id\": \"MAP_B\",\n  \"name\": \"B\",\n  \"layout\": \"LAYOUT_A\",\n  \"music\": \"MUS_A\",\n  \"region\": \"REGION_HOENN\",\n"));
+        assert!(text.contains("  \"connections\": null,\n"));
+        let reread = MapFile::parse(&text).unwrap().to_model(&layouts, &warps).unwrap();
+        assert_eq!(reread.events, created.events);
+        assert_eq!(reread.properties, created.properties);
+    }
+
+    #[test]
+    fn layouts_and_groups_take_new_entries_without_touching_the_rest() {
+        let mut layouts = Layouts::parse(LAYOUTS).unwrap();
+        let mut added = layouts.get("LAYOUT_A").unwrap().clone();
+        (added.id, added.name, added.width) = ("LAYOUT_B".into(), "B_Layout".into(), 7);
+        layouts.insert(&added).unwrap();
+        assert!(layouts.insert(&added).is_err());
+        let out = layouts.render();
+        assert!(out.starts_with(&LAYOUTS[..LAYOUTS.len() - "\n  ]\n}\n".len() - 1]));
+        assert_eq!(Layouts::parse(&out).unwrap().get("LAYOUT_B").unwrap().width, 7);
+        let groups = "{\n  \"group_order\": [\n    \"gA\"\n  ],\n  \"gA\": [\n    \"One\"\n  ]\n}\n";
+        let mut g = MapGroups::parse(groups).unwrap();
+        g.add("gA", "Two").unwrap();
+        assert_eq!(g.render(), groups.replace("\"One\"\n", "\"One\",\n    \"Two\"\n"));
+        assert_eq!((g.groups(), g.members("gA"), g.contains_map("Two")), (vec!["gA".to_owned()], vec!["One".to_owned(), "Two".to_owned()], true));
+        assert!(g.add("gB", "x").is_err());
     }
 }

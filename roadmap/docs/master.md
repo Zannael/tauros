@@ -397,8 +397,33 @@ Decisions (agent-owned, within the tasks' scope):
 - *Validation (MOD-001 amendment):* an upsert identical to the current entity is
   not re-checked, so a project's own data (an empty `TRAINER_NONE`, warps to
   `MAP_DYNAMIC`) never fails validation when rewritten unchanged.
-- *Not yet supported, rejected before writing:* new maps and layout resizing (G3-010), editing trainer blocks that contain C
+- *Not yet supported, rejected before writing:* editing trainer blocks that contain C
   comments, labels defined twice, moving scenes between maps.
+- *New maps and layouts (G3-010, accepted decisions):* the model gained
+  `Change::CreateLayout` and `Change::ResizeLayout`; a map is created by an
+  `UpsertMap` with a new id. A map's grid must name a layout of the same size, which
+  may be created earlier in the same change set. `UpsertMap` still cannot change a
+  size (`map.layout_size`): resizing is its own change.
+  - *Creation* writes `data/maps/<Name>/map.json` (Porymap's key order, header
+    defaults `MUS_DUMMY`, `MAPSEC_NONE`, `WEATHER_NONE`, `MAP_TYPE_NONE`, `connections`
+    null and four empty event arrays), a `scripts.inc` holding `<Name>_MapScripts::`
+    (the generated map header points at it), its `.include` in `data/event_scripts.s`
+    after the last map of the same group that has one, and the name appended to a
+    group of `map_groups.json` (the reserved property `group`, default the first
+    group; rejected on existing maps). A new layout gets `<Name>_Layout`,
+    `data/layouts/<Name>/{map,border}.bin`, Porymap's defaults (tilesets
+    `gTileset_General`/`gTileset_Petalburg`, fill metatile 0x1 at elevation 3,
+    2x2 border 0x1D4/0x1D5/0x1DC/0x1DD, or 0x14/0x15/0x1C/0x1D for `frlg`), and the
+    `layout_version` of another layout with the same primary tileset.
+  - *Resizing* keeps the top-left corner: growth adds fill blocks at the right and
+    bottom, shrinking drops them, and every map on the layout follows. Events
+    outside the new size reject the change (`layout.resize_events`) until they are
+    moved or removed. Both operations check the padded size against
+    `MAX_MAP_DATA_SIZE` (`layout.size_ceiling`), names and ids, tilesets declared in
+    `src/data/tilesets/headers.h`, and that the block file has the recorded size.
+  - *Limits:* growth or shrinking from the top or left, and connection offsets after
+    a resize, are not handled; the tileset, region map section and music constants
+    are not validated beyond tilesets (the build reports them).
 
 
 ### Static preflight and new trainers (G3-008, G3-009)

@@ -139,6 +139,15 @@ impl Event {
             Event::Background { .. } => EventKind::Background,
         }
     }
+
+    pub fn position(&self) -> &Position {
+        match self {
+            Event::Npc { position, .. }
+            | Event::Warp { position, .. }
+            | Event::Trigger { position, .. }
+            | Event::Background { position, .. } => position,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

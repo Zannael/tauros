@@ -183,6 +183,27 @@ pub fn add_include(event_scripts: &str, inc_path: &str, anchor: Option<&str>) ->
     out
 }
 
+/// Includes a new map's `scripts.inc`: after the last map of its group that has an
+/// include (so it sits under the same `.if` as its neighbours), else after the last
+/// map include, else at the end.
+pub fn add_map_scripts_include(event_scripts: &str, dir: &str, group_members: &[String]) -> String {
+    let path = |d: &str| format!("data/maps/{d}/scripts.inc");
+    let has = |p: &str| event_scripts.split_inclusive('\n').any(|l| l.trim() == include_line(p).trim());
+    let anchor = group_members
+        .iter()
+        .rev()
+        .map(|m| path(m))
+        .find(|p| has(p))
+        .or_else(|| {
+            event_scripts
+                .lines()
+                .rev()
+                .find_map(|l| l.trim().strip_prefix(".include \"").and_then(|r| r.strip_suffix('"')).filter(|r| r.starts_with("data/maps/") && r.ends_with("/scripts.inc")))
+                .map(str::to_owned)
+        });
+    add_include(event_scripts, &path(dir), anchor.as_deref())
+}
+
 pub fn remove_include(event_scripts: &str, inc_path: &str) -> String {
     let wanted = include_line(inc_path);
     event_scripts.split_inclusive('\n').filter(|l| l.trim() != wanted.trim()).collect()
@@ -228,5 +249,16 @@ mod tests {
         assert_eq!(add_include(&added, "data/maps/A/scenes/S.inc", Some("data/maps/A/scripts.inc")), added);
         assert_eq!(remove_include(&added, "data/maps/A/scenes/S.inc"), s);
         assert!(add_include(s, "data/scripts/scenes/G.inc", None).ends_with("x.inc\"\n\t.include \"data/scripts/scenes/G.inc\"\n"));
+    }
+
+    #[test]
+    fn a_new_map_is_included_next_to_its_group() {
+        let s = "\t.include \"data/maps/A/scripts.inc\"\n\t.include \"data/maps/B/scripts.inc\"\n\t.include \"data/maps/B/scenes/S.inc\"\n.if IS_FRLG\n\t.include \"data/maps/F/scripts.inc\"\n.endif\n";
+        let members = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        let add = |m: &[&str]| add_map_scripts_include(s, "N", &members(m));
+        assert!(add(&["A", "B", "Missing"]).contains("B/scripts.inc\"\n\t.include \"data/maps/N/scripts.inc\"\n\t.include \"data/maps/B/scenes/S.inc\""));
+        assert!(add(&["A"]).contains("A/scripts.inc\"\n\t.include \"data/maps/N/scripts.inc\"\n\t.include \"data/maps/B/"));
+        // No group member included: after the last map include, even inside a block.
+        assert!(add(&[]).contains("F/scripts.inc\"\n\t.include \"data/maps/N/scripts.inc\"\n.endif"));
     }
 }

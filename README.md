@@ -65,7 +65,7 @@ Available in Phase 2:
 
 What is missing:
 
-- Creating new maps or resizing layouts (G3-010).
+- Creating maps and resizing layouts from the MCP tools or the app (the model and the Gen 3 connector support both, G3-010).
 - Voice desktop acceptance (`AGT-004`), the pre-editor UX/UI cleanup (`APP-006`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
 
 Available in Phase 3 (complete) & Phase 4 (in progress):

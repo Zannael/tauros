@@ -8,7 +8,7 @@
 //! change set is all-or-nothing, snapshotted and recorded with its provenance.
 
 use crate::flags::{self, FlagDef, FLAGS_HEADER, VALUE_HEADERS};
-use crate::maps::{Layouts, MapFile, WarpIds, LAYOUTS_FILE, MAPS_DIR, WARP_IDS_HEADER};
+use crate::maps::{self, Block, Blockdata, Layout, Layouts, MapFile, MapGroups, WarpIds, LAYOUTS_FILE, MAPS_DIR, MAP_GROUPS_FILE, WARP_IDS_HEADER};
 use crate::names::{self, Kind, Vocabulary};
 use crate::party::{self, PartyFile};
 use crate::scripts::{self, ScriptFile, EVENT_SCRIPTS, SHARED_SCRIPTS_DIR};
@@ -36,6 +36,14 @@ const USAGE_ROOTS: [(&str, &[&str]); 3] =
 /// Flag definitions are not uses.
 const FLAG_DEFINITION_FILES: [&str; 2] = [FLAGS_HEADER, "include/constants/flags_frlg.h"];
 const BACKGROUND_TYPES: [&str; 3] = ["sign", "hidden_item", "secret_base"];
+/// Where the tilesets a layout can name are declared.
+const TILESET_HEADERS: &str = "src/data/tilesets/headers.h";
+/// Porymap's defaults for a new layout: tilesets, fill block and border.
+const DEFAULT_PRIMARY_TILESET: &str = "gTileset_General";
+const DEFAULT_SECONDARY_TILESET: &str = "gTileset_Petalburg";
+const DEFAULT_FILL_METATILE: u16 = 0x1;
+const DEFAULT_FILL_ELEVATION: u8 = 3;
+const LAYOUT_PROPERTIES: [&str; 5] = ["name", "primary_tileset", "secondary_tileset", "layout_version", "fill_metatile"];
 
 pub struct Gen3Connector {
     root: PathBuf,
@@ -61,6 +69,12 @@ struct State {
     vocab: Vocabulary,
     party: PartyFile,
     layouts: Layouts,
+    groups: Option<MapGroups>,
+    warp_ids: WarpIds,
+    /// Tileset symbols declared in the tileset headers.
+    tilesets: BTreeSet<String>,
+    /// Every directory under `data/maps`, with or without a `map.json`.
+    map_dirs: BTreeSet<String>,
     /// Map id to (directory name, file, model).
     maps: BTreeMap<MapId, (String, MapFile, Map)>,
     scripts: BTreeMap<String, ScriptFile>,
@@ -140,7 +154,7 @@ impl Gen3Connector {
     /// Project-relative files `load` reads (sorted): what [`Connector::fingerprint`] hashes.
     fn source_files(&self) -> Vec<String> {
         let mut files: BTreeSet<String> = BTreeSet::new();
-        for f in [TRAINERS_FILE, LAYOUTS_FILE, WARP_IDS_HEADER, EVENT_SCRIPTS, FLAGS_HEADER, OPPONENTS_HEADER, EXPANSION_HEADER] {
+        for f in [TRAINERS_FILE, LAYOUTS_FILE, MAP_GROUPS_FILE, TILESET_HEADERS, WARP_IDS_HEADER, EVENT_SCRIPTS, FLAGS_HEADER, OPPONENTS_HEADER, EXPANSION_HEADER] {
             files.insert(f.to_owned());
         }
         files.extend(VALUE_HEADERS.iter().map(|s| s.to_string()));
@@ -199,6 +213,7 @@ impl Gen3Connector {
         let maps_header = self.read(WARP_IDS_HEADER).unwrap_or_default();
         let warp_ids = WarpIds::parse(&maps_header);
         let mut maps = BTreeMap::new();
+        let map_dirs: BTreeSet<String> = self.list(MAPS_DIR).into_iter().collect();
         for dir in self.list(MAPS_DIR) {
             let rel = format!("{MAPS_DIR}/{dir}/map.json");
             if !self.root.join(&rel).is_file() {
@@ -208,6 +223,17 @@ impl Gen3Connector {
             let map = file.to_model(&layouts, &warp_ids).map_err(|e| format_err(&rel, None, e.0))?;
             maps.insert(map.id.clone(), (dir, file, map));
         }
+
+        let groups = match self.read(MAP_GROUPS_FILE) {
+            Ok(text) => Some(MapGroups::parse(&text).map_err(|e| format_err(MAP_GROUPS_FILE, None, e.0))?),
+            Err(_) => None,
+        };
+        let tilesets: BTreeSet<String> = self
+            .read(TILESET_HEADERS)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.strip_prefix("const struct Tileset ")?.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().map(str::to_owned))
+            .collect();
 
         let mut scripts = BTreeMap::new();
         let mut scenes: BTreeMap<ScriptLabel, (SceneSource, Scene)> = BTreeMap::new();
@@ -314,6 +340,10 @@ impl Gen3Connector {
             vocab,
             party,
             layouts,
+            groups,
+            warp_ids,
+            tilesets,
+            map_dirs,
             maps,
             scripts,
             scenes,
@@ -347,10 +377,12 @@ impl Gen3Connector {
         if let Ok(final_state) = validate::simulate(&view, changes) {
             let limits = crate::limits::Limits::read(&self.root);
             for (id, map) in &final_state.maps {
-                if !state.snapshot.maps.contains_key(id) { continue; }
+                if state.pseudo_maps.contains(id) { continue; }
                 found.extend(limits.check(map, self.baseline_npc_peaks.get(id).copied().unwrap_or(0), None));
             }
         }
+        let mut pending = Pending::new(state);
+        let limits = crate::limits::Limits::read(&self.root);
         let mut allocations = 0usize;
         let mut new_scenes: BTreeSet<ScriptLabel> = BTreeSet::new();
         for (index, change) in changes.changes.iter().enumerate() {
@@ -358,7 +390,13 @@ impl Gen3Connector {
             match change {
                 Change::UpsertTrainer { trainer } => found.extend(check_trainer(state, trainer, i)),
                 Change::RemoveTrainer { .. } => {}
-                Change::UpsertMap { map } => found.extend(check_map(state, map, i)),
+                Change::UpsertMap { map } => found.extend(check_map(state, map, i, &mut pending)),
+                Change::CreateLayout { layout, width, height, properties } => {
+                    found.extend(check_new_layout(state, &limits, &mut pending, layout.0.as_str(), (*width, *height), properties, i));
+                }
+                Change::ResizeLayout { layout, width, height, properties } => {
+                    found.extend(self.check_resize(&limits, &mut pending, layout.0.as_str(), (*width, *height), properties, i));
+                }
                 Change::AddEvent { map, event } => {
                     if let Some((_, file, m)) = state.maps.get(map) {
                         if file.shares_events() {
@@ -394,6 +432,40 @@ impl Gen3Connector {
         found
     }
 
+    fn check_resize(
+        &self,
+        limits: &crate::limits::Limits,
+        pending: &mut Pending,
+        id: &str,
+        (width, height): (u16, u16),
+        properties: &tauros_model::Extensions,
+        i: Option<usize>,
+    ) -> Vec<Violation> {
+        let mut found = Vec::new();
+        let Some(&(old_w, old_h)) = pending.layout_sizes.get(id) else {
+            return vec![Violation::error(i, "layout.exists", format!("no layout {id}"))];
+        };
+        found.extend(check_fill(properties, &["fill_metatile"], id, i));
+        found.extend(size_ceiling(limits, id, width, height, i));
+        if let Some(layout) = pending.layouts.get(id).cloned() {
+            let expected = usize::from(old_w) * usize::from(old_h) * 2;
+            let actual = match pending.blocks.get(&layout.blockdata_filepath) {
+                Some(len) => Some(*len),
+                None => fs::metadata(self.root.join(&layout.blockdata_filepath)).ok().map(|m| m.len() as usize),
+            };
+            if actual != Some(expected) {
+                found.push(Violation::error(
+                    i,
+                    "layout.blockdata",
+                    format!("{id}: {} holds {actual:?} bytes, expected {expected} for {old_w}x{old_h}", layout.blockdata_filepath),
+                ));
+            }
+            pending.blocks.insert(layout.blockdata_filepath, usize::from(width) * usize::from(height) * 2);
+        }
+        pending.layout_sizes.insert(id.to_owned(), (width, height));
+        found
+    }
+
     /// Computes every file edit for `changes`, in memory.
     fn plan(&self, state: &State, changes: &ChangeSet) -> Result<BTreeMap<String, Option<Vec<u8>>>, ConnectorError> {
         let mut work = state.clone();
@@ -412,7 +484,37 @@ impl Gen3Connector {
                         return Err(ConnectorError::NotFound(id.to_string()));
                     }
                 }
+                Change::UpsertMap { map } if !work.maps.contains_key(&map.id) => create_map(&mut work, map.clone())?,
                 Change::UpsertMap { map } => set_map(&mut work, map.clone())?,
+                Change::CreateLayout { layout, width, height, properties } => {
+                    let spec = layout_spec(&work.layouts, &layout.0, (*width, *height), properties).map_err(|m| format_err(LAYOUTS_FILE, None, m))?;
+                    work.layouts.insert(&spec).map_err(|e| format_err(LAYOUTS_FILE, None, e.0))?;
+                    let fill = fill_word(properties);
+                    let border = if spec.layout_version.as_deref() == Some("frlg") { FRLG_BORDER } else { EMERALD_BORDER };
+                    new_files.insert(spec.blockdata_filepath.clone(), Some(maps::write_words(&vec![fill; usize::from(*width) * usize::from(*height)])));
+                    new_files.insert(spec.border_filepath.clone(), Some(maps::write_words(&border)));
+                }
+                Change::ResizeLayout { layout, width, height, properties } => {
+                    let old = work.layouts.get(&layout.0).cloned().ok_or_else(|| ConnectorError::NotFound(layout.to_string()))?;
+                    let bytes = match new_files.get(&old.blockdata_filepath) {
+                        Some(Some(bytes)) => bytes.clone(),
+                        _ => fs::read(self.root.join(&old.blockdata_filepath)).map_err(|e| io_err(&old.blockdata_filepath, e))?,
+                    };
+                    let blocks = Blockdata::parse(&bytes).map_err(|e| format_err(&old.blockdata_filepath, None, e.0))?.0;
+                    if blocks.len() != usize::from(old.width) * usize::from(old.height) {
+                        return Err(format_err(&old.blockdata_filepath, None, format!("{} blocks, expected {}x{}", blocks.len(), old.width, old.height)));
+                    }
+                    let resized = resize_blocks(&blocks, (old.width, old.height), (*width, *height), fill_word(properties));
+                    new_files.insert(old.blockdata_filepath.clone(), Some(maps::write_words(&resized)));
+                    work.layouts.update(&Layout { width: *width, height: *height, ..old }).map_err(|e| format_err(LAYOUTS_FILE, None, e.0))?;
+                    for (_, _, m) in work.maps.values_mut() {
+                        if let MapGeometry::Grid { layout: l, width: w, height: h } = &mut m.geometry {
+                            if *l == *layout {
+                                (*w, *h) = (*width, *height);
+                            }
+                        }
+                    }
+                }
                 Change::AddEvent { map, event } => {
                     let mut m = work.maps.get(map).ok_or_else(|| ConnectorError::NotFound(map.to_string()))?.2.clone();
                     m.events.push(event.clone());
@@ -465,6 +567,10 @@ impl Gen3Connector {
                 out.insert(rel.to_owned(), Some(after.into_bytes()));
             }
         };
+        put(LAYOUTS_FILE, &state.layouts.render(), work.layouts.render());
+        if let (Some(before), Some(after)) = (&state.groups, &work.groups) {
+            put(MAP_GROUPS_FILE, &before.render(), after.render());
+        }
         put(OPPONENTS_HEADER, &state.opponents_text, work.opponents_text.clone());
         put(TRAINERS_FILE, &state.party.emit(), work.party.emit());
         for (id, (dir, file, _)) in &work.maps {
@@ -580,6 +686,28 @@ fn set_map(work: &mut State, map: Map) -> Result<(), ConnectorError> {
     Ok(())
 }
 
+/// Creates a map: `map.json`, its group entry, an empty `scripts.inc` (the map
+/// header points at `<Name>_MapScripts`) and the include of that file.
+fn create_map(work: &mut State, map: Map) -> Result<(), ConnectorError> {
+    let mut map = map;
+    let groups = work.groups.as_mut().ok_or_else(|| ConnectorError::NotFound(MAP_GROUPS_FILE.into()))?;
+    let group = match map.properties.remove("group") {
+        Some(Value::Text(group)) => group,
+        _ => groups.groups().into_iter().next().ok_or_else(|| format_err(MAP_GROUPS_FILE, None, "no map groups"))?,
+    };
+    let rel = format!("{MAPS_DIR}/{}/map.json", map.name);
+    let file = MapFile::create(&maps::with_new_map_defaults(normalized(map))).map_err(|e| format_err(&rel, None, e.0))?;
+    let model = file.to_model(&work.layouts, &work.warp_ids).map_err(|e| format_err(&rel, None, e.0))?;
+    let dir = model.name.clone();
+    groups.add(&group, &dir).map_err(|e| format_err(MAP_GROUPS_FILE, None, e.0))?;
+    let scripts_rel = format!("{MAPS_DIR}/{dir}/scripts.inc");
+    work.scripts.insert(scripts_rel.clone(), ScriptFile::parse(&format!("{dir}_MapScripts::\n\t.byte 0\n")));
+    let members: Vec<String> = groups.members(&group);
+    work.event_scripts = scripts::add_map_scripts_include(&work.event_scripts, &dir, &members);
+    work.maps.insert(model.id.clone(), (dir, file, model));
+    Ok(())
+}
+
 fn walk(root: &Path, dir: &str, visit: &mut dyn FnMut(&str)) {
     let Ok(entries) = fs::read_dir(root.join(dir)) else { return };
     let mut names: Vec<(String, bool)> = entries
@@ -665,33 +793,228 @@ fn check_trainer(state: &State, trainer: &Trainer, i: Option<usize>) -> Vec<Viol
     found
 }
 
-fn check_map(state: &State, map: &Map, i: Option<usize>) -> Vec<Violation> {
-    let mut found = Vec::new();
-    let Some((_, file, current)) = state.maps.get(&map.id) else {
-        return vec![Violation::error(i, "map.create", format!("{}: creating maps is not supported yet", map.id))];
+/// What earlier changes of the same change set already decided.
+struct Pending {
+    layout_sizes: BTreeMap<String, (u16, u16)>,
+    layouts: Layouts,
+    /// Byte size of block files a resize rewrote.
+    blocks: BTreeMap<String, usize>,
+    maps: BTreeSet<MapId>,
+    /// Map directory names, layout names and layout directories in use.
+    map_names: BTreeSet<String>,
+    layout_names: BTreeSet<String>,
+}
+
+impl Pending {
+    fn new(state: &State) -> Self {
+        let mut map_names = state.map_dirs.clone();
+        if let Some(groups) = &state.groups {
+            map_names.extend(groups.groups().iter().flat_map(|g| groups.members(g)));
+        }
+        Self {
+            layout_sizes: state.layouts.all().iter().map(|l| (l.id.clone(), (l.width, l.height))).collect(),
+            layouts: state.layouts.clone(),
+            blocks: BTreeMap::new(),
+            maps: BTreeSet::new(),
+            map_names,
+            layout_names: state.layouts.all().iter().map(|l| l.name.clone()).collect(),
+        }
+    }
+}
+
+const EMERALD_BORDER: [u16; 4] = [0x1D4, 0x1D5, 0x1DC, 0x1DD];
+const FRLG_BORDER: [u16; 4] = [0x14, 0x15, 0x1C, 0x1D];
+
+/// `ROUTE_101` becomes `Route101`.
+fn camel(upper_snake: &str) -> String {
+    upper_snake
+        .split('_')
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map(|c| c.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase()).unwrap_or_default()
+        })
+        .collect()
+}
+
+fn fill_word(properties: &tauros_model::Extensions) -> u16 {
+    let metatile = match properties.get("fill_metatile") {
+        Some(Value::Int(n)) => *n as u16,
+        _ => DEFAULT_FILL_METATILE,
     };
+    Block { metatile, collision: 0, elevation: DEFAULT_FILL_ELEVATION }.pack()
+}
+
+/// Resizes keeping the top-left corner; new blocks get `fill`.
+fn resize_blocks(old: &[u16], (old_w, old_h): (u16, u16), (new_w, new_h): (u16, u16), fill: u16) -> Vec<u16> {
+    let (old_w, old_h, new_w, new_h) = (usize::from(old_w), usize::from(old_h), usize::from(new_w), usize::from(new_h));
+    (0..new_h)
+        .flat_map(|y| (0..new_w).map(move |x| (x, y)))
+        .map(|(x, y)| if x < old_w && y < old_h { old[y * old_w + x] } else { fill })
+        .collect()
+}
+
+fn check_fill(properties: &tauros_model::Extensions, allowed: &[&str], id: &str, i: Option<usize>) -> Vec<Violation> {
+    let mut found = Vec::new();
+    for (key, value) in properties {
+        let known = allowed.contains(&key.as_str());
+        let valid = match (key.as_str(), value) {
+            ("fill_metatile", Value::Int(n)) => (0..=0x3FF).contains(n),
+            ("fill_metatile", _) => false,
+            (_, Value::Text(t)) => known && !t.is_empty() && no_newline(t),
+            _ => false,
+        };
+        if !known || !valid {
+            found.push(Violation::error(i, "layout.property", format!("{id}: property '{key}' is unknown or has a bad value")));
+        }
+    }
+    found
+}
+
+fn size_ceiling(limits: &crate::limits::Limits, id: &str, width: u16, height: u16, i: Option<usize>) -> Option<Violation> {
+    let blocks = (i64::from(width) + limits.offset_w) * (i64::from(height) + limits.offset_h);
+    (blocks > limits.map_blocks).then(|| {
+        Violation::error(i, "layout.size_ceiling", format!("{id}: padded layout uses {blocks}/{} blocks", limits.map_blocks))
+    })
+}
+
+/// The `layouts.json` entry for a new layout, with Porymap's naming: the layout is
+/// `<Name>_Layout` and its files are `data/layouts/<Name>/{map,border}.bin`.
+fn layout_spec(layouts: &Layouts, id: &str, (width, height): (u16, u16), properties: &tauros_model::Extensions) -> Result<Layout, String> {
+    let text = |key: &str| match properties.get(key) {
+        Some(Value::Text(t)) => Some(t.clone()),
+        _ => None,
+    };
+    let base = id.strip_prefix("LAYOUT_").filter(|b| scripts::is_identifier(b)).ok_or_else(|| format!("'{id}' must be LAYOUT_ followed by an identifier"))?;
+    let name = text("name").unwrap_or_else(|| format!("{}_Layout", camel(base)));
+    let dir = name.strip_suffix("_Layout").unwrap_or(&name).to_owned();
+    let primary = text("primary_tileset").unwrap_or_else(|| DEFAULT_PRIMARY_TILESET.to_owned());
+    let version = text("layout_version")
+        .or_else(|| layouts.all().iter().find(|l| l.primary_tileset == primary).and_then(|l| l.layout_version.clone()))
+        .unwrap_or_else(|| "emerald".to_owned());
+    Ok(Layout {
+        id: id.to_owned(),
+        name,
+        width,
+        height,
+        border_width: None,
+        border_height: None,
+        primary_tileset: primary,
+        secondary_tileset: text("secondary_tileset").unwrap_or_else(|| DEFAULT_SECONDARY_TILESET.to_owned()),
+        border_filepath: format!("data/layouts/{dir}/border.bin"),
+        blockdata_filepath: format!("data/layouts/{dir}/map.bin"),
+        layout_version: Some(version),
+    })
+}
+
+fn check_new_layout(
+    state: &State,
+    limits: &crate::limits::Limits,
+    pending: &mut Pending,
+    id: &str,
+    (width, height): (u16, u16),
+    properties: &tauros_model::Extensions,
+    i: Option<usize>,
+) -> Vec<Violation> {
+    let mut found = check_fill(properties, &LAYOUT_PROPERTIES, id, i);
+    if pending.layout_sizes.contains_key(id) {
+        found.push(Violation::error(i, "layout.unique", format!("layout {id} already exists")));
+        return found;
+    }
+    let spec = match layout_spec(&pending.layouts, id, (width, height), properties) {
+        Ok(spec) => spec,
+        Err(message) => {
+            found.push(Violation::error(i, "layout.id", message));
+            return found;
+        }
+    };
+    if !id.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_') {
+        found.push(Violation::error(i, "layout.id", format!("{id}: use upper case letters, digits and '_'")));
+    }
+    if !scripts::is_identifier(&spec.name) || spec.name.contains('/') {
+        found.push(Violation::error(i, "layout.name", format!("{id}: '{}' is not a valid layout name", spec.name)));
+    }
+    if pending.layout_names.contains(&spec.name) {
+        found.push(Violation::error(i, "layout.unique", format!("{id}: layout name {} is already used", spec.name)));
+    }
+    if pending.layouts.all().iter().any(|l| l.blockdata_filepath == spec.blockdata_filepath) {
+        found.push(Violation::error(i, "layout.unique", format!("{id}: {} already belongs to a layout", spec.blockdata_filepath)));
+    }
+    for tileset in [&spec.primary_tileset, &spec.secondary_tileset] {
+        if !state.tilesets.contains(tileset) {
+            found.push(Violation::error(i, "layout.tileset", format!("{id}: unknown tileset {tileset}")));
+        }
+    }
+    if !matches!(spec.layout_version.as_deref(), Some("emerald" | "frlg")) {
+        found.push(Violation::error(i, "layout.property", format!("{id}: layout_version must be emerald or frlg")));
+    }
+    found.extend(size_ceiling(limits, id, width, height, i));
+    pending.layout_sizes.insert(id.to_owned(), (width, height));
+    pending.layout_names.insert(spec.name.clone());
+    pending.blocks.insert(spec.blockdata_filepath.clone(), usize::from(width) * usize::from(height) * 2);
+    let _ = pending.layouts.insert(&spec);
+    found
+}
+
+/// Rules for a map whose id is new: Porymap's naming, a free directory and a group.
+fn check_new_map(state: &State, map: &Map, i: Option<usize>, pending: &mut Pending) -> Vec<Violation> {
+    let mut found = Vec::new();
+    let id = &map.id.0;
+    let id_ok = id.strip_prefix("MAP_").is_some_and(|rest| {
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    });
+    if !id_ok || state.pseudo_maps.contains(&map.id) {
+        found.push(Violation::error(i, "map.id", format!("{id}: a new map id is MAP_ followed by upper case letters, digits and '_'")));
+    }
+    if !scripts::is_identifier(&map.name) {
+        found.push(Violation::error(i, "map.name", format!("{id}: '{}' is not a valid map name", map.name)));
+    } else if pending.map_names.contains(&map.name) {
+        found.push(Violation::error(i, "map.name", format!("{id}: the name {} is already used by a map directory or group", map.name)));
+    }
+    match (&state.groups, map.properties.get("group")) {
+        (None, _) => found.push(Violation::error(i, "map.group", format!("{id}: {MAP_GROUPS_FILE} is missing"))),
+        (Some(groups), Some(Value::Text(group))) if !groups.groups().contains(group) => {
+            found.push(Violation::error(i, "map.group", format!("{id}: unknown map group {group}")))
+        }
+        (_, Some(Value::Text(_))) | (_, None) => {}
+        (_, Some(_)) => found.push(Violation::error(i, "map.group", format!("{id}: 'group' must name a map group"))),
+    }
+    pending.map_names.insert(map.name.clone());
+    pending.maps.insert(map.id.clone());
+    found
+}
+
+fn check_map(state: &State, map: &Map, i: Option<usize>, pending: &mut Pending) -> Vec<Violation> {
+    let mut found = Vec::new();
+    let existing = state.maps.get(&map.id).map(|(_, file, current)| (file.shares_events(), current.events.clone()));
+    let created = existing.is_none();
+    if created && !pending.maps.contains(&map.id) {
+        found.extend(check_new_map(state, map, i, pending));
+    }
     match &map.geometry {
-        MapGeometry::Grid { layout, width, height } => match state.layouts.get(&layout.0) {
-            Some(l) if l.width == *width && l.height == *height => {}
-            Some(l) => found.push(Violation::error(
+        MapGeometry::Grid { layout, width, height } => match pending.layout_sizes.get(&layout.0) {
+            Some(&(w, h)) if w == *width && h == *height => {}
+            Some(&(w, h)) => found.push(Violation::error(
                 i,
                 "map.layout_size",
-                format!("{}: {} is {}x{}; resizing layouts is not supported yet", map.id, layout, l.width, l.height),
+                format!("{}: {} is {w}x{h}; resize it with a ResizeLayout change", map.id, layout),
             )),
             None => found.push(Violation::error(i, "map.layout", format!("{}: unknown layout {layout}", map.id))),
         },
         MapGeometry::External { .. } => found.push(Violation::error(i, "map.geometry", "Gen 3 maps are grids")),
     }
-    if file.shares_events() && map.events != current.events {
-        found.push(Violation::error(i, "map.shared_events", format!("{} uses another map's events", map.id)));
+    if let Some((true, events)) = &existing {
+        if map.events != *events {
+            found.push(Violation::error(i, "map.shared_events", format!("{} uses another map's events", map.id)));
+        }
     }
     for c in &map.connections {
-        if !state.maps.contains_key(&c.map) {
+        if !state.maps.contains_key(&c.map) && !pending.maps.contains(&c.map) {
             found.push(Violation::error(i, "connection.map", format!("{}: connection to unknown map {}", map.id, c.map)));
         }
     }
     for (key, value) in &map.properties {
-        if ["id", "name", "layout", "connections", "object_events", "warp_events", "coord_events", "bg_events"].contains(&key.as_str()) {
+        let reserved = ["id", "name", "layout", "connections", "object_events", "warp_events", "coord_events", "bg_events"];
+        if reserved.contains(&key.as_str()) || (key == "group" && !created) {
             found.push(Violation::error(i, "map.property", format!("{}: '{key}' is not a property", map.id)));
         }
         if matches!(value, Value::List(_)) {
