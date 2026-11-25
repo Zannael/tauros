@@ -2,7 +2,7 @@
 
 ## 1. OBJECTIVE
 
-Analyze the previously generated overworld map in this conversation. Identify the minimum complete set of reusable graphical assets necessary to reconstruct that map in a Game Boy Advance tile-based RPG engine. Treat the map as the exclusive visual source of truth. This is an asset extraction and decomposition task, not a creative design task. Do not generate images at this stage.
+Analyze the map layout previously generated in this conversation (prompt 01). Identify the minimum complete set of reusable graphical assets necessary to build that map in a Game Boy Advance tile-based RPG engine. Treat the layout as the exclusive source of truth for which assets exist, what they look like (design, colors, materials) and how often they occur. The layout is drawn at plan scale (about 16 image pixels per metatile), so give every asset its footprint in metatiles at game scale; the tileset sheets will later redraw each asset at 4× with that footprint. This is an asset extraction and decomposition task, not a creative design task. Do not generate images at this stage.
 
 ## 2. TECHNICAL CONFIGURATION
 
@@ -16,12 +16,12 @@ Maximum palette banks: 13.
 Maximum global visible colors: 150.
 Reserved transparency color: #FF00FF.
 Hardware tile budget: 1024 in total, split into a primary tileset (at most 512 tiles, 512 metatiles, 6 palette banks) and a secondary tileset (at most 512 tiles, 512 metatiles, 7 palette banks).
-Tileset sheet dimensions: 24 × 16 metatiles.
-Tileset sheet resolution: 1536 × 1024 pixels.
+Tileset sheet dimensions: 40 × 22 metatiles (24 × 16 in a chat app).
+Tileset sheet resolution: 2560 × 1408 pixels (1536 × 1024 in a chat app).
 
 ## 3. SOURCE OF TRUTH
 
-Only identify assets present in the source map or strictly necessary to reconstruct a visible modular asset. Do not invent assets, materials, decorations, buildings, color variants, or environmental features. Do not redesign, improve, rescale, or reinterpret existing assets. Preserve all visual properties. If partially occluded, identify visible portions and portions requiring reconstruction. Do not present inferred graphical details as directly observed.
+Only identify assets present in the source map or strictly necessary to reconstruct a visible modular asset. Do not invent assets, materials, decorations, buildings, color variants, or environmental features. Do not redesign, improve, or reinterpret existing assets. Preserve all visual properties. If partially occluded, identify visible portions and portions requiring reconstruction. Do not present inferred graphical details as directly observed.
 
 ## 4. ASSET IDENTIFICATION AND DEDUPLICATION
 

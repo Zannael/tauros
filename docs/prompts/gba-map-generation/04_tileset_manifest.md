@@ -2,10 +2,10 @@
 
 ## 1. INPUT REFERENCES
 
-SOURCE_MAP: The previously generated overworld map.
-ASSET_INVENTORY: The previously established JSON asset inventory.
+SOURCE_MAP: The map layout (prompt 01).
+ASSET_INVENTORY: The approved JSON asset inventory and the batch plan (prompt 03).
 TARGET_SHEET_IMAGE: The most recently generated tileset sheet image.
-TARGET_SHEET_ID: [INSERT SHEET IDENTIFIER]
+TARGET_SHEET_ID: [INSERT SHEET IDENTIFIER, e.g. batch_01]
 
 ## 2. OBJECTIVE
 
@@ -13,10 +13,9 @@ Analyze the actual generated tileset image. Produce a machine-readable manifest 
 
 ## 3. COORDINATE SYSTEM
 
-Expected image width: 1536 pixels.
-Expected image height: 1024 pixels.
+Expected image size: 2560 × 1408 pixels from the automated pipeline, 1536 × 1024 from a chat app.
 Expected metatile width and height: 64 image pixels.
-Expected grid: 24 columns × 16 rows.
+Expected grid: 40 columns × 22 rows (24 × 16 from a chat app).
 Coordinate origin: top-left.
 Coordinate indexing: zero-based.
 
@@ -26,7 +25,7 @@ An asset's starting position refers to the top-left corner of its assigned graph
 
 Inspect the generated sheet and identify every distinct asset. Report corresponding inventory ID, name, sheet ID, section, starting column and row, width and height in metatiles, source occurrence count, layer, palette family, foreground priority, collision and behavior (copied from the inventory), repeatability and axis, source fidelity, grid alignment, and confidence in identification and coordinates.
 
-Preserve inventory IDs. Do not create new IDs for recognized inventory assets. Record unexpected assets separately. Record missing inventory assets and duplicate occurrences. If a position cannot be reliably determined, use null and explain uncertainty.
+Preserve inventory IDs. Do not create new IDs for recognized inventory assets. Record unexpected assets separately. Record missing assets of this batch and duplicate occurrences. If a position cannot be reliably determined, use null and explain uncertainty.
 
 ## 5. VALIDATION REQUIREMENTS
 
@@ -40,8 +39,8 @@ Return valid JSON only. Do not wrap in Markdown code fences. Use the following s
 
 {
   "sheet_id": "sheet_1",
-  "expected_resolution_px": {"width": 1536, "height": 1024},
-  "expected_grid_metatiles": {"columns": 24, "rows": 16},
+  "expected_resolution_px": {"width": 2560, "height": 1408},
+  "expected_grid_metatiles": {"columns": 40, "rows": 22},
   "assets": [
     {
       "id": "inventory_asset_id",
