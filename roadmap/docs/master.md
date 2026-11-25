@@ -3046,3 +3046,33 @@ off, on a scratch copy of the base build):**
 
 **Deferred (decision 2026-11-25):** sprites/Porypal, Porytiles animations and per-map tileset
 variants are tracked as `GFX-012`; until then animated tiles are reported as unsupported.
+
+## Graphical upgrade catalog scope split (GFX-004, 2026-11-25)
+
+**Owner decision (Simone, 2026-11-25, option A):** GFX-004's original Completion required one applied
+entry per kind, but sprites (Porypal, animations) are in `GFX-012` and converted Gen 4 kits depend on
+`GFX-007` and `DEC-004` (decisions 2-4 open). GFX-004 therefore keeps the entry model, apply/revert,
+shared tileset entries with credits, weather entries and the snowy-city acceptance; sprite kinds move to
+`GFX-013` (depends on `GFX-004`, `GFX-012`) and converted Gen 4 kits to `GFX-014` (depends on `GFX-004`,
+`GFX-007`, `DEC-004`).
+
+**Open / hypothesis:** isolation from shared tilesets will first be tried with a cloned primary/secondary
+pair assigned only to the acceptance map; whether this suffices without the GFX-012 remapping is not
+yet verified. If it does not, the GFX-012 dependency is added to GFX-004 and recorded here.
+
+**Verified 2026-11-25 (GFX-004 first increment, scratch copy of the pinned base under `$TAUROS_DATA`):**
+- `scripts/gfx_upgrades.py` (entries in `$TAUROS_DATA/assets/catalog/upgrades/`, CLI also as `asset_catalog.py upgrade`)
+  applies and reverts entries idempotently with a manifest in `<project>/.tauros/upgrades/`; apply verifies source
+  sha256, byte-protects listed paths, runs `gfx_pipeline.validate_compiled` and rolls back on failure. 13 synthetic tests.
+- Entry `snow-general-palettes`: clones the General primary as `gTileset_GeneralSnow` (used only by
+  `LAYOUT_PETALBURG_CITY`), replaces palettes 02/03/05 with Emerald Slide's (Team Aqua pin `3e06f6f9`) and palette 01
+  colours 11-14 (the house-roof ramp, which lives in the primary, not the secondary) with an authored white/blue-grey ramp.
+  A rendered before/after of the map shows snowy ground, trees and roofs; metatile ids, collisions and events are unchanged.
+- Entry `snow-heavy`: 3x snowflakes and faster fall in `field_weather_effect.c`, map weather `WEATHER_SNOW`.
+- Both entries built with `make rom syms` in the toolchain container (ROM sha256 `c8f89f59…`); reverting both and rebuilding
+  gave the base ROM byte for byte (`b6ebe0ba…`); re-applying reproduced `c8f89f59…`.
+- Emerald Slide's `metatiles.bin` is 12288 bytes = 512 triple-layer metatiles (24 bytes): its tile changes are not applied
+  (conversion-required). The catalog's earlier "layer count undetermined" for this folder is thus settled by size.
+- Not verified: boot and visual check in the emulator (pending Simone), animated tiles (flowers, water) of the clone,
+  Slateport and other General users (isolation checked by byte-identical shared files, not in game), a clean pinned base
+  (the scratch copy still has the GFX-001 `gfx_test` wiring), the rendering is an approximation (no layer types).

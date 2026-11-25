@@ -6,7 +6,7 @@ Stdlib only (Python 3.10+). Everything it reads and writes lives under
 never inside this repository. External files are treated as data: nothing from
 them is executed and archive members are extracted only as images/text.
 
-Commands: fetch, build, check, search, show, measure, view.  See README.
+Commands: fetch, build, check, search, show, measure, view, upgrade (see gfx_upgrades.py).  See README.
 """
 from __future__ import annotations
 
@@ -1754,6 +1754,9 @@ def main(argv=None):
     p.add_argument("--bridge", type=int, default=1)
     p.add_argument("--out", default="view.png")
     p.set_defaults(fn=cmd_view)
+    p = sub.add_parser("upgrade", help="graphical upgrade entries (GFX-004): list, show, apply, revert, preview")
+    p.add_argument("rest", nargs=argparse.REMAINDER)
+    p.set_defaults(fn=lambda a: __import__("gfx_upgrades").main(a.rest))
     args = ap.parse_args(argv)
     return args.fn(args)
 

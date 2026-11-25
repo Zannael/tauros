@@ -171,6 +171,22 @@ review with a confidence level; low-confidence regions are marked `?` in results
 Search answers list a coherent kit per role and state missing roles, roles that
 exist only inside composite objects, and absent metatile data.
 
+Upgrade entries (GFX-004): `scripts/gfx_upgrades.py` applies catalog assets to a scratch
+project under `$TAUROS_DATA` as reversible entries in `assets/catalog/upgrades/*.json`
+(kinds `tileset` and `weather`; sprites and converted Gen 4 kits are GFX-013/GFX-014). An
+entry records per-source pin, sha256, credits and terms, primary/secondary pairing,
+prerequisites, `unverified`/`verified`/`conversion-required` status and a preview. `apply`
+checks the source hashes, protects shared tilesets, collisions and events (they must stay
+byte-identical), runs the GFX-001 validator and rolls back on any failure; `revert`
+restores every byte and refuses when a file changed afterwards. Both are idempotent.
+
+```sh
+python3 scripts/asset_catalog.py upgrade list
+python3 scripts/asset_catalog.py upgrade apply snow-general-palettes --project <scratch project> [--make]
+python3 scripts/asset_catalog.py upgrade preview snow-general-palettes --project <scratch project>
+python3 scripts/asset_catalog.py upgrade revert snow-general-palettes --project <scratch project>
+```
+
 Limits: regions were reviewed by eye and may be a tile or two off; Ekat's and the
 Team Aqua "Other" sheets are indexed at sheet level only; reuse terms are stated only
 by Team Aqua and Alistair (credit) and unspecified for the others; sources hosted on

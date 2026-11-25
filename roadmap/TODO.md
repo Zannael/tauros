@@ -622,12 +622,27 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Deferred from GFX-001 on 2026-11-25. Pin and install Porypal in the toolchain image under the FND-002 rules (it is not installed), add sprite/palette conversion and validation (indexed 16-colour sprite sheets, shared OBJ palette slots, RGB555) to `scripts/gfx_pipeline.py`, and decide whether Porytiles 2.0 animations (`porytiles_src/anim`, which `create-tileset` templates) are supported instead of reported as unsupported; add per-map tileset variants with isolated shared-tileset updates and metatile/collision/behaviour remapping from the RES-004 follow-up. Refs: plan §"Graphics assets and visual enhancements" (proposed pipeline).
   Completion: Synthetic-fixture tests catch each sprite violation class; a valid synthetic sprite converts with the pinned Porypal and builds in a scratch project; the animation decision is recorded in master.md with a test.
 
-- [ ] **Not started** **GFX-004** Catalog of graphical upgrades.
+- [ ] **In progress** **GFX-004** Catalog of graphical upgrades.
   Depends on: `GFX-001`, `RES-004`.
   Responsible: Agent
+  Owner: Claude Code
+  Note: (owner: Claude Code, 2026-11-25: handoff to Simone's manual check. Implemented and verified in scratch: entry model, apply/revert, snowy Petalburg tileset entry and heavy-snow weather entry in scripts/gfx_upgrades.py; ROM at $TAUROS_DATA/assets/experiments/gfx-004/snowy-petalburg.gba awaits the emulator check; Done only after it, with the entries marked verified)
+  Scope: Enable/customize upgrades as catalog entries (shared tilesets with author credits and new weather effects on field_weather_effect.c; DS-style, 80x80 and animated battle sprites moved to `GFX-013` and converted Gen 4 kits to `GFX-014` by Owner decision 2026-11-25); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. The entry model must already allow the kinds of GFX-013/GFX-014 (converted kits: recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004). Isolation from shared tilesets is first attempted here by a cloned primary/secondary pair assigned only to the acceptance map (Porytiles as in GFX-001); if that needs metatile/collision/behaviour remapping or per-map variants of `GFX-012`, add that dependency and record it before continuing. Do not reorder APP-006. Refs: plan §"Graphics assets and visual enhancements" (what already exists), plan §"Risks and community notes" (Legal).
+  Completion: A tileset entry (snowy Emerald city: roofs, trees, ground, collisions and events preserved, shared tilesets untouched) and a weather entry can each be applied to the pinned project, pass the GFX-001 validator, build, show in preview, and revert idempotently; credits, source pin/sha256, terms, pairing, prerequisites and status are recorded per asset and listed in the entry; sprite and converted-kit kinds are covered by `GFX-013` and `GFX-014`.
+
+- [ ] **Not started** **GFX-013** Sprite upgrade entries in the graphical upgrade catalog.
+  Depends on: `GFX-004`, `GFX-012`.
+  Responsible: Agent
   Owner: unassigned
-  Scope: Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. RES-005: converted Gen 4 kits (GFX-007) enter as entries with recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004. Do not reorder APP-006. Refs: plan §"Graphics assets and visual enhancements" (what already exists), plan §"Risks and community notes" (Legal).
-  Completion: At least one entry per listed kind can be applied to the pinned project, builds and shows in preview; credits recorded per asset.
+  Scope: Split from GFX-004 on 2026-11-25: catalog entries of kind DS-style sprites, 80x80 sprites and animated battle sprites, applied through the GFX-012 Porypal conversion and the GFX-004 apply/revert and credit model. Assets stay under `$TAUROS_DATA`, never committed. Refs: plan §"Graphics assets and visual enhancements" (what already exists), plan §"Risks and community notes" (Legal).
+  Completion: At least one entry per sprite kind is applied to the pinned project, passes the GFX-001/GFX-012 validator, builds and shows in preview; credits recorded per asset.
+
+- [ ] **Not started** **GFX-014** Converted Gen 4 kit entries in the graphical upgrade catalog.
+  Depends on: `GFX-004`, `GFX-007`, `DEC-004`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Split from GFX-004 on 2026-11-25: kits converted by GFX-007 enter as catalog entries with recipe, source/output sha256, credits and conversion status, applied through the GFX-004 apply/revert flow; game-derived sources follow DEC-004. Refs: plan §"Graphics assets and visual enhancements", plan §"Risks and community notes" (Legal).
+  Completion: One converted kit entry is applied to the pinned project, passes the validator, builds and shows in preview with per-asset credits; DEC-004 policy on game-derived sources is respected.
 
 ## Beyond Gen 3
 
@@ -663,9 +678,9 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Rules for the agents writing the code": `GOV-002`, `AGT-008`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
-- plan §"Graphics assets and visual enhancements": `RES-004`, `RES-005`, `DEC-004`, `GFX-001`, `GFX-002`, `GFX-004`, `GFX-005`, `GFX-006`, `GFX-007`, `GFX-008`, `GFX-009`, `GFX-010`, `GFX-011`.
+- plan §"Graphics assets and visual enhancements": `RES-004`, `RES-005`, `DEC-004`, `GFX-001`, `GFX-002`, `GFX-004`, `GFX-005`, `GFX-006`, `GFX-007`, `GFX-008`, `GFX-009`, `GFX-010`, `GFX-011`, `GFX-012`, `GFX-013`, `GFX-014`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
-- plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`.
+- plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`, `GFX-013`, `GFX-014`.
 - plan §"Next steps": `GOV-001`, `FND-001`, `FND-002`, `RES-001`, `RES-002`.
 - plan §"Sources": reference list only; cited by the tasks above, no own work.
 

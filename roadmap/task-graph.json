@@ -1,7 +1,8 @@
 {
   "active_ids": [
     "APP-003",
-    "DEC-004"
+    "DEC-004",
+    "GFX-004"
   ],
   "ready_ids": [
     "AGT-005",
@@ -12,7 +13,6 @@
     "GFX-003",
     "GFX-010",
     "GFX-012",
-    "GFX-004",
     "GB-001",
     "NDS-001"
   ],
@@ -25,7 +25,6 @@
     "GFX-003",
     "GFX-010",
     "GFX-012",
-    "GFX-004",
     "GB-001",
     "NDS-001"
   ],
@@ -1273,7 +1272,8 @@
       "completion": "Each of the four decisions is recorded in master.md as an Owner decision with date; GFX-007 and GFX-008 scopes are updated to match.",
       "dependents": [
         "GFX-007",
-        "GFX-008"
+        "GFX-008",
+        "GFX-014"
       ],
       "id": "DEC-004",
       "incomplete_prerequisites": [],
@@ -1398,7 +1398,8 @@
     {
       "completion": "Synthetic-fixture tests cover exact 2x, residual blocks, semi-alpha, more than 15 colours per tile and over-budget kits; converting `grp/alchemybats-gen4-snow-town` twice gives byte-identical outputs that pass the GFX-001 validator and compile with the pinned Porytiles; the report lists every manual-review item; the catalog marks Zygoat's sheet as 2x-enlarged.",
       "dependents": [
-        "GFX-008"
+        "GFX-008",
+        "GFX-014"
       ],
       "id": "GFX-007",
       "incomplete_prerequisites": [
@@ -1504,7 +1505,9 @@
     },
     {
       "completion": "Synthetic-fixture tests catch each sprite violation class; a valid synthetic sprite converts with the pinned Porypal and builds in a scratch project; the animation decision is recorded in master.md with a test.",
-      "dependents": [],
+      "dependents": [
+        "GFX-013"
+      ],
       "id": "GFX-012",
       "incomplete_prerequisites": [],
       "note": null,
@@ -1521,22 +1524,71 @@
       "verification": null
     },
     {
-      "completion": "At least one entry per listed kind can be applied to the pinned project, builds and shows in preview; credits recorded per asset.",
-      "dependents": [],
+      "completion": "A tileset entry (snowy Emerald city: roofs, trees, ground, collisions and events preserved, shared tilesets untouched) and a weather entry can each be applied to the pinned project, pass the GFX-001 validator, build, show in preview, and revert idempotently; credits, source pin/sha256, terms, pairing, prerequisites and status are recorded per asset and listed in the entry; sprite and converted-kit kinds are covered by `GFX-013` and `GFX-014`.",
+      "dependents": [
+        "GFX-013",
+        "GFX-014"
+      ],
       "id": "GFX-004",
       "incomplete_prerequisites": [],
-      "note": null,
-      "owner": null,
+      "note": "(owner: Claude Code, 2026-11-25: handoff to Simone's manual check. Implemented and verified in scratch: entry model, apply/revert, snowy Petalburg tileset entry and heavy-snow weather entry in scripts/gfx_upgrades.py; ROM at $TAUROS_DATA/assets/experiments/gfx-004/snowy-petalburg.gba awaits the emulator check; Done only after it, with the entries marked verified)",
+      "owner": "Claude Code",
       "prerequisites": [
         "GFX-001",
         "RES-004"
       ],
       "responsible": "Agent",
-      "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. RES-005: converted Gen 4 kits (GFX-007) enter as entries with recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
+      "scope": "Enable/customize upgrades as catalog entries (shared tilesets with author credits and new weather effects on field_weather_effect.c; DS-style, 80x80 and animated battle sprites moved to `GFX-013` and converted Gen 4 kits to `GFX-014` by Owner decision 2026-11-25); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. The entry model must already allow the kinds of GFX-013/GFX-014 (converted kits: recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004). Isolation from shared tilesets is first attempted here by a cloned primary/secondary pair assigned only to the acceptance map (Porytiles as in GFX-001); if that needs metatile/collision/behaviour remapping or per-map variants of `GFX-012`, add that dependency and record it before continuing. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
       "source_line": 625,
-      "status": "Not started",
+      "status": "In progress",
       "title": "Catalog of graphical upgrades.",
+      "verification": null
+    },
+    {
+      "completion": "At least one entry per sprite kind is applied to the pinned project, passes the GFX-001/GFX-012 validator, builds and shows in preview; credits recorded per asset.",
+      "dependents": [],
+      "id": "GFX-013",
+      "incomplete_prerequisites": [
+        "GFX-004",
+        "GFX-012"
+      ],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-004",
+        "GFX-012"
+      ],
+      "responsible": "Agent",
+      "scope": "Split from GFX-004 on 2026-11-25: catalog entries of kind DS-style sprites, 80x80 sprites and animated battle sprites, applied through the GFX-012 Porypal conversion and the GFX-004 apply/revert and credit model. Assets stay under `$TAUROS_DATA`, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 633,
+      "status": "Not started",
+      "title": "Sprite upgrade entries in the graphical upgrade catalog.",
+      "verification": null
+    },
+    {
+      "completion": "One converted kit entry is applied to the pinned project, passes the validator, builds and shows in preview with per-asset credits; DEC-004 policy on game-derived sources is respected.",
+      "dependents": [],
+      "id": "GFX-014",
+      "incomplete_prerequisites": [
+        "GFX-004",
+        "GFX-007",
+        "DEC-004"
+      ],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-004",
+        "GFX-007",
+        "DEC-004"
+      ],
+      "responsible": "Agent",
+      "scope": "Split from GFX-004 on 2026-11-25: kits converted by GFX-007 enter as catalog entries with recipe, source/output sha256, credits and conversion status, applied through the GFX-004 apply/revert flow; game-derived sources follow DEC-004. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 640,
+      "status": "Not started",
+      "title": "Converted Gen 4 kit entries in the graphical upgrade catalog.",
       "verification": null
     },
     {
@@ -1554,7 +1606,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 634,
+      "source_line": 649,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1575,7 +1627,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 641,
+      "source_line": 656,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1594,14 +1646,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 648,
+      "source_line": 663,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "7f5ed2e825385c83013eff1b43367457893fa597ee56ffb753c5bc4b9343e433",
+  "todo_sha256": "26ca5b06699bc4319f920c82f860bc50a508b1053b5ec73c414a1fed350ddb23",
   "topological_layers": [
     [
       "AGT-005",
@@ -1624,11 +1676,13 @@
       "MCP-005",
       "GFX-007",
       "GFX-011",
+      "GFX-013",
       "GB-002"
     ],
     [
       "APP-005",
-      "GFX-008"
+      "GFX-008",
+      "GFX-014"
     ]
   ]
 }
