@@ -51,6 +51,7 @@ struct App {
     shutdown: tauros_app::shutdown::Shutdown,
     voice: tauros_app::voice::Voice,
     claude_voice: tauros_app::claude_dictation::ClaudeDictation,
+    mapgen: tauros_app::mapgen::MapGen,
 }
 
 impl App {
@@ -71,6 +72,7 @@ impl tauros_app::shutdown::Resources for App {
             scope.spawn(|| self.chat.shutdown());
             scope.spawn(|| self.voice.shutdown());
             scope.spawn(|| self.claude_voice.shutdown());
+            scope.spawn(|| self.mapgen.shutdown());
             scope.spawn(|| self.codex_login.lock().unwrap().shutdown());
             scope.spawn(|| self.antigravity_login.lock().unwrap().shutdown());
         });
@@ -408,6 +410,23 @@ fn claude_voice_cancel(app: tauri::State<'_, App>) {
     app.claude_voice.cancel();
 }
 
+/// Runs one map generator step; its progress and state events stream to `on_event`.
+#[tauri::command(async)]
+fn mapgen_run(app: tauri::State<'_, App>, args: Vec<String>, on_event: Channel<serde_json::Value>) -> Result<serde_json::Value, String> {
+    app.mapgen.run(args, |event| { let _ = on_event.send(event); })
+}
+
+#[tauri::command(async)]
+fn mapgen_cancel(app: tauri::State<'_, App>) {
+    app.mapgen.cancel();
+}
+
+/// A generated image from the mapgen data folder, as raw PNG bytes.
+#[tauri::command(async)]
+fn mapgen_image(app: tauri::State<'_, App>, path: String) -> Result<tauri::ipc::Response, String> {
+    app.mapgen.image(&path).map(tauri::ipc::Response::new)
+}
+
 /// The button bit (in `Button::ALL` order) for a GDK key name, case-insensitive:
 /// arrows, X = A, Z = B, Enter = Start, Backspace = Select, A = L, S = R.
 fn bit_for_key_name(name: &str) -> Option<u16> {
@@ -522,7 +541,7 @@ fn main() {
         .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
         .expect("emulator thread");
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, shutdown: Default::default(), voice: Default::default(), claude_voice: Default::default() })
+        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, shutdown: Default::default(), voice: Default::default(), claude_voice: Default::default(), mapgen: Default::default() })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
@@ -573,7 +592,10 @@ fn main() {
             set_typing,
             project_info,
             build_and_play,
-            preview_map
+            preview_map,
+            mapgen_run,
+            mapgen_cancel,
+            mapgen_image
         ];
             handler(invoke)
         })

@@ -158,6 +158,55 @@ Team Aqua "Other" sheets are indexed at sheet level only; reuse terms are stated
 by Team Aqua and Alistair (credit) and unspecified for the others; sources hosted on
 Google Drive/Mediafire are pinned by sha256 and the link resolvers may break.
 
+## Map generator (GFX-009, experimental)
+
+The **Map generator** view (header switch next to *Play*) automates the prompt pack in
+`docs/prompts/gba-map-generation/`: describe a scene, then run three steps with review
+in between.
+
+1. **Layout**: Claude (official CLI, your plan) designs the full map size and layout;
+   the image model draws it with the style reference attached, on an image sized exactly
+   to the map (one metatile = one 16-48 px cell, plus a 2-cell magenta border).
+2. **Inventory and batches**: Claude lists every distinct asset of the accepted layout
+   as JSON; batches of at most 12 assets of one category are planned deterministically.
+3. **Tileset sheets**: one 2560×1408 image (40×22 metatiles at 4x) per batch, with the
+   accepted layout and the style reference attached, on a transparent background
+   (the model's soft alpha is made binary; the raw file is kept). Each sheet gets automatic checks (size, magenta background,
+   separated-asset count) and, optionally, a Claude check of missing or cropped assets;
+   a failed check triggers bounded automatic regeneration.
+
+Every step keeps all versions: accept one, regenerate, or apply a correction (an edit of
+the shown version). API errors are retried with backoff; *Stop* ends the running step
+and app exit stops it too. Runs live in `$TAUROS_DATA/mapgen/runs/<id>/` (`run.json`,
+images, the exact prompts sent) and resume after a restart. The same steps run from a
+terminal:
+
+```sh
+python3 scripts/mapgen.py create --scene "A snowy treetop city..."   # prints the run id
+python3 scripts/mapgen.py layout <run>          # --replan, --correction "..."
+python3 scripts/mapgen.py accept <run> layout   # --version N
+python3 scripts/mapgen.py inventory <run>
+python3 scripts/mapgen.py sheets <run>          # or: sheet <run> N [--correction "..."]
+python3 scripts/mapgen.py accept <run> batch --batch N
+```
+
+Setup: put `OPENAI_API_KEY=...` in `$TAUROS_DATA/mapgen/openai.env` (mode 600; it never
+enters the repository, logs or the UI), a default style reference PNG in
+`$TAUROS_DATA/mapgen/style_reference.png`, and sign in to the `claude` CLI. Per-run
+defaults (Settings): `gpt-image-2.6-flare` for layouts (fast), `gpt-image-2.6-sunburst`
+for sheets and corrections (editing precision), quality high, transparent sheets, Claude
+`opus`, one automatic retry, Claude sheet check on. New images use `complexity=high`,
+corrections `low`. The Image API is used rather than the Responses API because the
+latter rewrites prompts through a mainline model, the drift seen in ChatGPT.
+
+Costs: every image call reports its token usage; the view shows the OpenAI cost per
+version and per map, priced at $5 text input, $8 image input and $30 image output per
+million tokens. Claude calls go through the signed-in CLI: they use your plan limits and are not billed;
+the CLI's API-price estimate is shown only as a tooltip. Limits: the images
+are model drawings, not GBA-valid tiles; extraction into a tileset (GFX-001/GFX-007)
+and map assembly are not automated yet. The edit endpoint can copy the style
+reference's content when a prompt is short.
+
 ## Credits and prior art
 
 Tauros learns from two earlier projects. No code or dependency is taken from either;

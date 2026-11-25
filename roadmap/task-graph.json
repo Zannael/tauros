@@ -10,6 +10,7 @@
     "APP-006",
     "PROV-001",
     "GFX-001",
+    "GFX-010",
     "GB-001",
     "NDS-001"
   ],
@@ -20,6 +21,7 @@
     "APP-006",
     "PROV-001",
     "GFX-001",
+    "GFX-010",
     "GB-001",
     "NDS-001"
   ],
@@ -811,7 +813,8 @@
         "AGT-011",
         "APP-007",
         "APP-005",
-        "MCP-005"
+        "MCP-005",
+        "GFX-009"
       ],
       "id": "AGT-003",
       "incomplete_prerequisites": [],
@@ -1289,6 +1292,7 @@
         "GFX-002",
         "GFX-003",
         "GFX-007",
+        "GFX-011",
         "GFX-004"
       ],
       "id": "GFX-001",
@@ -1438,6 +1442,68 @@
       "verification": null
     },
     {
+      "completion": "From the view the Owner runs scene → layout → inventory → all batches with review actions, and the run resumes after an app restart; deterministic parts (batch planning, sheet checks, prompt extraction, request building, retries against a local fake server, run state) have targeted tests; app build, Clippy and roadmap checks pass; README and master.md record usage, costs model and limits; the key never appears in the repository, logs or UI.",
+      "dependents": [
+        "GFX-010"
+      ],
+      "id": "GFX-009",
+      "incomplete_prerequisites": [],
+      "note": "Generation tooling accepted as working; the Owner is not satisfied with how faithfully a generated layout becomes a game map. That fidelity work is planned in GFX-010 and GFX-011.",
+      "owner": "Claude Code",
+      "prerequisites": [
+        "AGT-003"
+      ],
+      "responsible": "Agent",
+      "scope": "Owner request 2026-11-24, explicitly ahead of the APP-006 sequencing for this view only: automate the manual ChatGPT flow of `docs/prompts/gba-map-generation/` (layout, inventory, tileset batches), which drifted and lost track of batches in chat. A stdlib-only orchestrator script keeps the run state under `$TAUROS_DATA/mapgen/runs/` and sends the verbatim image prompts of the prompt pack to the OpenAI image API (images edit with the layout and the style reference as inputs, fixed size), using the Owner's key copied unread from the local carousels project into `$TAUROS_DATA/mapgen/openai.env` (mode 600, never in the repository, logs or UI). Text and vision steps (layout plan, inventory, per-sheet check) use the official Claude CLI with structured JSON output for local personal use, as in AGT-004. Batches are planned deterministically from the inventory. Automatic retries: API errors with backoff, deterministic sheet checks (size, magenta background, asset count by segmentation) with a bounded automatic regeneration; human review per step with accept, regenerate and edit-with-correction, as in the carousels pipeline. A new app view shows steps, images, statuses and progress, cancellable, stopped on app exit. Paid API use only when the Owner starts it from the view; one low-quality smoke call allowed during implementation. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Layered architecture\" (layer 1), plan §\"Rules for the agents writing the code\".",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 591,
+      "status": "Done",
+      "title": "Map generator view: automated layout and tileset generation with an image model.",
+      "verification": "2026-11-25 UTC: the Owner ran a full map from the view: scene, Claude layout plan (64×48 metatiles), Flare layout at the exact grid size (1632×1248, 24 px cells, checks passed), Claude inventory (32 assets), 6 deterministic batches, 6 Sunburst sheets at 2560×1408 on transparent backgrounds, all automatic and Claude checks passed and all accepted; 7 image calls, 0.55 USD reported by token usage, 8 Claude CLI calls on the plan. After an app restart the view reopened the same run with its state, images and costs (screenshot on a virtual display). `python3 -m unittest discover -s tests` passed 84 tests with 1 skipped; mapgen tests use a local fake image API and a fake Claude CLI; app Rust tests passed; Clippy with warnings denied, roadmap, privacy and whitespace checks passed; a scan of the diff found no key. Paid calls during implementation: one low-quality smoke call and two approved low-quality model tests. Limits: the generated sheets are not a game tileset; extraction, map assembly and Gen 3 export were only prototyped outside the repository (see master.md, GFX-009 end-to-end prototype) and are planned in GFX-010 and GFX-011."
+    },
+    {
+      "completion": "On at least two generated maps (one town, one route), the composed map reaches the agreed fidelity score and the Owner judges it a faithful port in a side-by-side view; the report lists every remaining difference; targeted tests cover grid recovery, placement checks, autotile selection and the score on synthetic fixtures.",
+      "dependents": [
+        "GFX-011"
+      ],
+      "id": "GFX-010",
+      "incomplete_prerequisites": [],
+      "note": "Owner direction 2026-11-25: not now; resume when the project is ready. The 2026-11-25 end-to-end prototype reached the emulator but the result was far from the layout (see master.md).",
+      "owner": null,
+      "prerequisites": [
+        "GFX-009"
+      ],
+      "responsible": "Agent",
+      "scope": "After generation, reproduce the accepted layout as a metatile map that is visually almost identical to it (target about 0.99:1), so the idea survives the port. Cover: (1) an inventory that lists every visual element needed to rebuild the layout, including platform sides and supports, trunks, cast shadows, ground variants and transitions, tree rows with front/middle/back variants, and the walkable/blocked role of each part; (2) reliable extraction of sheet assets with consistent scale to the inventory footprint (no visible seams, no distorted aspect); (3) parsing the layout into a per-cell semantic grid and object placements, with the cell grid recovered from the image and each placement checked against the layout; (4) composition rules for autotiles, edges, overlaps and drawing order (below/above the player); (5) a measured fidelity score between the resampled layout and the composed map, per region, with a report of the cells that differ and why. Missing assets are requested as targeted extra batches rather than approximated. Decide and record whether residual gaps are closed by layout-derived tiles within the tile budget. Prototype findings, outputs and runs stay under `$TAUROS_DATA`; only code, synthetic fixtures and docs enter the repository. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Rules for the agents writing the code\".",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 600,
+      "status": "Not started",
+      "title": "Faithful reconstruction of a generated layout as a tile map (target ~0.99:1).",
+      "verification": null
+    },
+    {
+      "completion": "A generated map builds, boots and passes automated reachability and collision checks (including bridges and stairs) in the emulator; it opens in Porymap; the Owner walks it and accepts it.",
+      "dependents": [],
+      "id": "GFX-011",
+      "incomplete_prerequisites": [
+        "GFX-010",
+        "GFX-001"
+      ],
+      "note": "Owner direction 2026-11-25: not now. The prototype built and booted but bridge collisions were wrong.",
+      "owner": null,
+      "prerequisites": [
+        "GFX-010",
+        "GFX-001"
+      ],
+      "responsible": "Agent",
+      "scope": "Turn a GFX-010 map into Gen 3 data and install it through the connector with a snapshot: primary/secondary tileset pair within budget (tiles, metatiles, palettes, RGB555), metatile layer types, collisions, elevations and behaviours derived from the inventory roles (bridges, stairs, doors with warps, ledges where relevant), layout and map registration, then build and boot to the map in the app. Choose and record the tileset compiler (Porytiles from the pinned toolchain or an own compiler) and run the GFX-001 validator on the result. Verify movement with emulator checks: every walkable area reachable from the start, bridges and stairs crossable in their direction only where intended, blocked cells not enterable. Projects stay openable in Porymap. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Rules for the agents writing the code\" (Never destructive, Compatible formats).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 608,
+      "status": "Not started",
+      "title": "Export a reconstructed map to the game project and verify it in the emulator.",
+      "verification": null
+    },
+    {
       "completion": "At least one entry per listed kind can be applied to the pinned project, builds and shows in preview; credits recorded per asset.",
       "dependents": [],
       "id": "GFX-004",
@@ -1453,7 +1519,7 @@
       "responsible": "Agent",
       "scope": "Enable/customize upgrades as catalog entries (DS-style sprites, 80x80 sprites, animated battle sprites, shared tilesets with author credits, new weather effects on field_weather_effect.c); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. RES-005: converted Gen 4 kits (GFX-007) enter as entries with recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 591,
+      "source_line": 616,
       "status": "Not started",
       "title": "Catalog of graphical upgrades.",
       "verification": null
@@ -1473,7 +1539,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 600,
+      "source_line": 625,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1494,7 +1560,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 607,
+      "source_line": 632,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1513,14 +1579,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 614,
+      "source_line": 639,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "b32d529490181bc8266546cef8287e311cf870e202d9f0f2696c1e0eeaaa6528",
+  "todo_sha256": "069c76eb5b76bc0411904f913cea677eaca00e9fdb29e14cd6d8b926bd92863a",
   "topological_layers": [
     [
       "G3-010",
@@ -1531,6 +1597,7 @@
       "PROV-001",
       "DEC-004",
       "GFX-001",
+      "GFX-010",
       "GB-001",
       "NDS-001"
     ],
@@ -1541,6 +1608,7 @@
       "GFX-002",
       "GFX-003",
       "GFX-007",
+      "GFX-011",
       "GFX-004",
       "GB-002"
     ],

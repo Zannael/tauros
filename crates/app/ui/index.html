@@ -99,12 +99,90 @@
     #play-status { width: 100%; font-size: 12px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere;
                    max-height: 90px; overflow-y: auto; }
     #play-status.error { color: #ff8f9c; }
+
+    /* View switch and map generator (GFX-009) */
+    #views { display: flex; background: #211c24; border: 1px solid #352c3b; border-radius: 6px; padding: 2px; }
+    #views button { border: 0; background: transparent; color: var(--muted); padding: 4px 10px; }
+    #views button[aria-pressed="true"] { background: #3a303f; color: var(--fg); }
+    body.view-mapgen main { width: 760px; }
+    body.view-mapgen main > :not(header):not(#mapgen):not(#mg-lightbox) { display: none !important; }
+    body:not(.view-mapgen) #mapgen { display: none; }
+    #mapgen { width: 100%; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
+    .mg-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .mg-bar .select-control { flex: 1; min-width: 220px; }
+    .mg-bar select, #mapgen input, #mapgen textarea, #mapgen select { background: var(--bg); color: var(--fg); border: 1px solid #584b60;
+      border-radius: 5px; font: inherit; padding: 6px 8px; }
+    .mg-bar select { width: 100%; height: 34px; padding-right: 30px; }
+    #mapgen textarea { width: 100%; resize: vertical; min-height: 64px; }
+    #mg-usage { color: var(--muted); font-size: 12px; }
+    .mg-card { background: #211c24; border: 1px solid #352c3b; border-radius: 6px; padding: 12px; }
+    .mg-card h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .mg-card h3 .n { width: 22px; height: 22px; border-radius: 50%; background: #2c2530; display: inline-grid; place-items: center;
+      font-size: 12px; color: var(--accent); }
+    .mg-card h3 .grow { flex: 1; }
+    .mg-card p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .mg-card[data-locked="true"] { opacity: .55; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2c2530; color: var(--muted); font-weight: 400; white-space: nowrap; }
+    .chip:empty { display: none; }
+    .chip[data-s="review"] { background: #3a2f1a; color: #eed3a0; }
+    .chip[data-s="accepted"] { background: #1f3322; color: #a9d8ab; }
+    .chip[data-s="failed"] { background: #3a1a1f; color: #ffb3bd; }
+    .chip[data-s="generating"], .chip[data-s="planning"], .chip[data-s="checking"], .chip[data-s="running"] { background: #2a2540; color: #c9b8ff; }
+    .mg-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+    .mg-actions .primary { background: var(--accent); border-color: var(--accent); color: #241a08; font-weight: 600; }
+    .mg-actions .primary:hover:not(:disabled) { background: #f6bd4f; }
+    .mg-figure { margin-top: 10px; display: grid; gap: 6px; }
+    .mg-figure > img, .mg-batch .thumb, #mg-lightbox img { background-color: #2a2430;
+      background-image: linear-gradient(45deg, #332b3a 25%, transparent 25%, transparent 75%, #332b3a 75%),
+                        linear-gradient(45deg, #332b3a 25%, transparent 25%, transparent 75%, #332b3a 75%);
+      background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+    .mg-figure > img { width: 100%; max-height: 300px; object-fit: contain; image-rendering: pixelated; border-radius: 4px; cursor: zoom-in; }
+    .mg-versions { display: flex; gap: 6px; overflow-x: auto; }
+    .mg-versions button { padding: 2px; border-radius: 4px; position: relative; }
+    .mg-versions button[aria-pressed="true"] { border-color: var(--accent); }
+    .mg-versions img { width: 72px; display: block; image-rendering: pixelated; cursor: pointer; }
+    .mg-versions .tag { position: absolute; left: 4px; top: 3px; font-size: 10px; background: #000a; padding: 0 4px; border-radius: 3px; }
+    .mg-checks { font-size: 12px; color: var(--muted); }
+    .mg-checks .bad { color: #ffb3bd; }
+    .mg-checks .good { color: #a9d8ab; }
+    details.mg-correct summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    details.mg-correct[open] summary { margin-bottom: 6px; }
+    #mg-batches { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; margin-top: 10px; }
+    .mg-batch { text-align: left; padding: 8px; display: grid; gap: 6px; background: var(--bg); }
+    .mg-batch[aria-pressed="true"] { border-color: var(--accent); }
+    .mg-batch .thumb { aspect-ratio: 20 / 11; border-radius: 3px; image-rendering: pixelated; object-fit: contain; width: 100%; display: block; }
+    .mg-batch .row { display: flex; justify-content: space-between; gap: 6px; align-items: center; font-size: 12px; }
+    #mg-batch-detail { margin-top: 10px; border-top: 1px solid #352c3b; padding-top: 10px; }
+    #mg-batch-detail ol { margin: 6px 0 0; padding-left: 20px; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+    #mg-batch-detail li.missing { color: #ffb3bd; }
+    #mg-activity { position: sticky; bottom: 0; background: #2a2540; border: 1px solid #44395e; border-radius: 6px; padding: 8px 10px;
+      display: flex; gap: 10px; align-items: center; font-size: 12px; }
+    #mg-activity[hidden] { display: none; }
+    #mg-activity .spin { width: 12px; height: 12px; border: 2px solid #c9b8ff55; border-top-color: #c9b8ff; border-radius: 50%;
+      animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #mg-activity .spin { animation: none; } }
+    #mg-activity span { flex: 1; }
+    #mg-error { background: #3a1a1f; color: #ffb3bd; border-radius: 6px; padding: 8px 10px; font-size: 12px; white-space: pre-wrap; }
+    #mg-log { font-size: 11px; color: var(--muted); }
+    #mg-log pre { max-height: 160px; overflow: auto; white-space: pre-wrap; margin: 6px 0 0; }
+    #mg-settings label, #mg-create label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+    #mg-settings .grid input:not([type=checkbox]), #mg-settings .grid select { width: 100%; min-width: 0; }
+    #mg-settings .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+    #mg-lightbox { position: fixed; inset: 0; background: #0b090cee; display: grid; place-items: center; z-index: 10; padding: 20px; }
+    #mg-lightbox[hidden] { display: none; }
+    #mg-lightbox img { max-width: 100%; max-height: calc(100vh - 80px); image-rendering: pixelated; }
+    #mg-lightbox div { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 8px; }
   </style>
 </head>
 <body>
   <main>
   <header>
     <strong>Tauros</strong>
+    <div id="views" role="group" aria-label="View">
+      <button type="button" data-view="play" aria-pressed="true">Play</button>
+      <button type="button" data-view="mapgen" aria-pressed="false">Map generator</button>
+    </div>
     <span id="status">Open a ROM to start.</span>
     <input id="file" type="file" accept=".gba" hidden>
     <button id="toggle-history">History</button>
@@ -132,6 +210,86 @@
     <p>Restore state keeps the files as they were at that commit, including its changes.</p>
     <ul id="history-list"></ul>
   </section>
+  <section id="mapgen" aria-label="Map generator">
+    <div class="mg-bar">
+      <div class="select-control"><select id="mg-run" aria-label="Map run"></select></div>
+      <button id="mg-new" type="button">New map…</button>
+      <button id="mg-settings-toggle" type="button" aria-expanded="false">Settings</button>
+    </div>
+    <div id="mg-usage" role="status"></div>
+    <div id="mg-error" role="alert" hidden></div>
+    <form id="mg-create" class="mg-card" hidden>
+      <h3><span class="grow">New map</span></h3>
+      <label>Scene description (notes or a voice draft are fine; English works best)
+        <textarea id="mg-scene" rows="6" placeholder="A treetop city with a crystal castle to the north, a plaza, a market…"></textarea></label>
+      <label style="margin-top:8px">Style reference PNG (camera angle and general look only; empty = default)
+        <input id="mg-style" type="text" placeholder="Default style reference"></label>
+      <div class="mg-actions"><button class="primary" type="submit">Create</button><button id="mg-create-cancel" type="button">Cancel</button></div>
+    </form>
+    <div id="mg-settings" class="mg-card" hidden>
+      <h3><span class="grow">Settings for this map</span></h3>
+      <p>Flare is faster for layout drafts; Sunburst is more precise when redrawing and correcting. Corrections use low planning complexity, new images high.</p>
+      <div class="grid">
+        <label>Layout image model <input id="mg-layout-model" type="text" list="mg-models"></label>
+        <label>Sheet image model <input id="mg-sheet-model" type="text" list="mg-models"></label>
+        <datalist id="mg-models"><option value="gpt-image-2.6-flare"><option value="gpt-image-2.6-sunburst"><option value="gpt-image-2.5-flare"><option value="gpt-image-2.5-sunburst"></datalist>
+        <label>Image quality <select id="mg-image-quality"><option>high</option><option>medium</option><option>low</option><option>xhigh</option><option>max</option></select></label>
+        <label>Claude model <select id="mg-claude-model"><option>opus</option><option>sonnet</option></select></label>
+        <label>Automatic retries per sheet <input id="mg-retries" type="number" min="0" max="3"></label>
+        <label><span><input id="mg-verify" type="checkbox"> Claude checks each sheet</span></label>
+        <label><span><input id="mg-transparent" type="checkbox"> Transparent sheet background</span></label>
+      </div>
+      <div class="mg-actions"><button id="mg-settings-save" class="primary" type="button">Save settings</button></div>
+    </div>
+    <div id="mg-empty" class="mg-card" hidden><p>No map yet. Choose <b>New map…</b>, describe the scene, then run the steps below.</p></div>
+    <div id="mg-steps">
+      <article class="mg-card" id="mg-layout">
+        <h3><span class="n">1</span><span class="grow">Layout</span><span class="chip" data-s=""></span></h3>
+        <p class="mg-desc"></p>
+        <div class="mg-figure"></div>
+        <div class="mg-checks"></div>
+        <details class="mg-correct"><summary>Correct the layout…</summary>
+          <textarea id="mg-layout-correction" rows="3" placeholder="What should change, e.g. move the market to the east platform"></textarea>
+          <div class="mg-actions"><button id="mg-layout-apply" type="button">Apply correction</button></div></details>
+        <div class="mg-actions">
+          <button id="mg-layout-generate" class="primary" type="button">Generate layout</button>
+          <button id="mg-layout-replan" type="button" title="Ask Claude for a new plan, then draw it">New plan</button>
+          <button id="mg-layout-accept" type="button">Accept this version</button>
+        </div>
+      </article>
+      <article class="mg-card" id="mg-inventory">
+        <h3><span class="n">2</span><span class="grow">Inventory and batches</span><span class="chip" data-s=""></span></h3>
+        <p class="mg-desc"></p>
+        <div class="mg-actions"><button id="mg-inventory-run" class="primary" type="button">Build inventory</button></div>
+      </article>
+      <article class="mg-card" id="mg-sheets">
+        <h3><span class="n">3</span><span class="grow">Tileset sheets</span><span class="chip" data-s=""></span></h3>
+        <p class="mg-desc"></p>
+        <div class="mg-actions">
+          <button id="mg-sheets-all" class="primary" type="button">Generate all pending</button>
+        </div>
+        <div id="mg-batches"></div>
+        <div id="mg-batch-detail" hidden>
+          <h3><span class="grow" id="mg-batch-title"></span><span class="chip" data-s=""></span></h3>
+          <div class="mg-figure"></div>
+          <div class="mg-checks"></div>
+          <ol id="mg-batch-assets"></ol>
+          <details class="mg-correct"><summary>Correct this sheet…</summary>
+            <textarea id="mg-batch-correction" rows="3" placeholder="What should change, e.g. the trees must have complete crowns"></textarea>
+            <div class="mg-actions"><button id="mg-batch-apply" type="button">Apply correction</button></div></details>
+          <div class="mg-actions">
+            <button id="mg-batch-generate" type="button">Regenerate</button>
+            <button id="mg-batch-accept" class="primary" type="button">Accept this version</button>
+          </div>
+        </div>
+      </article>
+    </div>
+    <details id="mg-log"><summary>Activity log</summary><pre></pre></details>
+    <div id="mg-activity" role="status" aria-live="polite" hidden><i class="spin"></i><span></span><button id="mg-stop" type="button">Stop</button></div>
+  </section>
+  <div id="mg-lightbox" hidden role="dialog" aria-label="Image preview">
+    <div style="display:grid;justify-items:center"><img alt=""><div><span id="mg-lightbox-caption"></span><button id="mg-lightbox-close" type="button">Close</button></div></div>
+  </div>
   </main>
   <aside id="chat" aria-label="Agent chat">
     <div id="chat-header">
@@ -191,5 +349,6 @@
   </aside>
   <script src="main.js"></script>
   <script src="voice.js"></script>
+  <script src="mapgen.js"></script>
 </body>
 </html>

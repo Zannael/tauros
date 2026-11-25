@@ -2860,3 +2860,95 @@ colour merges is preferred over a spare palette when it saves space, so the GFX-
 minimises palettes and reports each merge; (b) large Gen 4 trees (5x5 metatiles) are
 welcome in Emerald maps. Still open: harmonisation direction for mixed kits, use of
 game-derived Zygoat/Justin8964 art in distributed hacks, and the cast-shadow policy.
+
+## Map generator view: image-model layouts and tileset batches (GFX-009, 2026-11-24)
+
+**Accepted requirement (Simone in chat, 2026-11-24):** automate the manual ChatGPT flow of
+`docs/prompts/gba-map-generation/` in a new app view, modelled on his local carousels
+project (OpenAI image API plus Claude CLI, human review with regenerate/edit retries),
+ahead of the APP-006 sequencing for this view only. The OpenAI key is the one in that
+project's `.env`, copied unread into `$TAUROS_DATA/mapgen/openai.env` (mode 600).
+
+**Observed in the manual trials (verified by inspection of the saved images, 2026-11-24):**
+- In ChatGPT chat the image model only sees the assistant's own summary: a 19 KB
+  constraint prompt produced a painterly, cropped illustration. A short verbatim image
+  prompt plus a style reference fixed look and framing.
+- Tying the map size to one 4x image (24x16 metatiles) made towns tiny. Vanilla sizes
+  (layouts.json of the pinned expansion): Rustboro and Slateport 40x60, Lilycove 80x40,
+  Fortree 40x20, Route 119 40x140; the engine accepts (w + 15) x (h + 14) <= 10240
+  (`MAX_MAP_DATA_SIZE`, include/fieldmap.h). Tile budget belongs to the tileset, so the
+  layout is now drawn at plan scale and assets are redrawn at 4x on sheets.
+- A detailed "style sample" scene drifted from the layout (castle redesigned) and was
+  dropped. Asked to pack a whole inventory section (57 assets) on fixed coordinates, the
+  model drew about 25; in batches of about 10 it drew them, but in chat it repeated the
+  bridge batch for the stairs batch, losing track of the plan.
+
+**Implementation (verified facts):**
+- `scripts/mapgen.py` (stdlib) keeps runs in `$TAUROS_DATA/mapgen/runs/<id>/`, sends the
+  verbatim image prompts extracted from prompts 01 and 03 to `POST /v1/images/edits`
+  (multipart `image[]` = style reference, or accepted layout + style reference for
+  sheets; fixed size; `output_format=png`), retries 408/409/429/5xx and network errors
+  with backoff (4 attempts), redacts `sk-` strings from API errors, and plans batches
+  deterministically (max 12 assets, one section, shelf-packed with a one-tile gap in
+  24x16; 1x1 surface pieces of one material become one autotile set).
+- Claude steps run `claude -p --input-format stream-json --output-format stream-json
+  --json-schema ... --tools ""` with images as base64 content blocks; the result's
+  `structured_output` is used. Checked live on 2026-11-24 with a 32x32 test image
+  (correct answer, reported 0.026 USD equivalent on the plan).
+- Live smoke on 2026-11-24: one `gpt-image-2.5-flare` edit call at quality low, size
+  1536x1024, one reference image, returned a 1536x1024 PNG in 12.7 s. The output largely
+  copied the reference's content for a one-line prompt.
+- The backend (`crates/app/src/mapgen.rs`) runs one job at a time in its own process
+  group, streams JSON events, stops it on Stop and on app exit (TERM, 5 s grace, KILL),
+  and serves images only from the mapgen folder as PNG (`img-src 'self' data:`).
+
+**Limits:** no full paid run was executed by the agent; layout and inventory quality,
+real per-image costs, the Claude sheet check's accuracy and the UI with live jobs await
+the Owner's run. Images are model drawings, not GBA-valid tiles; extraction and map
+assembly are not automated.
+
+**Image API choices (Owner approved 2026-11-24, after reading the OpenAI image generation
+guide; verified facts from the guide, the model pages and the Images API reference):**
+- Sizes: any `WIDTHxHEIGHT` with both sides divisible by 16 and aspect 1:3 to 3:1; above
+  2560x1440 experimental, maximum 3840x2160. `background`: `transparent`, `opaque`, `auto`.
+  `complexity`: `low`, `medium`, `high` (default high, no extra fee). `quality` adds
+  `xhigh` and `max` for the 2.5 Sunburst/Flare variants. Edits accept up to 16 images.
+- Sunburst is recommended "where editing precision matters most", Flare for fast everyday
+  generation. Model pages list `gpt-image-2.6-sunburst` and `gpt-image-2.6-flare` with
+  the same prices (USD per 1M tokens: text input 5, image input 8, image output 30) and
+  only the images generations/edits endpoints; the guide also names `gpt-image-2.5-*`.
+- The Responses API wraps the image model in a mainline model that revises the prompt
+  (`revised_prompt`); not used, to keep prompts verbatim.
+- Live test 2026-11-24, two edit calls at quality low, 1216x896, `background=transparent`,
+  one reference image: both 2.6 model ids accepted; exact size returned; RGBA PNG with no
+  pixel at alpha 255 (solid pixels 251-253) and a faint low-alpha halo (about 2-3% of
+  pixels between 1 and 223); usage 46 text + 1536 image input tokens, 626 output tokens
+  (about 0.031 USD each). Sunburst's tree was crisper pixel art than Flare's.
+- Applied in `scripts/mapgen.py`: Flare for layouts, Sunburst for sheets and corrections;
+  layout images sized to the map grid (largest cell from 48 to 16 px within 2560x1440,
+  2-cell magenta border); sheets 2560x1408 (40x22 metatiles at 4x) with transparent
+  background, alpha thresholded at 128 (raw file kept); complexity high for new images and
+  low for corrections; per-version usage and cost recorded and shown in the view; batches
+  of at most 16 assets. Markup-guided edits and `n` > 1 candidates are not used yet.
+
+**GFX-009 end-to-end prototype (verified facts, 2026-11-25):** throwaway scripts outside the
+repository took one Owner run (64x48 layout, 6 accepted sheets) to the emulator.
+- Extraction: alpha segmentation of each sheet plus one Claude call per sheet (numbered
+  boxes) assigned all 32 inventory assets correctly; drawn sizes did not match the
+  footprints (a 1x1 barrel was about 5 tiles wide on the sheet), so each asset was rescaled
+  to its inventory footprint; one joined ground block kept visible seams.
+- Layout parsing: the map rectangle inside the magenta border gave 24.2 px cells; colour
+  classification per cell separated plank, plaza and forest floor but confused lavender
+  canopy with the plaza stone; Claude placed 42 objects (castle modules, houses, stalls,
+  lanterns, stairs, bridges) from a gridded image, close to the drawing.
+- Composition and export: autotiled ground, greedy tree stamps, last object row below the
+  player; 920 unique tiles, 311 metatiles and 13 palettes after flip-aware deduplication
+  (within 1024/1024/13). Installed as a primary+secondary pair, layout and map
+  (`MAP_MAPGEN_KINESIA`, snow weather) in the local test project; `make rom syms` in the
+  pinned container succeeded after adding the map script include; Tauros booted to the map
+  at 59.7 fps on a virtual display.
+- Owner check: the map walks; bridge collisions are wrong; the result is far from the
+  layout. Causes observed: no trunks or platform sides in the inventory, platform shapes
+  from noisy colour classification, trees stamped on a grid, a single forest-floor tile,
+  stairs built from the wrong pieces, no shadows. Planned as GFX-010 (fidelity) and GFX-011
+  (export and emulator checks); the Owner deferred both on 2026-11-25.
