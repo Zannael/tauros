@@ -2987,3 +2987,62 @@ repository took one Owner run (64x48 layout, 6 accepted sheets) to the emulator.
   from noisy colour classification, trees stamped on a grid, a single forest-floor tile,
   stairs built from the wrong pieces, no shadows. Planned as GFX-010 (fidelity) and GFX-011
   (export and emulator checks); the Owner deferred both on 2026-11-25.
+
+## Asset pipeline and validator (GFX-001, 2026-11-25)
+
+**Decision (accepted for implementation, before code):** the validator and pipeline live in
+`scripts/gfx_pipeline.py` (Python 3.10+, stdlib only, PNG decoding reused from
+`scripts/asset_catalog.py`), not in `crates/connector-gen3`. Reasons, all checked on the
+tree: the connector reads only compiled Porymap-format data (`metatiles.bin`,
+`metatile_attributes.bin`, map JSON, limits) and has no PNG decoder (the only `png` crate
+dependency is in `crates/mcp`); the inputs of this step are source PNGs before Porytiles;
+the toolchain container is already driven from Python (`setup_toolchain.py`); the
+converter (GFX-007) and catalog (GFX-004) are Python-side. The validator prints JSON, so the
+app or MCP can call it as a subprocess later. If an in-process Rust check of compiled
+tilesets is wanted, it is a separate task and reads the same binary facts listed below.
+
+**Verified 2026-11-25 (run in the pinned image `tauros-gba-toolchain:d75267a55161`, network
+off, on a scratch copy of the base build):**
+- Porytiles 2.0.0 has a different CLI from 1.x: `create-tileset`, `import-tileset`,
+  `compile-tileset`, `decompile-tileset` (no `compile-primary`). On the expansion it needs
+  `--metatile-attribute-size 2` (the project declares two mask layouts) and a secondary needs a
+  partner primary (`--primary-pairing-mode manual --primary-pairing-partners <name>`).
+- `create-tileset gTileset_X` writes the editable sources `porytiles_src/{bottom,middle,top}.png`
+  (RGBA metatile sheets, 16 px cells, 128 px wide in the template), `attributes.csv` and a sample
+  `anim/` (flower), and wires `src/data/tilesets/{headers,graphics,metatiles}.h` plus generated
+  animation code; `compile-tileset` writes `porytiles_bin/{tiles.png,metatiles.bin,
+  metatile_attributes.bin,palettes/00..15.pal}`.
+- The template layers use magenta (255,0,255) as transparent and colours such as 57,82,0 next to
+  56,192,128: both the `v*8` and the `floor(v5*255/31)` expansion of RGB555 occur. The validator
+  therefore accepts a channel value as RGB555-exact when it equals any of `v5*8`,
+  `v5*8 | v5>>2`, `floor(v5*255/31)`.
+- Porytiles layers are three (bottom/middle/top); the pinned engine is two-layer. A metatile
+  with content on all three layers is an error here.
+
+**Verified 2026-11-25 (executed, GFX-001):**
+- `scripts/gfx_pipeline.py` reports, with file, pixel, tile or metatile coordinates, every class
+  below; errors fail the run, warnings (`tile.duplicate`, `palette.shared_with_primary`) do not:
+  `dimensions.not_multiple_of_8/16`, `layers.size_mismatch`, `package.missing_layer`,
+  `palette.too_many_colours` (>15 opaque colours per 8x8 tile), `palette.indexed_entries` (>16
+  PLTE entries), `color.not_rgb555`, `alpha.semi_transparent`, `metatile.triple_layer`,
+  `animation.unsupported`, `budget.{palettes,tiles,metatiles}`, `package.metatile_format`
+  (24-byte triple-layer metatiles, 4-byte FireRed attributes), `tile.out_of_range`,
+  `palette.{slot_out_of_range,primary_overflow,primary_mismatch}`. Budgets are the pinned
+  6/512/512 (primary) and 7/512/512 (secondary).
+- The source-stage tile/metatile/palette budgets are estimates (flip-aware unique tiles plus the
+  blank tile, non-empty cells, first-fit palette packing) and are reported as warnings; the
+  compiled-stage check reads `metatiles.bin`, `tiles.png` and the palettes and is exact. On the
+  valid fixture the estimate was 69 tiles and Porytiles produced 80.
+- In `metatiles.bin` a secondary's tile ids below 512 are the primary's; palette slots 0-5 are
+  the primary's and 6-12 the secondary's; sharing is flagged only for the secondary's own tiles
+  drawn with slots 0-5.
+- A synthetic 16-metatile primary compiled with Porytiles 2.0.0 (container, network off) and
+  `make rom syms` built a 33,554,432-byte ROM listing the new tileset symbols; a synthetic
+  secondary compiled against it with manual partner pairing. Both ran on a scratch copy of the
+  pinned base build under `$TAUROS_DATA`; the repository gained only code, tests and docs.
+- Not verified: the ROM was not booted, the tileset was not assigned to a map or opened in
+  Porymap, a secondary against the vanilla General primary was not compiled, and no real art
+  (Gen 4 or catalog) went through the pipeline.
+
+**Deferred (decision 2026-11-25):** sprites/Porypal, Porytiles animations and per-map tileset
+variants are tracked as `GFX-012`; until then animated tiles are reported as unsupported.

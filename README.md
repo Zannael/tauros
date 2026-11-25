@@ -123,6 +123,24 @@ executed without review. Upstream build systems of the pinned decomp bases
 
 No Nintendo assets, ROMs or saves are ever part of this repository.
 
+## Tileset validator and pipeline (GFX-001)
+
+`scripts/gfx_pipeline.py` (stdlib, Python 3.10+) checks Porytiles source layers
+(`bottom/middle/top.png`) and compiled tilesets against the pinned engine, with
+file/pixel/tile/metatile coordinates per violation. Tilesets only; sprites/Porypal and
+animated tiles are not handled (animations are reported as unsupported). It is not wired
+into the app.
+
+```sh
+python3 scripts/gfx_pipeline.py validate <dir|png> [--role primary|secondary] [--json]
+python3 scripts/gfx_pipeline.py validate-compiled <porytiles_bin dir> [--role ...] [--primary-bin <dir>]
+python3 scripts/gfx_pipeline.py build --project <scratch copy under $TAUROS_DATA> \
+    --source <dir> --name gTileset_X [--role secondary --primary gTileset_Y] [--make]
+```
+
+`build` validates, runs Porytiles in the toolchain container (network off), validates the
+compiled output and optionally builds the ROM; it refuses any project outside `$TAUROS_DATA`.
+
 ## Local graphics asset catalog (GFX-005)
 
 A dataset-only catalog of reusable Gen 3 environment graphics (Team Aqua's Asset
