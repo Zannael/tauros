@@ -421,6 +421,13 @@ Decisions (agent-owned, within the tasks' scope):
     moved or removed. Both operations check the padded size against
     `MAX_MAP_DATA_SIZE` (`layout.size_ceiling`), names and ids, tilesets declared in
     `src/data/tilesets/headers.h`, and that the block file has the recorded size.
+  - *Porymap 6.3.1 agreement (verified 2026-11-25):* a map created in Porymap
+    writes the same files and defaults as Tauros (tilesets, 0x3001 fill, border);
+    its resize keeps the top-left corner but fills with block 0x0. A Porymap save
+    rewrites unrelated engine JSON (key order, `name_clone` dropped), so Tauros and
+    Porymap should not edit the same project at the same time. The flatpak sees only
+    folders it is granted: run it with `--filesystem=<project>` and open the project
+    from the dialog; a project opened through the document portal is read-only.
   - *Limits:* growth or shrinking from the top or left, and connection offsets after
     a resize, are not handled; the tileset, region map section and music constants
     are not validated beyond tilesets (the build reports them).

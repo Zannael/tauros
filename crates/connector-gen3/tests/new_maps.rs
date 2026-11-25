@@ -284,3 +284,38 @@ fn prepare_porymap_project() {
     let ok = Command::new("cp").arg("-a").arg(dir.path().join(".")).arg(&target).status().unwrap().success();
     assert!(ok, "copy failed");
 }
+
+/// A project saved by Porymap (edited block, resized layout, rewritten JSON of the
+/// whole project) still loads, validates and takes new edits. Manual: set
+/// `TAUROS_PORYMAP_SAVED_DIR` to a disposable copy of such a project.
+#[test]
+#[ignore = "needs a project saved by Porymap in TAUROS_PORYMAP_SAVED_DIR"]
+fn a_project_saved_by_porymap_still_loads_and_takes_edits() {
+    let Some(dir) = std::env::var_os("TAUROS_PORYMAP_SAVED_DIR") else { panic!("set TAUROS_PORYMAP_SAVED_DIR") };
+    let dir = Path::new(&dir);
+    let mut c = Gen3Connector::open(dir, None).unwrap();
+    let loaded = c.load().unwrap();
+    assert_eq!(loaded.maps.len(), 940, "939 maps plus TaurosMeadow");
+    let meadow = MapId::from("MAP_TAUROS_MEADOW");
+    assert_eq!(loaded.maps[&meadow].geometry, MapGeometry::Grid { layout: LayoutId::from("LAYOUT_TAUROS_MEADOW"), width: 20, height: 14 });
+    let path = dir.join("data/layouts/TaurosMeadow/map.bin");
+    let saved = words(&path);
+    assert_eq!(saved.len(), 20 * 14);
+    // Shrink it back and edit the header in the same change set.
+    let mut map = loaded.maps[&meadow].clone();
+    if let MapGeometry::Grid { width, height, .. } = &mut map.geometry {
+        (*width, *height) = (16, 12);
+    }
+    map.properties.insert("weather".into(), Value::Text("WEATHER_SUNNY".into()));
+    c.apply(
+        &ChangeSet::new("shrink after Porymap", Provenance::Human)
+            .with(Change::ResizeLayout { layout: LayoutId::from("LAYOUT_TAUROS_MEADOW"), width: 16, height: 12, properties: Extensions::new() })
+            .with(Change::UpsertMap { map }),
+    )
+    .unwrap();
+    let shrunk = words(&path);
+    assert_eq!(shrunk.len(), 16 * 12);
+    for y in 0..12 {
+        assert_eq!(shrunk[y * 16..(y + 1) * 16], saved[y * 20..y * 20 + 16], "row {y}");
+    }
+}
