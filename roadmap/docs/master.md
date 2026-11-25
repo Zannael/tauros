@@ -3076,3 +3076,5 @@ yet verified. If it does not, the GFX-012 dependency is added to GFX-004 and rec
 - Not verified: boot and visual check in the emulator (pending Simone), animated tiles (flowers, water) of the clone,
   Slateport and other General users (isolation checked by byte-identical shared files, not in game), a clean pinned base
   (the scratch copy still has the GFX-001 `gfx_test` wiring), the rendering is an approximation (no layer types).
+
+**Verified 2026-11-25 (Owner check):** Simone opened the built ROM in the app on Petalburg City and confirmed the snowy look (ground, trees, roofs), walking, doors and the snowfall; both entries are now `verified`. GFX-004 is Done within the split scope; the isolation hypothesis above held for this case (cloned primary, no GFX-012 remapping needed because metatile ids are unchanged).

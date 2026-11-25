@@ -1,8 +1,7 @@
 {
   "active_ids": [
     "APP-003",
-    "DEC-004",
-    "GFX-004"
+    "DEC-004"
   ],
   "ready_ids": [
     "AGT-005",
@@ -1531,7 +1530,7 @@
       ],
       "id": "GFX-004",
       "incomplete_prerequisites": [],
-      "note": "(owner: Claude Code, 2026-11-25: handoff to Simone's manual check. Implemented and verified in scratch: entry model, apply/revert, snowy Petalburg tileset entry and heavy-snow weather entry in scripts/gfx_upgrades.py; ROM at $TAUROS_DATA/assets/experiments/gfx-004/snowy-petalburg.gba awaits the emulator check; Done only after it, with the entries marked verified)",
+      "note": "Scope split 2026-11-25 (Owner, option A): sprite kinds in `GFX-013`, converted Gen 4 kits in `GFX-014`.",
       "owner": "Claude Code",
       "prerequisites": [
         "GFX-001",
@@ -1541,16 +1540,15 @@
       "scope": "Enable/customize upgrades as catalog entries (shared tilesets with author credits and new weather effects on field_weather_effect.c; DS-style, 80x80 and animated battle sprites moved to `GFX-013` and converted Gen 4 kits to `GFX-014` by Owner decision 2026-11-25); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. The entry model must already allow the kinds of GFX-013/GFX-014 (converted kits: recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004). Isolation from shared tilesets is first attempted here by a cloned primary/secondary pair assigned only to the acceptance map (Porytiles as in GFX-001); if that needs metatile/collision/behaviour remapping or per-map variants of `GFX-012`, add that dependency and record it before continuing. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
       "source_line": 625,
-      "status": "In progress",
+      "status": "Done",
       "title": "Catalog of graphical upgrades.",
-      "verification": null
+      "verification": "2026-11-25 UTC: ran `python3 -m unittest discover -s tests -p test_gfx_upgrades.py` (13 synthetic tests: idempotent apply and byte-exact revert, protected shared tileset/collisions/events, rollback on protect violation and on validator error, anchor uniqueness, changed source sha256, drift refusal, reverse-order revert, conversion-required and unsafe paths, project outside the data directory, entry model, preview) and the full suite once (126 tests OK, 2 skipped). On a scratch copy of the pinned base under `$TAUROS_DATA`: applied `snow-general-palettes` (Emerald Slide palettes 02/03/05 at Team Aqua pin 3e06f6f9 plus an authored roof ramp in palette 01, cloned `gTileset_GeneralSnow` used only by LAYOUT_PETALBURG_CITY; GFX-001 validator passed) and `snow-heavy` (field_weather_effect.c, map weather); rendered before/after preview shows snowy ground, trees and roofs; `make rom syms` in the toolchain container gave ROM c8f89f59; reverting both and rebuilding gave the base ROM b6ebe0ba byte for byte; re-applying reproduced c8f89f59. The Owner opened the ROM in the app on Petalburg City and confirmed the look, walking, doors and the snowfall. Roadmap, privacy and whitespace checks passed. Limits: Emerald Slide's tile image and 24-byte triple-layer metatiles are not applied (conversion-required); only the General palettes of one city were changed, other General users, animated tiles and the optional Slateport check were not verified in game; the base copy still carries the GFX-001 `gfx_test` wiring; the secondary Petalburg set is vanilla; sprites and converted kits are GFX-013/GFX-014."
     },
     {
       "completion": "At least one entry per sprite kind is applied to the pinned project, passes the GFX-001/GFX-012 validator, builds and shows in preview; credits recorded per asset.",
       "dependents": [],
       "id": "GFX-013",
       "incomplete_prerequisites": [
-        "GFX-004",
         "GFX-012"
       ],
       "note": null,
@@ -1562,7 +1560,7 @@
       "responsible": "Agent",
       "scope": "Split from GFX-004 on 2026-11-25: catalog entries of kind DS-style sprites, 80x80 sprites and animated battle sprites, applied through the GFX-012 Porypal conversion and the GFX-004 apply/revert and credit model. Assets stay under `$TAUROS_DATA`, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 633,
+      "source_line": 634,
       "status": "Not started",
       "title": "Sprite upgrade entries in the graphical upgrade catalog.",
       "verification": null
@@ -1572,7 +1570,6 @@
       "dependents": [],
       "id": "GFX-014",
       "incomplete_prerequisites": [
-        "GFX-004",
         "GFX-007",
         "DEC-004"
       ],
@@ -1586,7 +1583,7 @@
       "responsible": "Agent",
       "scope": "Split from GFX-004 on 2026-11-25: kits converted by GFX-007 enter as catalog entries with recipe, source/output sha256, credits and conversion status, applied through the GFX-004 apply/revert flow; game-derived sources follow DEC-004. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 640,
+      "source_line": 641,
       "status": "Not started",
       "title": "Converted Gen 4 kit entries in the graphical upgrade catalog.",
       "verification": null
@@ -1606,7 +1603,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 649,
+      "source_line": 650,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1627,7 +1624,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 656,
+      "source_line": 657,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1646,14 +1643,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 663,
+      "source_line": 664,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "26ca5b06699bc4319f920c82f860bc50a508b1053b5ec73c414a1fed350ddb23",
+  "todo_sha256": "a90a8ff05f7c96bcb5e6666d0e6e87e26e51fdf25f2e8e825bef12ebb5c183d4",
   "topological_layers": [
     [
       "AGT-005",
@@ -1666,7 +1663,6 @@
       "GFX-003",
       "GFX-010",
       "GFX-012",
-      "GFX-004",
       "GB-001",
       "NDS-001"
     ],
