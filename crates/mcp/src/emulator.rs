@@ -76,6 +76,18 @@ impl SymbolTable {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Searches symbol names case-insensitively by substring, returning up to `limit` pairs.
+    pub fn search(&self, query: &str, limit: usize) -> Vec<(String, u32)> {
+        let q = query.trim().to_ascii_lowercase();
+        let cap = limit.clamp(1, 200);
+        self.entries
+            .iter()
+            .filter(|(name, _)| q.is_empty() || name.to_ascii_lowercase().contains(&q))
+            .take(cap)
+            .map(|(name, &addr)| (name.clone(), addr))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +189,55 @@ impl EmuSession {
     /// The emulator core, read-only (for example to copy the current frame).
     pub fn emulator(&self) -> &(dyn Emulator + Send) {
         self.emu.as_ref()
+    }
+
+    /// Paired symbol table for the loaded ROM.
+    pub fn symbols(&self) -> &SymbolTable {
+        &self.symbols
+    }
+
+    /// Names of in-memory savestates bound to the currently loaded ROM.
+    pub fn list_savestates(&self) -> Vec<String> {
+        let Some(current_sha) = &self.rom_sha256 else {
+            return Vec::new();
+        };
+        self.savestates
+            .iter()
+            .filter(|(_, slot)| &slot.rom_sha256 == current_sha)
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
+    /// Returns the raw savestate bytes for `name` if it matches the loaded ROM.
+    pub fn savestate_bytes(&self, name: &str) -> Option<&[u8]> {
+        let current_sha = self.rom_sha256.as_deref()?;
+        let slot = self.savestates.get(name)?;
+        (slot.rom_sha256 == current_sha).then_some(slot.bytes.as_slice())
+    }
+
+    /// Captures the current emulator state directly as raw bytes with its ROM hash and frame count.
+    pub fn export_savestate_bytes(&mut self) -> Result<(Vec<u8>, String, u32), EmuToolError> {
+        let rom_sha256 = self
+            .rom_sha256
+            .clone()
+            .ok_or_else(|| EmuToolError::new("no_rom", "no ROM is loaded in the emulator"))?;
+        let bytes = self
+            .emu
+            .save_state()
+            .map_err(|e| EmuToolError::new("state_error", e.to_string()))?;
+        let frame_count = self.emu.frame_count();
+        Ok((bytes, rom_sha256, frame_count))
+    }
+
+    /// Loads raw savestate bytes directly into the loaded core and returns the restored frame count.
+    pub fn import_savestate_bytes(&mut self, bytes: &[u8]) -> Result<u32, EmuToolError> {
+        if self.rom.is_none() {
+            return Err(EmuToolError::new("no_rom", "no ROM is loaded in the emulator"));
+        }
+        self.emu
+            .load_state(bytes)
+            .map_err(|e| EmuToolError::new("state_error", e.to_string()))?;
+        Ok(self.emu.frame_count())
     }
 }
 

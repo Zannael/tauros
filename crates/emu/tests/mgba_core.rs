@@ -81,6 +81,32 @@ fn reloading_and_reset_restart_the_console() {
     assert_eq!(emu.frame_count(), 0);
     run(&mut emu, 3, &mut Vec::new());
     assert!(uniform(&emu.frame()).is_some());
+
+    let vlayers = emu.video_layers();
+    let achans = emu.audio_channels();
+    assert!(vlayers.len() >= 5, "expected GBA BG0-BG3 + OBJ, got {vlayers:?}");
+    assert!(achans.len() >= 6, "expected GBA PSG 1-4 + FIFO A/B, got {achans:?}");
+    // Test GBA audio channel toggling (0..6: PSG 1-4, FIFO A/B).
+    let mut active_audio = Vec::new();
+    run(&mut emu, 10, &mut active_audio);
+    let active_spread = active_audio.iter().copied().max().unwrap_or(0)
+        - active_audio.iter().copied().min().unwrap_or(0);
+    for ch in &achans {
+        emu.set_audio_channel(ch.id, false);
+    }
+    // Flush any residual blip_buf decay from before channels were disabled.
+    run(&mut emu, 2, &mut Vec::new());
+    let mut muted_audio = Vec::new();
+    run(&mut emu, 10, &mut muted_audio);
+    let muted_spread = muted_audio.iter().copied().max().unwrap_or(0)
+        - muted_audio.iter().copied().min().unwrap_or(0);
+    assert!(
+        muted_spread < active_spread / 2,
+        "disabling all audio channels should attenuate output (active {active_spread}, muted {muted_spread})"
+    );
+    for ch in &achans {
+        emu.set_audio_channel(ch.id, true);
+    }
 }
 
 #[test]

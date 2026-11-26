@@ -4,16 +4,47 @@
 //! video buffer; both live as long as the core and are only replaced after the
 //! previous ROM is unloaded.
 
-use crate::{Buttons, EmuError, Emulator, Frame, MemoryRegion};
+use crate::{Buttons, ChannelInfo, EmuError, EmuLogEntry, Emulator, Frame, MemoryRegion, RomInfo};
+use std::collections::VecDeque;
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_int};
-use std::sync::Once;
+use std::os::raw::{c_char, c_int, c_void};
+use std::sync::{Mutex, Once, OnceLock};
 use tauros_mgba_sys as sys;
 
 /// Output sample rate, the one mGBA's own frontends use.
 const AUDIO_RATE: u32 = 32_768;
 /// Stereo frames buffered inside the core between two drains (about 4 frames).
 const AUDIO_BUFFER: usize = 2048;
+/// Maximum number of mGBA log entries retained between UI polls.
+const MAX_LOG_ENTRIES: usize = 256;
+
+unsafe extern "C" {
+    fn vsnprintf(
+        s: *mut c_char,
+        n: usize,
+        format: *const c_char,
+        arg: *mut sys::__va_list_tag,
+    ) -> c_int;
+    fn free(ptr: *mut c_void);
+}
+
+fn log_buffer() -> &'static Mutex<VecDeque<EmuLogEntry>> {
+    static LOGS: OnceLock<Mutex<VecDeque<EmuLogEntry>>> = OnceLock::new();
+    LOGS.get_or_init(|| Mutex::new(VecDeque::with_capacity(MAX_LOG_ENTRIES)))
+}
+
+fn log_level_name(level: sys::mLogLevel) -> &'static str {
+    match level {
+        sys::mLOG_FATAL => "FATAL",
+        sys::mLOG_ERROR => "ERROR",
+        sys::mLOG_WARN => "WARN",
+        sys::mLOG_INFO => "INFO",
+        sys::mLOG_DEBUG => "DEBUG",
+        sys::mLOG_STUB => "STUB",
+        sys::mLOG_GAME_ERROR => "GAME_ERROR",
+        _ => "LOG",
+    }
+}
 
 pub struct Mgba {
     core: *mut sys::mCore,
@@ -28,26 +59,56 @@ pub struct Mgba {
 // state for it, so it may move between threads (not be shared: it is not Sync).
 unsafe impl Send for Mgba {}
 
-unsafe extern "C" fn quiet_log(
+unsafe extern "C" fn capture_log(
     _logger: *mut sys::mLogger,
-    _category: c_int,
-    _level: sys::mLogLevel,
-    _format: *const c_char,
-    _args: *mut sys::__va_list_tag,
+    category: c_int,
+    level: sys::mLogLevel,
+    format: *const c_char,
+    args: *mut sys::__va_list_tag,
 ) {
+    // Skip high-volume debug/stub spam unless fatal/error/warn/info/game_error.
+    if level & (sys::mLOG_FATAL | sys::mLOG_ERROR | sys::mLOG_WARN | sys::mLOG_INFO | sys::mLOG_GAME_ERROR) == 0 {
+        return;
+    }
+    let message = if format.is_null() {
+        String::new()
+    } else {
+        let mut buf = [0u8; 512];
+        let written = unsafe { vsnprintf(buf.as_mut_ptr().cast(), buf.len(), format, args) };
+        if written < 0 {
+            unsafe { CStr::from_ptr(format) }.to_string_lossy().into_owned()
+        } else {
+            let len = (written as usize).min(buf.len() - 1);
+            String::from_utf8_lossy(&buf[..len]).trim_end_matches(['\r', '\n']).to_owned()
+        }
+    };
+    if message.is_empty() {
+        return;
+    }
+    if let Ok(mut logs) = log_buffer().lock() {
+        if logs.len() >= MAX_LOG_ENTRIES {
+            logs.pop_front();
+        }
+        logs.push_back(EmuLogEntry {
+            level: log_level_name(level).to_owned(),
+            category,
+            message,
+        });
+    }
 }
 
-/// mGBA logs to stderr by default; Tauros reports through its own errors instead.
-fn silence_logging() {
+/// mGBA logs to stderr by default; Tauros captures logs into an internal ring
+/// buffer and surfaces them in the emulator log panel instead.
+fn install_logger() {
     static ONCE: Once = Once::new();
-    static mut LOGGER: sys::mLogger = sys::mLogger { log: Some(quiet_log), filter: std::ptr::null_mut() };
+    static mut LOGGER: sys::mLogger = sys::mLogger { log: Some(capture_log), filter: std::ptr::null_mut() };
     ONCE.call_once(|| unsafe { sys::mLogSetDefaultLogger(std::ptr::addr_of_mut!(LOGGER)) });
 }
 
 impl Mgba {
     /// A GBA core with no ROM loaded.
     pub fn gba() -> Result<Self, EmuError> {
-        silence_logging();
+        install_logger();
         unsafe {
             let core = sys::GBACoreCreate();
             if core.is_null() {
@@ -253,6 +314,145 @@ impl Emulator for Mgba {
         }
         Ok(())
     }
+
+    fn rom_info(&self) -> Option<RomInfo> {
+        self.rom.as_ref()?;
+        unsafe {
+            let mut title_buf = [0 as c_char; 16];
+            let mut code_buf = [0 as c_char; 16];
+            if let Some(get_title) = (*self.core).getGameTitle {
+                get_title(self.core, title_buf.as_mut_ptr());
+            }
+            if let Some(get_code) = (*self.core).getGameCode {
+                get_code(self.core, code_buf.as_mut_ptr());
+            }
+            let title = CStr::from_ptr(title_buf.as_ptr()).to_string_lossy().trim().to_owned();
+            let code = CStr::from_ptr(code_buf.as_ptr()).to_string_lossy().trim().to_owned();
+            let rom_size = (*self.core).romSize.map(|f| f(self.core)).unwrap_or(0);
+            let mut save_ptr: *mut c_void = std::ptr::null_mut();
+            let save_size = (*self.core)
+                .savedataClone
+                .map(|clone_fn| {
+                    let sz = clone_fn(self.core, &mut save_ptr);
+                    if !save_ptr.is_null() {
+                        free(save_ptr);
+                    }
+                    sz
+                })
+                .unwrap_or(0);
+            Some(RomInfo {
+                title,
+                code,
+                rom_size,
+                frame_count: self.frame_count(),
+                save_size,
+            })
+        }
+    }
+
+    fn export_save(&mut self) -> Result<Vec<u8>, EmuError> {
+        if self.rom.is_none() {
+            return Err(EmuError::NoRom);
+        }
+        unsafe {
+            let clone_fn = (*self.core)
+                .savedataClone
+                .ok_or_else(|| EmuError::State("libmgba savedataClone unavailable".into()))?;
+            let mut ptr: *mut c_void = std::ptr::null_mut();
+            let size = clone_fn(self.core, &mut ptr);
+            if size == 0 || ptr.is_null() {
+                if !ptr.is_null() {
+                    free(ptr);
+                }
+                return Err(EmuError::State("no cartridge save memory is active for this ROM".into()));
+            }
+            let bytes = std::slice::from_raw_parts(ptr.cast::<u8>(), size).to_vec();
+            free(ptr);
+            Ok(bytes)
+        }
+    }
+
+    fn import_save(&mut self, data: &[u8]) -> Result<(), EmuError> {
+        if self.rom.is_none() {
+            return Err(EmuError::NoRom);
+        }
+        if data.is_empty() {
+            return Err(EmuError::State("save file is empty".into()));
+        }
+        unsafe {
+            let restore_fn = (*self.core)
+                .savedataRestore
+                .ok_or_else(|| EmuError::State("libmgba savedataRestore unavailable".into()))?;
+            if !restore_fn(self.core, data.as_ptr().cast(), data.len(), true) {
+                return Err(EmuError::State(format!(
+                    "libmgba rejected the {} byte save file",
+                    data.len()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn take_logs(&mut self) -> Vec<EmuLogEntry> {
+        log_buffer()
+            .lock()
+            .map(|mut q| q.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    fn video_layers(&self) -> Vec<ChannelInfo> {
+        unsafe { read_channel_list(self.core, (*self.core).listVideoLayers) }
+    }
+
+    fn set_video_layer(&mut self, id: usize, enabled: bool) {
+        unsafe {
+            if let Some(enable_fn) = (*self.core).enableVideoLayer {
+                enable_fn(self.core, id, enabled);
+            }
+        }
+    }
+
+    fn audio_channels(&self) -> Vec<ChannelInfo> {
+        unsafe { read_channel_list(self.core, (*self.core).listAudioChannels) }
+    }
+
+    fn set_audio_channel(&mut self, id: usize, enabled: bool) {
+        unsafe {
+            if let Some(enable_fn) = (*self.core).enableAudioChannel {
+                enable_fn(self.core, id, enabled);
+            }
+        }
+    }
+}
+
+unsafe fn read_channel_list(
+    core: *const sys::mCore,
+    list_fn: Option<unsafe extern "C" fn(*const sys::mCore, *mut *const sys::mCoreChannelInfo) -> usize>,
+) -> Vec<ChannelInfo> {
+    let Some(list_fn) = list_fn else {
+        return Vec::new();
+    };
+    let mut ptr: *const sys::mCoreChannelInfo = std::ptr::null();
+    let n = unsafe { list_fn(core, &mut ptr) };
+    if ptr.is_null() || n == 0 {
+        return Vec::new();
+    }
+    unsafe { std::slice::from_raw_parts(ptr, n) }
+        .iter()
+        .map(|c| ChannelInfo {
+            id: c.id,
+            internal_name: if c.internalName.is_null() {
+                String::new()
+            } else {
+                unsafe { CStr::from_ptr(c.internalName) }.to_string_lossy().into_owned()
+            },
+            visible_name: if c.visibleName.is_null() {
+                String::new()
+            } else {
+                unsafe { CStr::from_ptr(c.visibleName) }.to_string_lossy().into_owned()
+            },
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -252,6 +252,28 @@ pub struct BootReport {
     pub location: Location,
 }
 
+/// Reads the player's live map group/num and coordinates from `gSaveBlock1Ptr`,
+/// returning `Ok(None)` when the pointer is null or outside GBA EWRAM (e.g.
+/// on the copyright/title screens before a save or new game is active).
+pub fn read_live_location(
+    emu: &(impl Emulator + ?Sized),
+    sb1_ptr_addr: u32,
+    layout: GameLayout,
+) -> Result<Option<Location>, BootError> {
+    let sb1 = emu.read_u32(sb1_ptr_addr)?;
+    if !(0x0200_0000..0x0204_0000).contains(&sb1) {
+        return Ok(None);
+    }
+    let loc = emu.read_memory(sb1 + layout.sb1_location, 2)?;
+    let pos = emu.read_memory(sb1 + layout.sb1_pos, 4)?;
+    Ok(Some(Location {
+        group: loc[0],
+        num: loc[1],
+        x: i16::from_le_bytes([pos[0], pos[1]]),
+        y: i16::from_le_bytes([pos[2], pos[3]]),
+    }))
+}
+
 /// Frames allowed for each wait; the measured waits are far shorter.
 const WAIT_LIMIT: u32 = 900;
 /// Frames run after arriving, so the fade-in and map scripts have finished.
@@ -286,10 +308,8 @@ impl BootPlan {
 
     /// The location and position the game holds in `gSaveBlock1Ptr`.
     pub fn location(&self, emu: &(impl Emulator + ?Sized)) -> Result<Location, BootError> {
-        let sb1 = emu.read_u32(self.sb1_ptr)?;
-        let loc = emu.read_memory(sb1 + self.layout.sb1_location, 2)?;
-        let pos = emu.read_memory(sb1 + self.layout.sb1_pos, 4)?;
-        Ok(Location { group: loc[0], num: loc[1], x: i16::from_le_bytes([pos[0], pos[1]]), y: i16::from_le_bytes([pos[2], pos[3]]) })
+        read_live_location(emu, self.sb1_ptr, self.layout)?
+            .ok_or_else(|| BootError("gSaveBlock1Ptr is not initialized in EWRAM".into()))
     }
 
     /// Whether saved flag `n` is set.

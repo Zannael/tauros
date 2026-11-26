@@ -40,8 +40,8 @@ fn main() {
         ("SKIP_GIT", "ON"),
         ("DISABLE_DEPS", "ON"),
         ("ENABLE_SCRIPTING", "OFF"),
-        ("ENABLE_DEBUGGERS", "OFF"),
-        ("ENABLE_GDB_STUB", "OFF"),
+        ("USE_DEBUGGERS", "OFF"),
+        ("USE_GDB_STUB", "OFF"),
     ] {
         config.define(key, value);
     }

@@ -3078,3 +3078,13 @@ yet verified. If it does not, the GFX-012 dependency is added to GFX-004 and rec
   (the scratch copy still has the GFX-001 `gfx_test` wiring), the rendering is an approximation (no layer types).
 
 **Verified 2026-11-25 (Owner check):** Simone opened the built ROM in the app on Petalburg City and confirmed the snowy look (ground, trees, roofs), walking, doors and the snowfall; both entries are now `verified`. GFX-004 is Done within the split scope; the isolation hypothesis above held for this case (cloned primary, no GFX-012 remapping needed because metatile ids are unchanged).
+
+## Emulator panel completion and mGBA controls (APP-003, 2026-11-26)
+
+**Owner decision (Simone, 2026-11-26):** prioritize finishing `APP-003` ahead of `APP-006`, porting practical mGBA desktop testing and inspection controls into the emulation pane while keeping layout/aesthetic consolidation for `APP-006`.
+
+**Verified facts:**
+- `crates/mgba-sys/build.rs`: mGBA 0.10.5's CMake option is `USE_DEBUGGERS` / `USE_GDB_STUB` (not `ENABLE_DEBUGGERS` / `ENABLE_GDB_STUB`). Switching `build.rs` to `USE_DEBUGGERS=OFF` and `USE_GDB_STUB=OFF` aligns `struct mCore` field offsets with `bindgen`, enabling `savedataClone`/`savedataRestore`, `listVideoLayers`/`enableVideoLayer`, and `listAudioChannels`/`enableAudioChannel`.
+- `crates/app/tauri.conf.json` + `crates/app/src/main.rs`: WebKitGTK's `ipc://` custom-protocol binary `fetch()` requires `connect-src 'self' ipc: http://ipc.localhost` in CSP; `extract_binary_body` also accepts Tauri's JSON byte-array fallback for `load_rom`, `emu_import_save`, and `emu_load_state_file`.
+- Implemented and verified (`cargo test -p tauros-emu`, `cargo test -p tauros-app --lib --bins`, `node tests/emu_ui.cjs`, and Owner desktop confirmation): File/Emulation/Audio-Video/Tools menus, transport strip, ROM info, `.sav` import/export, quick savestate slots 1-9 and `.ss` file save/load, Pause/Reset/Frame Advance/Fast Forward/Rewind, Scale/Aspect/Mute/Volume/PNG screenshot, persisted key remapping, mGBA log panel, Video Layers (`BG0`–`BG3`, `OBJ`) and Audio Channels (`PSG 1`–`4`, `FIFO A`/`B`) toggles, tabbed Game State Viewers (Palette, Tile/VRAM, OAM/Sprite, Memory & `.sym` inspector), `Agent held` status badge, automatic selected/live agent context, and post-build preview banner.
+- **Limits:** `codex_adapter` and `codex_lists_visible_models_and_overrides_following_turns` failed under the restricted sandbox (`bwrap` / `Codex disconnected`, untouched); UI tabs and layer toggles were verified via unit tests on GBA hardware RAM and Owner desktop trial rather than automated WebKitGTK click-through.

@@ -59,6 +59,7 @@ impl Launch {
                 name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
                 rom: read(path)?,
                 boot: None,
+                layout: None,
             }),
             Self::Point { project, target } => {
                 let rom = read(&project.join("pokeemerald.gba"))?;
@@ -70,7 +71,7 @@ impl Launch {
                 let toolchain = Toolchain::for_repository(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))?;
                 let layout = GameLayout::measure(&toolchain, project).map_err(|e| e.to_string())?;
                 let boot = BootPlan::new(target.clone(), &snapshot, &maps, &Symbols::parse(&symbols), layout).map_err(|e| e.to_string())?;
-                Ok(PreparedLaunch { name: format!("{} ({}, {})", target.map.0, target.x, target.y), rom, boot: Some(boot) })
+                Ok(PreparedLaunch { name: format!("{} ({}, {})", target.map.0, target.x, target.y), rom, boot: Some(boot), layout: Some(layout) })
             }
         }
     }
@@ -80,4 +81,11 @@ pub struct PreparedLaunch {
     pub name: String,
     pub rom: Vec<u8>,
     pub boot: Option<BootPlan>,
+    pub layout: Option<GameLayout>,
+}
+
+impl PreparedLaunch {
+    pub fn rom_only(name: String, rom: Vec<u8>) -> Self {
+        Self { name, rom, boot: None, layout: None }
+    }
 }

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use tauros_agent_bridge::McpServerConfig;
-use tauros_connector_gen3::boot::{map_numbers, BootPlan, BootTarget, GameLayout, Symbols};
+use tauros_connector_gen3::boot::{map_numbers, read_live_location, BootPlan, BootTarget, GameLayout, Symbols};
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
 use tauros_emu::{Emulator, Mgba};
@@ -58,7 +58,7 @@ pub struct Gen3BootHook {
     project_dir: PathBuf,
     connector: Arc<Mutex<Box<dyn Connector + Send>>>,
     toolchain: Option<Toolchain>,
-    cached_layout: Option<(String, GameLayout)>,
+    cached_layout: Arc<Mutex<Option<(String, GameLayout)>>>,
 }
 
 impl Gen3BootHook {
@@ -67,23 +67,28 @@ impl Gen3BootHook {
         connector: Arc<Mutex<Box<dyn Connector + Send>>>,
         toolchain: Option<Toolchain>,
     ) -> Self {
+        Self::with_shared_layout(project_dir, connector, toolchain, Arc::new(Mutex::new(None)))
+    }
+
+    pub fn with_shared_layout(
+        project_dir: PathBuf,
+        connector: Arc<Mutex<Box<dyn Connector + Send>>>,
+        toolchain: Option<Toolchain>,
+        cached_layout: Arc<Mutex<Option<(String, GameLayout)>>>,
+    ) -> Self {
         Self {
             project_dir,
             connector,
             toolchain,
-            cached_layout: None,
+            cached_layout,
         }
     }
 
     fn layout(&mut self) -> Result<GameLayout, String> {
         // Native edits can change C struct layouts; only reuse a measurement at
         // the same source revision. Failed recordings invalidate it as well.
-        let revision = std::process::Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(&self.project_dir).output()
-            .map_err(|e| e.to_string())?;
-        let revision = String::from_utf8_lossy(&revision.stdout).trim().to_owned();
-        if let Some((cached_revision, layout)) = &self.cached_layout {
+        let revision = git_head_revision(&self.project_dir)?;
+        if let Some((cached_revision, layout)) = self.cached_layout.lock().unwrap().as_ref() {
             if *cached_revision == revision {
                 return Ok(*layout);
             }
@@ -93,9 +98,18 @@ impl Gen3BootHook {
             .as_ref()
             .ok_or_else(|| "toolchain not configured; cannot measure Gen 3 struct layout".to_owned())?;
         let layout = GameLayout::measure(toolchain, &self.project_dir).map_err(|e| e.to_string())?;
-        self.cached_layout = Some((revision, layout));
+        *self.cached_layout.lock().unwrap() = Some((revision, layout));
         Ok(layout)
     }
+}
+
+fn git_head_revision(project_dir: &Path) -> Result<String, String> {
+    let revision = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(project_dir)
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&revision.stdout).trim().to_owned())
 }
 
 impl BootHook for Gen3BootHook {
@@ -158,6 +172,72 @@ pub struct ProjectSession {
     connector: Arc<Mutex<Box<dyn Connector + Send>>>,
     emulator: Arc<Mutex<EmuSession>>,
     operation_gate: Arc<Mutex<()>>,
+    cached_layout: Arc<Mutex<Option<(String, GameLayout)>>>,
+    last_build_sha256: Arc<Mutex<Option<String>>>,
+    last_boot: Arc<Mutex<Option<LastBootTarget>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct LastBootTarget {
+    pub map: String,
+    pub x: i16,
+    pub y: i16,
+    pub flags: Vec<String>,
+    pub rom_sha256: String,
+}
+
+/// Live emulator location and build-sync context shared with the UI and agent.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AgentEmuContext {
+    pub selected_map: Option<String>,
+    pub selected_x: Option<i16>,
+    pub selected_y: Option<i16>,
+    pub launch_target: Option<LastBootTarget>,
+    pub live_status: String,
+    pub live_map: Option<String>,
+    pub live_group: Option<u8>,
+    pub live_num: Option<u8>,
+    pub live_x: Option<i16>,
+    pub live_y: Option<i16>,
+    pub loaded_rom_sha256: Option<String>,
+    pub built_rom_sha256: Option<String>,
+    pub rom_stale: bool,
+    pub new_build_pending: bool,
+}
+
+impl AgentEmuContext {
+    /// Formats a concise structured context block for the agent, keeping the
+    /// UI-selected map, launch target, and live emulator position distinct.
+    pub fn to_prompt_block(&self) -> String {
+        let selected = match (&self.selected_map, self.selected_x, self.selected_y) {
+            (Some(m), Some(x), Some(y)) => format!("{m} ({x}, {y})"),
+            (Some(m), _, _) => m.clone(),
+            _ => "none".to_owned(),
+        };
+        let launch = match &self.launch_target {
+            Some(t) if t.flags.is_empty() => format!("{} ({}, {})", t.map, t.x, t.y),
+            Some(t) => format!("{} ({}, {}) flags={}", t.map, t.x, t.y, t.flags.join(",")),
+            None => "none".to_owned(),
+        };
+        let live = match (&self.live_map, self.live_x, self.live_y) {
+            (Some(m), Some(x), Some(y)) => format!("{} at {m} ({x}, {y})", self.live_status),
+            (None, Some(x), Some(y)) => format!(
+                "{} at map ({:?}, {:?}) ({x}, {y})",
+                self.live_status, self.live_group, self.live_num
+            ),
+            _ => self.live_status.clone(),
+        };
+        let loaded = self.loaded_rom_sha256.as_deref().map(|s| &s[..s.len().min(12)]).unwrap_or("none");
+        let built = self.built_rom_sha256.as_deref().map(|s| &s[..s.len().min(12)]).unwrap_or("none");
+        format!(
+            "[Tauros Workspace Context]\n\
+             selected_preview_map: {selected}\n\
+             launch_target: {launch}\n\
+             live_emulator: {live}\n\
+             loaded_rom: {loaded} | disk_built_rom: {built} | rom_stale: {} | new_build_pending: {}\n",
+            self.rom_stale, self.new_build_pending
+        )
+    }
 }
 
 /// Bounds and a bounded starting point for a preview destination. Walkability
@@ -199,17 +279,52 @@ impl ProjectSession {
         let connector = Gen3Connector::open(project_dir, toolchain.clone())
             .map_err(|e| format!("failed to open Gen 3 project {}: {e}", project_dir.display()))?;
         let connector: Arc<Mutex<Box<dyn Connector + Send>>> = Arc::new(Mutex::new(Box::new(connector)));
+        let cached_layout = Arc::new(Mutex::new(None));
         let mgba = Mgba::gba().map_err(|e| format!("failed to initialize libmgba core: {e}"))?;
         let mut session = EmuSession::new(mgba)
             .with_constants(load_project_constants(project_dir))
-            .with_boot_hook(Gen3BootHook::new(project_dir.to_path_buf(), Arc::clone(&connector), toolchain));
+            .with_boot_hook(Gen3BootHook::with_shared_layout(
+                project_dir.to_path_buf(),
+                Arc::clone(&connector),
+                toolchain,
+                Arc::clone(&cached_layout),
+            ));
         if let Some(base) = base_rom {
             session = session.with_base_rom(base);
         }
         if project_dir.join("pokeemerald.gba").is_file() && project_dir.join("pokeemerald.sym").is_file() {
             reload_project_artifacts(project_dir, &mut session)?;
         }
-        Ok(Self { dir: project_dir.to_path_buf(), connector, emulator: Arc::new(Mutex::new(session)), operation_gate: Arc::new(Mutex::new(())) })
+        Ok(Self {
+            dir: project_dir.to_path_buf(),
+            connector,
+            emulator: Arc::new(Mutex::new(session)),
+            operation_gate: Arc::new(Mutex::new(())),
+            cached_layout,
+            last_build_sha256: Arc::new(Mutex::new(None)),
+            last_boot: Arc::new(Mutex::new(None)),
+        })
+    }
+
+    /// Seeds the cached struct layout when measured externally (e.g. during CLI launch).
+    pub fn record_layout(&self, layout: GameLayout) {
+        if let Ok(rev) = git_head_revision(&self.dir) {
+            *self.cached_layout.lock().unwrap() = Some((rev, layout));
+        }
+    }
+
+    /// Records a boot target performed at launch or via preview/build.
+    pub fn record_boot(&self, map: &str, x: i16, y: i16, flags: &[String], rom_sha256: &str) {
+        *self.last_boot.lock().unwrap() = Some(LastBootTarget {
+            map: map.to_owned(),
+            x,
+            y,
+            flags: flags.to_vec(),
+            rom_sha256: rom_sha256.to_owned(),
+        });
+        if self.last_build_sha256.lock().unwrap().as_deref() == Some(rom_sha256) {
+            *self.last_build_sha256.lock().unwrap() = None;
+        }
     }
 
     pub fn dir(&self) -> &Path {
@@ -229,10 +344,15 @@ impl ProjectSession {
     /// reloads the new ROM and `.sym` into the shared session.
     pub fn mcp_server(&self) -> TaurosServer {
         let reload_dir = self.dir.clone();
+        let build_sha = Arc::clone(&self.last_build_sha256);
         TaurosServer::with_shared_connector(Arc::clone(&self.connector))
             .with_operation_gate(Arc::clone(&self.operation_gate))
             .with_shared_emulator(self.emulator())
-            .with_post_build_hook(move |session| reload_project_artifacts(&reload_dir, session))
+            .with_post_build_hook(move |session| {
+                reload_project_artifacts(&reload_dir, session)?;
+                *build_sha.lock().unwrap() = session.rom_sha256().map(str::to_owned);
+                Ok(())
+            })
     }
 
     /// The project's map ids, sorted.
@@ -267,6 +387,7 @@ impl ProjectSession {
         let rom_sha256 = session.rom_sha256().ok_or("no built ROM loaded")?.to_owned();
         let request = EmuBootRequest { kind: BootKind::BootTo, map: Some(map.to_owned()), x: Some(x), y: Some(y), flags: flags.to_vec(), frames: 0 };
         let booted = emu_boot(&mut session, request).map_err(|e| format!("{}: {}", e.kind, e.message))?;
+        self.record_boot(map, x, y, flags, &rom_sha256);
         Ok(BuildAndBoot { rom_sha256, boot_frames: booted.frame_count })
     }
 
@@ -284,7 +405,113 @@ impl ProjectSession {
         reload_project_artifacts(&self.dir, &mut session)?;
         let request = EmuBootRequest { kind: BootKind::BootTo, map: Some(map.to_owned()), x: Some(x), y: Some(y), flags: flags.to_vec(), frames: 0 };
         let booted = emu_boot(&mut session, request).map_err(|e| format!("{}: {}", e.kind, e.message))?;
+        self.record_boot(map, x, y, flags, &built.rom_sha256);
         Ok(BuildAndBoot { rom_sha256: built.rom_sha256, boot_frames: booted.frame_count })
+    }
+
+    /// Reads the live emulator location and build/selection state without running builds.
+    pub fn agent_context(
+        &self,
+        selected_map: Option<String>,
+        selected_x: Option<i16>,
+        selected_y: Option<i16>,
+        launch_target: Option<LastBootTarget>,
+    ) -> AgentEmuContext {
+        use sha2::{Digest, Sha256};
+        let rom_path = self.dir.join("pokeemerald.gba");
+        let built_rom_sha256 = fs::read(&rom_path)
+            .ok()
+            .map(|bytes| format!("{:x}", Sha256::digest(&bytes)));
+        let (loaded_rom_sha256, live_status, live_map, live_group, live_num, live_x, live_y) =
+            match self.emulator.try_lock() {
+                Err(_) => (None, "emulator_busy".to_owned(), None, None, None, None, None),
+                Ok(session) => {
+                    let loaded_sha = session.rom_sha256().map(str::to_owned);
+                    if !session.has_rom() {
+                        (loaded_sha, "no_rom".to_owned(), None, None, None, None, None)
+                    } else if built_rom_sha256.is_some() && loaded_sha != built_rom_sha256 {
+                        (loaded_sha, "stale_rom".to_owned(), None, None, None, None, None)
+                    } else {
+                        let cached = self.cached_layout.lock().unwrap().clone();
+                        let current_rev = git_head_revision(&self.dir).ok();
+                        let layout = cached.and_then(|(rev, l)| {
+                            (current_rev.as_deref() == Some(rev.as_str())).then_some(l)
+                        });
+                        let sb1_addr = session.symbols().get("gSaveBlock1Ptr");
+                        match (layout, sb1_addr) {
+                            (Some(layout), Some(sb1_ptr)) => {
+                                match read_live_location(session.emulator(), sb1_ptr, layout) {
+                                    Ok(Some(loc)) => {
+                                        let map_name = map_numbers(&self.dir).ok().and_then(|maps| {
+                                            maps.into_iter()
+                                                .find(|(_, (g, n))| *g == loc.group && *n == loc.num)
+                                                .map(|(name, _)| name)
+                                        });
+                                        (
+                                            loaded_sha,
+                                            "ok".to_owned(),
+                                            map_name,
+                                            Some(loc.group),
+                                            Some(loc.num),
+                                            Some(loc.x),
+                                            Some(loc.y),
+                                        )
+                                    }
+                                    Ok(None) => (
+                                        loaded_sha,
+                                        "title_or_uninitialized".to_owned(),
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                    ),
+                                    Err(_) => (
+                                        loaded_sha,
+                                        "unavailable".to_owned(),
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                        None,
+                                    ),
+                                }
+                            }
+                            _ => (
+                                loaded_sha,
+                                "layout_unmeasured".to_owned(),
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                            ),
+                        }
+                    }
+                }
+            };
+        let rom_stale = built_rom_sha256.is_some()
+            && loaded_rom_sha256.is_some()
+            && built_rom_sha256 != loaded_rom_sha256;
+        let pending_sha = self.last_build_sha256.lock().unwrap().clone();
+        let new_build_pending = pending_sha.is_some() && pending_sha == loaded_rom_sha256;
+        let effective_launch = launch_target.or_else(|| self.last_boot.lock().unwrap().clone());
+        AgentEmuContext {
+            selected_map,
+            selected_x,
+            selected_y,
+            launch_target: effective_launch,
+            live_status,
+            live_map,
+            live_group,
+            live_num,
+            live_x,
+            live_y,
+            loaded_rom_sha256,
+            built_rom_sha256,
+            rom_stale,
+            new_build_pending,
+        }
     }
 }
 
@@ -466,7 +693,14 @@ mod preview_tests {
         let emulator = EmuSession::new(emu).with_rom(vec![9]).unwrap().with_boot_hook(SyntheticBoot(Arc::clone(&calls)));
         let project = ProjectSession { dir: dir.clone(),
             connector: Arc::new(Mutex::new(Box::new(MemoryConnector::new(snapshot)))),
-            emulator: Arc::new(Mutex::new(emulator)), operation_gate: Arc::new(Mutex::new(())) };
+            emulator: Arc::new(Mutex::new(emulator)), operation_gate: Arc::new(Mutex::new(())),
+            cached_layout: Arc::new(Mutex::new(None)),
+            last_build_sha256: Arc::new(Mutex::new(None)),
+            last_boot: Arc::new(Mutex::new(None)) };
+        let ctx_before = project.agent_context(Some("MAP_TEST_MART".into()), Some(5), Some(4), None);
+        assert_eq!(ctx_before.live_status, "stale_rom");
+        assert!(ctx_before.rom_stale);
+        assert!(!ctx_before.new_build_pending);
         let bounds = project.preview_maps().unwrap();
         assert_eq!((bounds[0].default_x, bounds[0].default_y), (5, 4));
         let original_hash = project.emulator.lock().unwrap().rom_sha256().unwrap().to_owned();

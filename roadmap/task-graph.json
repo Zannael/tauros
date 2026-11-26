@@ -1,6 +1,5 @@
 {
   "active_ids": [
-    "APP-003",
     "DEC-004"
   ],
   "ready_ids": [
@@ -1089,26 +1088,26 @@
       "verification": null
     },
     {
-      "completion": "From an open map, one action builds and boots there; agent context distinguishes selected map from actual emulator location, unavailable context is explicit, and agent-held refresh is labelled clearly. An agent build can be previewed directly at the intended map without manual New Game navigation; record the Owner manual check and supported state-preservation limits. Invalid targets are rejected before build/reload, and the separate built-ROM preview does not invoke the ROM builder.",
+      "completion": "From an open map, one action builds and boots there; agent context distinguishes selected map from actual emulator location, unavailable context is explicit, and agent-held refresh is labelled clearly. An agent build can be previewed directly at the intended map without manual New Game navigation; invalid targets are rejected before build/reload, and the separate built-ROM preview does not invoke the ROM builder. Block 1 emulator menu/controls (ROM info, .sav import/export, savestate slots/files, Pause/Resume/Reset/Frame Advance/Fast Forward/Rewind, Scale/Aspect/Mute/Volume/PNG screenshot, persisted key remapping, emulator log) and Block 2 state viewers/layer toggles are tested and confirmed by the Owner in the native app, with limits documented in README and master.md.",
       "dependents": [
         "APP-005"
       ],
       "id": "APP-003",
       "incomplete_prerequisites": [],
-      "note": "(owner: Codex, Owner sequencing 2026-11-21: retain existing partial implementation; resume feature expansion only after APP-006 acceptance. Fixed map-switch bounds and added separate Preview of the existing built ROM without a ROM build. Picker remembers per-map points and uses bounded centre defaults; backend rejects bad targets before build/reload. Targeted synthetic backend test, actual UI handlers under a temporary mocked DOM, JS syntax and app Clippy passed. Real Mart boot/walkability/timing still needs Owner acceptance; no game changes, commits or paid tests. Automatic agent context and held-refresh label remain open.)",
-      "owner": "Codex",
+      "note": null,
+      "owner": "Antigravity",
       "prerequisites": [
         "EMU-003",
         "EMU-004",
         "G3-005"
       ],
       "responsible": "Agent",
-      "scope": "Build-and-preview from the editor in the same window, boot to the selected map or scene. The window's emulator is the same session the agent's MCP emulator tools drive, so what the agent builds, boots and checks appears in the window (accepted 2026-11-19, see master.md \"Streaming chat panel (AGT-003)\"). Owner follow-up 2026-11-20: pass structured context for the selected preview/editor map and the actual emulator map/position to the agent, keeping selection, launch target and live location distinct and marking unavailable/stale state. Show an explicit agent-held state instead of presenting the 10 Hz frame refresh as gameplay FPS. After an agent build, provide a direct preview at the selected/current target without a manual New Game sequence; keep the target and supported flags explicit. Owner map-switch follow-up 2026-11-20: prevent stale out-of-bounds coordinates when changing maps and reject invalid targets before building; add a separate preview action using the existing built ROM/symbol pair without rebuilding the ROM. Document that this is a fresh boot-to-point, not instant live-state teleportation, and that bounded defaults do not guarantee walkability. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Layered architecture\" (layer 1).",
+      "scope": "Build-and-preview from the editor in the same window, boot to the selected map or scene. The window's emulator is the same session the agent's MCP emulator tools drive, so what the agent builds, boots and checks appears in the window (accepted 2026-11-19, see master.md \"Streaming chat panel (AGT-003)\"). Owner follow-up 2026-11-20: pass structured context for the selected preview/editor map and the actual emulator map/position to the agent, keeping selection, launch target and live location distinct and marking unavailable/stale state. Show an explicit agent-held state instead of presenting the 10 Hz frame refresh as gameplay FPS. After an agent build, provide a direct preview at the selected/current target without a manual New Game sequence; keep the target and supported flags explicit. Owner map-switch follow-up 2026-11-20: prevent stale out-of-bounds coordinates when changing maps and reject invalid targets before building; add a separate preview action using the existing built ROM/symbol pair without rebuilding the ROM. Owner expansion 2026-11-26 (prioritized ahead of APP-006 layout polish): port practical mGBA desktop testing/inspection controls into the emulation pane in two blocks — Block 1: File (Open ROM, ROM info, .sav import/export, quick savestate slots 1-9 and file save/load), Emulation (Pause/Resume, Reset, Frame Advance, Fast Forward speeds, Rewind), Audio/Video (Scale/Aspect Ratio, Mute/Volume, real FPS/state readout, PNG Screenshot), Tools (persisted GBA key remapping, emulator log); Block 2: Game state viewers (Palette, Tile/VRAM, OAM/Sprite, Memory and .sym inspector) and video/audio layer toggles. Excludes ARM/GDB debugger, Lua scripting, cheats, hardware sensors, link-cable multiplayer, IPS/archive loaders and GLSL shaders. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Layered architecture\" (layer 1).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
       "source_line": 462,
-      "status": "In progress",
+      "status": "Done",
       "title": "Emulator panel integrated with the editor.",
-      "verification": null
+      "verification": "2026-11-26 UTC: Owner confirmed the completed APP-003 desktop emulator pane (Block 1 + Block 2) in the native app on Linux after fixing WebKitGTK binary IPC CSP (`connect-src 'self' ipc: http://ipc.localhost` + JSON-array `extract_binary_body` fallback) and `libmgba` CMake `USE_DEBUGGERS=OFF` / `USE_GDB_STUB=OFF` alignment with `bindgen`. Checks run: `cargo test -p tauros-emu` (all passed, including `rom_info`, `export_save`/`import_save`, `video_layers`, `audio_channels` attenuation, and Emerald ROM tests), `cargo test -p tauros-app --lib --bins` (13 lib + 3 bin tests passed: `emu_config`, `emu_files`, `emu_inspect` Palette/Tile/OAM/Memory+deref decoders, `playback` step/reset/speed/rewind/agent_held, `mcp_host::preview_tests` bounds/agent_context, `extract_binary_body`), `cargo clippy -p tauros-app --tests -- -D warnings`, `cargo build -p tauros-app`, `node --check` on `main.js`/`emu_ui.js`/`emu_inspect_ui.js`, `node tests/emu_ui.cjs`, `node tests/voice_ui.cjs`, `python3 -m unittest tests/test_roadmap.py tests/test_layers.py tests/test_privacy.py -v` (47 OK), `check_roadmap.py` and `check_private.py --all`. Limits: `codex_adapter` / `codex_lists_visible_models_and_overrides_following_turns` failed in the restricted sandbox due to `bwrap` (`Codex disconnected`, untouched); Tile/OAM/Palette/Memory UI tabs and layer toggles were verified via unit tests on GBA hardware RAM and Owner desktop trial rather than automated WebKitGTK click-through; no commit-time `TAUROS_DOCKER_TESTS=1` rerun was performed."
     },
     {
       "completion": "Tests show undo restores the previous snapshot exactly; the view lists changes with their origin.",
@@ -1139,7 +1138,6 @@
       "incomplete_prerequisites": [
         "APP-001",
         "APP-002",
-        "APP-003",
         "MCP-005",
         "APP-006"
       ],
@@ -1650,13 +1648,12 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "a90a8ff05f7c96bcb5e6666d0e6e87e26e51fdf25f2e8e825bef12ebb5c183d4",
+  "todo_sha256": "a1f21e1fe90e930fb305320d8cbae2c7ba0bfaa0705b71237a3413f396c08170",
   "topological_layers": [
     [
       "AGT-005",
       "AGT-009",
       "APP-006",
-      "APP-003",
       "PROV-001",
       "DEC-004",
       "GFX-002",

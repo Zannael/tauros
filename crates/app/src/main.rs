@@ -20,15 +20,27 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::ipc::{Channel, InvokeBody, InvokeResponseBody, Request};
 use tauros_agent_bridge::claude_sidecar::ClaudeSidecarConfig;
 use tauros_agent_bridge::AgentEvent;
 use tauros_app::chat::{antigravity_backend, claude_backend, codex_backend, Chat};
+use tauros_app::emu_config::{
+    emulator_data_dir, load_config, save_config, EmuConfig, EmuPrefs, KeyMap,
+};
+use tauros_app::emu_files::{
+    export_save_file, import_save_bytes, list_quick_slots, load_quick_slot,
+    load_state_from_bytes, save_quick_slot, save_screenshot, save_state_to_file,
+    SavedFileReceipt, SavestateSlotStatus,
+};
+use tauros_app::emu_inspect::{
+    list_memory_regions, read_memory_window, read_oam, read_palettes, read_tiles_rgba,
+    MemoryRegionDto, MemoryWindowDto, OamEntryDto, PaletteDump, SymbolMatchDto, TileSheetDto,
+};
 use tauros_app::history::{list_history, undo_to, HistoryEntry, UndoReceipt};
 use tauros_app::launch::{Launch, PreparedLaunch, USAGE};
-use tauros_app::mcp_host::{BuildAndBoot, ProjectSession};
-use tauros_app::playback::{buttons_from_mask, emulator_thread, Command};
+use tauros_app::mcp_host::{AgentEmuContext, BuildAndBoot, LastBootTarget, ProjectSession};
+use tauros_app::playback::{buttons_from_mask, emulator_thread, Command, PlaybackStatus};
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_emu::{Buttons, Mgba};
 use tauros_mcp::emulator::EmuSession;
@@ -36,6 +48,14 @@ use serde::Serialize;
 
 struct App {
     commands: Mutex<Sender<Command>>,
+    /// Shared emulator session (also wired to the project's MCP server when open).
+    emu_session: Arc<Mutex<EmuSession>>,
+    /// Persisted emulator key bindings and playback/AV preferences.
+    emu_config: Arc<RwLock<EmuConfig>>,
+    emu_data_dir: PathBuf,
+    rom_name: Mutex<String>,
+    video_layers_disabled: Mutex<std::collections::HashSet<usize>>,
+    audio_channels_disabled: Mutex<std::collections::HashSet<usize>>,
     /// A command-line ROM or project target, loaded when the window attaches.
     initial_launch: Option<Launch>,
     /// The `--project` game project, shared by the window and the agent's tools.
@@ -87,6 +107,8 @@ fn load(app: &App, launch: PreparedLaunch) -> Result<(), String> {
     let (reply, result) = mpsc::channel();
     send(app, Command::Load(launch, reply))?;
     let report = result.recv().map_err(|_| "the emulator thread stopped".to_owned())??;
+    app.video_layers_disabled.lock().unwrap().clear();
+    app.audio_channels_disabled.lock().unwrap().clear();
     if let Some(report) = report {
         eprintln!("tauros: booted {report:?}");
     }
@@ -95,21 +117,77 @@ fn load(app: &App, launch: PreparedLaunch) -> Result<(), String> {
 
 /// Attaches the window's frame channel and starts the CLI-selected launch, if any.
 #[tauri::command]
-fn attach(app: tauri::State<'_, App>, on_frame: Channel<InvokeResponseBody>) -> Result<Option<String>, String> {
+fn attach(
+    app: tauri::State<'_, App>,
+    on_frame: Channel<InvokeResponseBody>,
+) -> Result<Option<String>, String> {
     eprintln!("tauros: window attached");
     send(&app, Command::Attach(on_frame))?;
     let Some(launch) = &app.initial_launch else { return Ok(None) };
     let prepared = launch.prepare()?;
     let name = prepared.name.clone();
+    let layout = prepared.layout;
     load(&app, prepared)?;
+    *app.rom_name.lock().unwrap() = name.clone();
+    if let (Some(project), Some(Launch::Point { target, .. })) = (&app.project, &app.initial_launch) {
+        if let Some(l) = layout {
+            project.record_layout(l);
+        }
+        let rom_sha = app.emu_session.lock().unwrap().rom_sha256().unwrap_or_default().to_owned();
+        let flags: Vec<String> = target.flags.iter().map(|f| f.0.clone()).collect();
+        project.record_boot(&target.map.0, target.x, target.y, &flags, &rom_sha);
+    }
     Ok(Some(name))
+}
+
+#[tauri::command]
+fn attach_status(app: tauri::State<'_, App>, on_status: Channel<PlaybackStatus>) -> Result<(), String> {
+    send(&app, Command::AttachStatus(on_status))
+}
+
+/// Extracts raw bytes from either Tauri's binary IPC (`InvokeBody::Raw`) or
+/// its JSON `postMessage` fallback (`InvokeBody::Json` array of byte values).
+fn extract_binary_body(body: &InvokeBody, label: &str) -> Result<Vec<u8>, String> {
+    match body {
+        InvokeBody::Raw(bytes) => Ok(bytes.clone()),
+        InvokeBody::Json(serde_json::Value::Array(items)) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                let n = item
+                    .as_u64()
+                    .and_then(|v| u8::try_from(v).ok())
+                    .ok_or_else(|| format!("expected {label} as binary bytes"))?;
+                out.push(n);
+            }
+            Ok(out)
+        }
+        _ => Err(format!("expected {label} as a binary body")),
+    }
 }
 
 /// Loads a ROM sent as the raw request body.
 #[tauri::command]
 fn load_rom(app: tauri::State<'_, App>, request: Request<'_>) -> Result<(), String> {
-    let InvokeBody::Raw(rom) = request.body() else { return Err("expected the ROM bytes as a binary body".into()) };
-    load(&app, PreparedLaunch { name: String::new(), rom: rom.clone(), boot: None })
+    let rom = extract_binary_body(request.body(), "the ROM bytes")?;
+    let name = request
+        .headers()
+        .get("x-rom-name")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+        .unwrap_or_else(|| "rom.gba".to_owned());
+    load(&app, PreparedLaunch::rom_only(name.clone(), rom))?;
+    *app.rom_name.lock().unwrap() = name;
+    Ok(())
+}
+
+#[tauri::command]
+fn emu_set_rom_name(app: tauri::State<'_, App>, name: String) -> Result<(), String> {
+    let clean = name.trim();
+    if clean.is_empty() {
+        return Ok(());
+    }
+    *app.rom_name.lock().unwrap() = clean.to_owned();
+    send(&app, Command::SyncFrame(Some(clean.to_owned())))
 }
 
 /// Prints a diagnostic from the page (first frame, audio state, script errors) on
@@ -129,14 +207,336 @@ fn set_paused(app: tauri::State<'_, App>, paused: bool) -> Result<(), String> {
     send(&app, Command::Pause(paused))
 }
 
+#[tauri::command(async)]
+fn emu_reset(app: tauri::State<'_, App>) -> Result<(), String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let (tx, rx) = mpsc::channel();
+    send(&app, Command::Reset(tx))?;
+    rx.recv().map_err(|_| "the emulator thread stopped".to_owned())?
+}
+
+#[tauri::command(async)]
+fn emu_step_frame(app: tauri::State<'_, App>) -> Result<u32, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let (tx, rx) = mpsc::channel();
+    send(&app, Command::StepFrame(tx))?;
+    rx.recv().map_err(|_| "the emulator thread stopped".to_owned())?
+}
+
+#[tauri::command]
+fn emu_set_speed(app: tauri::State<'_, App>, speed: u8) -> Result<EmuConfig, String> {
+    let updated = {
+        let mut cfg = app.emu_config.write().unwrap();
+        cfg.prefs.speed = speed;
+        cfg.prefs.sanitize();
+        cfg.clone()
+    };
+    save_config(&app.emu_data_dir, &updated)?;
+    send(&app, Command::SetSpeed(updated.prefs.speed))?;
+    Ok(updated)
+}
+
+#[tauri::command(async)]
+fn emu_rewind(app: tauri::State<'_, App>) -> Result<u32, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let (tx, rx) = mpsc::channel();
+    send(&app, Command::Rewind(tx))?;
+    rx.recv().map_err(|_| "the emulator thread stopped".to_owned())?
+}
+
+#[tauri::command]
+fn emu_status(app: tauri::State<'_, App>) -> Result<PlaybackStatus, String> {
+    let (tx, rx) = mpsc::channel();
+    send(&app, Command::QueryStatus(tx))?;
+    rx.recv().map_err(|_| "the emulator thread stopped".to_owned())
+}
+
+#[tauri::command(async)]
+fn emu_screenshot(app: tauri::State<'_, App>) -> Result<SavedFileReceipt, String> {
+    let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    let name = app.rom_name.lock().unwrap().clone();
+    save_screenshot(&app.emu_data_dir, &mut session, &name)
+}
+
+#[tauri::command(async)]
+fn emu_export_save(app: tauri::State<'_, App>) -> Result<SavedFileReceipt, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    let name = app.rom_name.lock().unwrap().clone();
+    export_save_file(&app.emu_data_dir, &mut session, &name)
+}
+
+#[tauri::command(async)]
+fn emu_import_save(app: tauri::State<'_, App>, request: Request<'_>) -> Result<u32, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let bytes = extract_binary_body(request.body(), ".sav bytes")?;
+    let frame = {
+        let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+        import_save_bytes(&mut session, &bytes)?
+    };
+    send(&app, Command::SyncFrame(None))?;
+    Ok(frame)
+}
+
+#[tauri::command]
+fn emu_savestate_slots(app: tauri::State<'_, App>) -> Result<Vec<SavestateSlotStatus>, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    Ok(list_quick_slots(&app.emu_data_dir, &session))
+}
+
+#[tauri::command(async)]
+fn emu_save_slot(app: tauri::State<'_, App>, slot: u8) -> Result<SavedFileReceipt, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    save_quick_slot(&app.emu_data_dir, &mut session, slot)
+}
+
+#[tauri::command(async)]
+fn emu_load_slot(app: tauri::State<'_, App>, slot: u8) -> Result<u32, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let frame = {
+        let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+        load_quick_slot(&app.emu_data_dir, &mut session, slot)?
+    };
+    send(&app, Command::SyncFrame(None))?;
+    Ok(frame)
+}
+
+#[tauri::command(async)]
+fn emu_save_state_file(app: tauri::State<'_, App>) -> Result<SavedFileReceipt, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    let name = app.rom_name.lock().unwrap().clone();
+    save_state_to_file(&app.emu_data_dir, &mut session, &name)
+}
+
+#[tauri::command(async)]
+fn emu_load_state_file(app: tauri::State<'_, App>, request: Request<'_>) -> Result<u32, String> {
+    if app.chat.busy() { return Err("the agent is working; wait for it or stop it".into()); }
+    let bytes = extract_binary_body(request.body(), "savestate bytes")?;
+    let frame = {
+        let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+        load_state_from_bytes(&mut session, &bytes)?
+    };
+    send(&app, Command::SyncFrame(None))?;
+    Ok(frame)
+}
+
+#[derive(Serialize)]
+struct EmuLogDto {
+    level: String,
+    category: i32,
+    message: String,
+}
+
+#[tauri::command]
+fn emu_logs(app: tauri::State<'_, App>) -> Result<Vec<EmuLogDto>, String> {
+    let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    Ok(session
+        .emulator_mut()
+        .take_logs()
+        .into_iter()
+        .map(|entry| EmuLogDto {
+            level: entry.level,
+            category: entry.category,
+            message: entry.message,
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn emu_get_config(app: tauri::State<'_, App>) -> EmuConfig {
+    app.emu_config.read().unwrap().clone()
+}
+
+#[tauri::command]
+fn emu_set_keymap(app: tauri::State<'_, App>, keymap: KeyMap) -> Result<EmuConfig, String> {
+    let updated = {
+        let mut cfg = app.emu_config.write().unwrap();
+        let mut next_map = keymap;
+        next_map.normalize_and_validate()?;
+        cfg.keymap = next_map;
+        cfg.clone()
+    };
+    save_config(&app.emu_data_dir, &updated)?;
+    Ok(updated)
+}
+
+#[tauri::command]
+fn emu_set_prefs(app: tauri::State<'_, App>, prefs: EmuPrefs) -> Result<EmuConfig, String> {
+    let updated = {
+        let mut cfg = app.emu_config.write().unwrap();
+        let mut next_prefs = prefs;
+        next_prefs.sanitize();
+        cfg.prefs = next_prefs;
+        cfg.clone()
+    };
+    save_config(&app.emu_data_dir, &updated)?;
+    send(&app, Command::SetSpeed(updated.prefs.speed))?;
+    send(&app, Command::SetRewindEnabled(updated.prefs.rewind_enabled))?;
+    Ok(updated)
+}
+
+#[derive(Serialize)]
+struct ChannelToggleDto {
+    id: usize,
+    name: String,
+    enabled: bool,
+}
+
+#[derive(Serialize)]
+struct EmuLayersDto {
+    video: Vec<ChannelToggleDto>,
+    audio: Vec<ChannelToggleDto>,
+}
+
+#[tauri::command]
+fn emu_layers(app: tauri::State<'_, App>) -> Result<EmuLayersDto, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    let v_disabled = app.video_layers_disabled.lock().unwrap();
+    let a_disabled = app.audio_channels_disabled.lock().unwrap();
+    let video = session
+        .emulator()
+        .video_layers()
+        .into_iter()
+        .map(|c| ChannelToggleDto {
+            id: c.id,
+            name: c.visible_name,
+            enabled: !v_disabled.contains(&c.id),
+        })
+        .collect();
+    let audio = session
+        .emulator()
+        .audio_channels()
+        .into_iter()
+        .map(|c| ChannelToggleDto {
+            id: c.id,
+            name: c.visible_name,
+            enabled: !a_disabled.contains(&c.id),
+        })
+        .collect();
+    Ok(EmuLayersDto { video, audio })
+}
+
+#[tauri::command]
+fn emu_set_video_layer(app: tauri::State<'_, App>, id: usize, enabled: bool) -> Result<(), String> {
+    {
+        let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+        session.emulator_mut().set_video_layer(id, enabled);
+    }
+    let mut disabled = app.video_layers_disabled.lock().unwrap();
+    if enabled { disabled.remove(&id); } else { disabled.insert(id); }
+    let _ = send(&app, Command::SyncFrame(None));
+    Ok(())
+}
+
+#[tauri::command]
+fn emu_set_audio_channel(app: tauri::State<'_, App>, id: usize, enabled: bool) -> Result<(), String> {
+    {
+        let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+        session.emulator_mut().set_audio_channel(id, enabled);
+    }
+    let mut disabled = app.audio_channels_disabled.lock().unwrap();
+    if enabled { disabled.remove(&id); } else { disabled.insert(id); }
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn emu_inspect_palettes(app: tauri::State<'_, App>) -> Result<PaletteDump, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    if !session.has_rom() { return Err("no ROM loaded".into()); }
+    read_palettes(session.emulator())
+}
+
+#[tauri::command(async)]
+fn emu_inspect_tiles(
+    app: tauri::State<'_, App>,
+    base_addr: u32,
+    bpp8: bool,
+    palette_idx: u8,
+    is_obj: bool,
+) -> Result<TileSheetDto, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    if !session.has_rom() { return Err("no ROM loaded".into()); }
+    read_tiles_rgba(session.emulator(), base_addr, bpp8, palette_idx, is_obj)
+}
+
+#[tauri::command(async)]
+fn emu_inspect_oam(app: tauri::State<'_, App>) -> Result<Vec<OamEntryDto>, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    if !session.has_rom() { return Err("no ROM loaded".into()); }
+    read_oam(session.emulator())
+}
+
+#[tauri::command]
+fn emu_memory_regions(app: tauri::State<'_, App>) -> Result<Vec<MemoryRegionDto>, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    Ok(list_memory_regions(session.emulator()))
+}
+
+#[tauri::command(async)]
+fn emu_read_memory(app: tauri::State<'_, App>, addr: u32, len: usize, deref: bool) -> Result<MemoryWindowDto, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    read_memory_window(session.emulator(), addr, len, deref)
+}
+
+#[tauri::command]
+fn emu_search_symbols(app: tauri::State<'_, App>, query: String, limit: Option<usize>) -> Result<Vec<SymbolMatchDto>, String> {
+    let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
+    Ok(session
+        .symbols()
+        .search(&query, limit.unwrap_or(60))
+        .into_iter()
+        .map(|(name, addr)| SymbolMatchDto { name, addr })
+        .collect())
+}
+
+fn launch_target_for_app(app: &App) -> Option<LastBootTarget> {
+    let (Some(_), Some(Launch::Point { target, .. })) = (&app.project, &app.initial_launch) else {
+        return None;
+    };
+    let rom_sha256 = app.emu_session.lock().ok().and_then(|s| s.rom_sha256().map(str::to_owned)).unwrap_or_default();
+    Some(LastBootTarget {
+        map: target.map.0.clone(),
+        x: target.x,
+        y: target.y,
+        flags: target.flags.iter().map(|f| f.0.clone()).collect(),
+        rom_sha256,
+    })
+}
+
+#[tauri::command(async)]
+fn project_context(
+    app: tauri::State<'_, App>,
+    selected_map: Option<String>,
+    selected_x: Option<i16>,
+    selected_y: Option<i16>,
+) -> Option<AgentEmuContext> {
+    let project = app.project.as_ref()?;
+    Some(project.agent_context(selected_map, selected_x, selected_y, launch_target_for_app(&app)))
+}
+
 /// Sends a chat message; the turn's events stream to `on_event` until it completes.
 /// Runs off the main thread: the first message starts the sidecar and MCP server.
 #[tauri::command(async)]
-fn chat_send(app: tauri::State<'_, App>, text: String, on_event: Channel<AgentEvent>) -> Result<String, String> {
+fn chat_send(
+    app: tauri::State<'_, App>,
+    text: String,
+    selected_map: Option<String>,
+    selected_x: Option<i16>,
+    selected_y: Option<i16>,
+    on_event: Channel<AgentEvent>,
+) -> Result<String, String> {
     let login = app.codex_login.lock().unwrap();
     if login.pending() { return Err("finish or cancel ChatGPT sign-in before sending".into()); }
     if app.antigravity_login.lock().unwrap().pending() { return Err("finish or cancel Google sign-in before sending".into()); }
-    let turn = app.chat.send(&text, move |event| {
+    let payload = if let Some(project) = &app.project {
+        let ctx = project.agent_context(selected_map, selected_x, selected_y, launch_target_for_app(&app));
+        format!("{}\n{}", ctx.to_prompt_block(), text.trim())
+    } else {
+        text
+    };
+    let turn = app.chat.send(&payload, move |event| {
         let _ = on_event.send(event);
     })?;
     Ok(turn.to_string())
@@ -320,6 +720,9 @@ fn build_and_play(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Re
         _ => Vec::new(),
     };
     let report = project.build_and_boot(&map, x, y, &flags)?;
+    let label = format!("{map} ({x}, {y})");
+    *app.rom_name.lock().unwrap() = label.clone();
+    let _ = send(&app, Command::SyncFrame(Some(label)));
     eprintln!("tauros: built and booted {map} ({x}, {y}): {report:?}");
     Ok(report)
 }
@@ -333,7 +736,11 @@ fn preview_map(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Resul
         Some(Launch::Point { target, .. }) => target.flags.iter().map(|f| f.0.clone()).collect(),
         _ => Vec::new(),
     };
-    project.preview_built(&map, x, y, &flags)
+    let report = project.preview_built(&map, x, y, &flags)?;
+    let label = format!("{map} ({x}, {y})");
+    *app.rom_name.lock().unwrap() = label.clone();
+    let _ = send(&app, Command::SyncFrame(Some(label)));
+    Ok(report)
 }
 
 #[tauri::command]
@@ -427,28 +834,15 @@ fn mapgen_image(app: tauri::State<'_, App>, path: String) -> Result<tauri::ipc::
     app.mapgen.image(&path).map(tauri::ipc::Response::new)
 }
 
-/// The button bit (in `Button::ALL` order) for a GDK key name, case-insensitive:
-/// arrows, X = A, Z = B, Enter = Start, Backspace = Select, A = L, S = R.
-fn bit_for_key_name(name: &str) -> Option<u16> {
-    Some(match name.to_ascii_lowercase().as_str() {
-        "x" => 0,
-        "z" => 1,
-        "backspace" => 2,
-        "return" | "kp_enter" => 3,
-        "right" => 4,
-        "left" => 5,
-        "up" => 6,
-        "down" => 7,
-        "s" => 8,
-        "a" => 9,
-        _ => return None,
-    })
-}
-
 /// Reads the keyboard on the GTK window: key events reach the toplevel before
 /// WebKit and any input method, so the game gets them whatever the page's focus.
 #[cfg(target_os = "linux")]
-fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>, typing: Arc<AtomicBool>) -> tauri::Result<()> {
+fn native_keyboard(
+    window: &tauri::WebviewWindow,
+    commands: Sender<Command>,
+    typing: Arc<AtomicBool>,
+    emu_config: Arc<RwLock<EmuConfig>>,
+) -> tauri::Result<()> {
     use gtk::prelude::*;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -465,8 +859,16 @@ fn native_keyboard(window: &tauri::WebviewWindow, commands: Sender<Command>, typ
             }
             return gtk::glib::Propagation::Proceed;
         }
+        let mods = event.state();
+        if mods.intersects(
+            gtk::gdk::ModifierType::CONTROL_MASK
+                | gtk::gdk::ModifierType::MOD1_MASK
+                | gtk::gdk::ModifierType::SUPER_MASK,
+        ) {
+            return gtk::glib::Propagation::Proceed;
+        }
         let name = event.keyval().name().map(|n| n.to_string()).unwrap_or_default();
-        let bit = bit_for_key_name(&name);
+        let bit = emu_config.read().unwrap().keymap.bit_for_raw_key(&name);
         if logged.get() < 4 || verbose {
             logged.set(logged.get() + 1);
             eprintln!("tauros: key {name:?} {} -> {bit:?}", if down { "down" } else { "up" });
@@ -506,6 +908,11 @@ fn main() {
             std::process::exit(2);
         }
     };
+    let emu_data_dir = emulator_data_dir();
+    let initial_config = load_config(&emu_data_dir);
+    let initial_speed = initial_config.prefs.speed;
+    let initial_rewind = initial_config.prefs.rewind_enabled;
+    let emu_config = Arc::new(RwLock::new(initial_config));
     let (tx, rx) = mpsc::channel();
     let typing = Arc::new(AtomicBool::new(false));
     let project = match &initial_launch {
@@ -531,23 +938,46 @@ fn main() {
             }
         },
     };
+    let worker_session = Arc::clone(&session);
     let chat_provider = Arc::new(Mutex::new("claude".to_owned()));
     let chat = Arc::new(project_chat(project.clone(), Arc::clone(&chat_provider)));
     let chat_holds = Arc::clone(&chat);
     #[cfg(target_os = "linux")]
-    let (keyboard, keyboard_typing) = (tx.clone(), typing.clone());
+    let (keyboard, keyboard_typing, keyboard_config) = (tx.clone(), typing.clone(), Arc::clone(&emu_config));
     std::thread::Builder::new()
         .name("emulator".into())
-        .spawn(move || emulator_thread(rx, session, move || chat_holds.busy()))
+        .spawn(move || emulator_thread(rx, worker_session, move || chat_holds.busy()))
         .expect("emulator thread");
+    let _ = tx.send(Command::SetSpeed(initial_speed));
+    let _ = tx.send(Command::SetRewindEnabled(initial_rewind));
     tauri::Builder::default()
-        .manage(App { commands: Mutex::new(tx), initial_launch, project, chat, chat_provider, chat_models: Mutex::default(), codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()), antigravity_login: Mutex::default(), typing, shutdown: Default::default(), voice: Default::default(), claude_voice: Default::default(), mapgen: Default::default() })
+        .manage(App {
+            commands: Mutex::new(tx),
+            emu_session: session,
+            emu_config,
+            emu_data_dir,
+            rom_name: Mutex::new(String::new()),
+            video_layers_disabled: Mutex::default(),
+            audio_channels_disabled: Mutex::default(),
+            initial_launch,
+            project,
+            chat,
+            chat_provider,
+            chat_models: Mutex::default(),
+            codex_login: Mutex::new(tauros_app::codex_login::CodexLogin::default()),
+            antigravity_login: Mutex::default(),
+            typing,
+            shutdown: Default::default(),
+            voice: Default::default(),
+            claude_voice: Default::default(),
+            mapgen: Default::default(),
+        })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             {
                 use tauri::Manager;
                 let window = app.get_webview_window("main").expect("main window");
-                native_keyboard(&window, keyboard.clone(), keyboard_typing.clone())?;
+                native_keyboard(&window, keyboard.clone(), keyboard_typing.clone(), keyboard_config.clone())?;
             }
             let _ = app;
             Ok(())
@@ -562,10 +992,39 @@ fn main() {
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             attach,
+            attach_status,
             load_rom,
+            emu_set_rom_name,
             log,
             set_buttons,
             set_paused,
+            emu_reset,
+            emu_step_frame,
+            emu_set_speed,
+            emu_rewind,
+            emu_status,
+            emu_screenshot,
+            emu_export_save,
+            emu_import_save,
+            emu_savestate_slots,
+            emu_save_slot,
+            emu_load_slot,
+            emu_save_state_file,
+            emu_load_state_file,
+            emu_logs,
+            emu_get_config,
+            emu_set_keymap,
+            emu_set_prefs,
+            emu_layers,
+            emu_set_video_layer,
+            emu_set_audio_channel,
+            emu_inspect_palettes,
+            emu_inspect_tiles,
+            emu_inspect_oam,
+            emu_memory_regions,
+            emu_read_memory,
+            emu_search_symbols,
+            project_context,
             voice_status,
             voice_start,
             voice_finish,
@@ -610,13 +1069,14 @@ mod tests {
     use tauros_emu::Button;
 
     #[test]
-    fn gdk_key_names_map_to_buttons() {
-        assert_eq!(bit_for_key_name("x"), Some(0));
-        assert_eq!(bit_for_key_name("X"), Some(0));
-        assert_eq!(bit_for_key_name("Return"), Some(3));
-        assert_eq!(bit_for_key_name("BackSpace"), Some(2));
-        assert_eq!(bit_for_key_name("Left"), Some(5));
-        assert_eq!(bit_for_key_name("q"), None);
+    fn default_keymap_maps_gdk_names_to_buttons() {
+        let km = KeyMap::default();
+        assert_eq!(km.bit_for_raw_key("x"), Some(0));
+        assert_eq!(km.bit_for_raw_key("X"), Some(0));
+        assert_eq!(km.bit_for_raw_key("Return"), Some(3));
+        assert_eq!(km.bit_for_raw_key("BackSpace"), Some(2));
+        assert_eq!(km.bit_for_raw_key("Left"), Some(5));
+        assert_eq!(km.bit_for_raw_key("q"), None);
     }
 
     #[test]
@@ -624,5 +1084,19 @@ mod tests {
         assert_eq!(buttons_from_mask(0), Buttons::NONE);
         let b = buttons_from_mask(1 | 1 << 3 | 1 << 9);
         assert_eq!(b.iter().collect::<Vec<_>>(), [Button::A, Button::Start, Button::L]);
+    }
+
+    #[test]
+    fn extract_binary_body_accepts_raw_and_json_array_fallback() {
+        assert_eq!(
+            extract_binary_body(&InvokeBody::Raw(vec![1, 2, 255]), "rom").unwrap(),
+            vec![1, 2, 255]
+        );
+        assert_eq!(
+            extract_binary_body(&InvokeBody::Json(serde_json::json!([10, 20, 30])), "rom").unwrap(),
+            vec![10, 20, 30]
+        );
+        assert!(extract_binary_body(&InvokeBody::Json(serde_json::json!([256])), "rom").is_err());
+        assert!(extract_binary_body(&InvokeBody::Json(serde_json::json!({"a": 1})), "rom").is_err());
     }
 }

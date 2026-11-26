@@ -78,6 +78,32 @@ pub struct Frame {
     pub rgba: Vec<u8>,
 }
 
+/// Metadata reported by the loaded ROM header and core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RomInfo {
+    pub title: String,
+    pub code: String,
+    pub rom_size: usize,
+    pub frame_count: u32,
+    pub save_size: usize,
+}
+
+/// A log message captured from the emulator core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EmuLogEntry {
+    pub level: String,
+    pub category: i32,
+    pub message: String,
+}
+
+/// A toggleable video layer or audio channel exposed by the emulator core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChannelInfo {
+    pub id: usize,
+    pub internal_name: String,
+    pub visible_name: String,
+}
+
 impl Frame {
     /// The `[r, g, b]` of the pixel at `(x, y)`.
     pub fn pixel(&self, x: u32, y: u32) -> [u8; 3] {
@@ -176,6 +202,42 @@ pub trait Emulator {
 
     /// Restores a state taken by `save_state`.
     fn load_state(&mut self, state: &[u8]) -> Result<(), EmuError>;
+
+    /// Metadata about the currently loaded ROM, if any.
+    fn rom_info(&self) -> Option<RomInfo> {
+        None
+    }
+
+    /// Exports the cartridge save RAM (SRAM/Flash/EEPROM) as raw `.sav` bytes.
+    fn export_save(&mut self) -> Result<Vec<u8>, EmuError> {
+        Err(EmuError::State("save export is not supported by this core".into()))
+    }
+
+    /// Imports raw `.sav` bytes into the cartridge save memory.
+    fn import_save(&mut self, _data: &[u8]) -> Result<(), EmuError> {
+        Err(EmuError::State("save import is not supported by this core".into()))
+    }
+
+    /// Drains any log messages emitted by the emulator core since the last call.
+    fn take_logs(&mut self) -> Vec<EmuLogEntry> {
+        Vec::new()
+    }
+
+    /// Video layers that can be toggled individually (e.g. `BG0`..`BG3`, `OBJ`).
+    fn video_layers(&self) -> Vec<ChannelInfo> {
+        Vec::new()
+    }
+
+    /// Enables or disables a video layer by `id`.
+    fn set_video_layer(&mut self, _id: usize, _enabled: bool) {}
+
+    /// Audio channels that can be toggled individually (e.g. `PSG 1`..`4`, `FIFO A/B`).
+    fn audio_channels(&self) -> Vec<ChannelInfo> {
+        Vec::new()
+    }
+
+    /// Enables or disables an audio channel by `id`.
+    fn set_audio_channel(&mut self, _id: usize, _enabled: bool) {}
 
     /// Reads a little-endian `u32`.
     fn read_u32(&self, addr: u32) -> Result<u32, EmuError> {

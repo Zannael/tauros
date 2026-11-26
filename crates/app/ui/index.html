@@ -173,6 +173,116 @@
     #mg-lightbox[hidden] { display: none; }
     #mg-lightbox img { max-width: 100%; max-height: calc(100vh - 80px); image-rendering: pixelated; }
     #mg-lightbox div { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    /* Emulator menu bar, transport controls, stage & modals (APP-003 Block 1) */
+    #emu-menubar { display: flex; align-items: center; gap: 4px; width: 720px; max-width: 100%;
+      background: #211c24; border: 1px solid #352c3b; border-radius: 6px; padding: 3px 6px; position: relative; z-index: 6; }
+    .menu-item { position: relative; }
+    .menu-trigger { background: transparent; border: 0; color: var(--fg); padding: 4px 10px; border-radius: 4px; font-size: 13px; }
+    .menu-item.open > .menu-trigger, .menu-trigger:hover { background: #352c3b; }
+    .menu-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 230px;
+      background: #211c24; border: 1px solid #44394a; border-radius: 6px; padding: 4px;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, .45); z-index: 20; }
+    .menu-item.open > .menu-dropdown { display: flex; flex-direction: column; gap: 1px; }
+    .menu-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+      text-align: left; background: transparent; border: 0; border-radius: 4px; padding: 6px 10px;
+      color: var(--fg); font-size: 12.5px; cursor: pointer; }
+    .menu-entry:hover:not(:disabled) { background: #352c3b; }
+    .menu-entry:disabled { opacity: .42; cursor: default; }
+    .menu-entry[aria-checked="true"]::before { content: '✓ '; color: var(--accent); font-weight: 700; margin-right: 4px; }
+    .menu-entry[aria-checked="false"]::before { content: '  '; white-space: pre; margin-right: 4px; }
+    .menu-shortcut { color: var(--muted); font-size: 11px; margin-left: auto; }
+    .menu-sep { height: 1px; background: #352c3b; margin: 4px 6px; }
+    .menu-sub { position: relative; }
+    .menu-sub > .menu-dropdown { top: -4px; left: calc(100% + 2px); min-width: 170px; }
+    .menu-sub:hover > .menu-dropdown, .menu-sub:focus-within > .menu-dropdown { display: flex; flex-direction: column; gap: 1px; }
+    .menu-volume-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted); }
+    .menu-volume-row input { flex: 1; accent-color: var(--accent); }
+    .menu-note { padding: 5px 10px; font-size: 11px; color: var(--muted); font-style: italic; }
+
+    #emu-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 720px; max-width: 100%; }
+    #emu-transport button { font-size: 12px; padding: 4px 9px; }
+    #emu-transport button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    #emu-mode-pill { margin-left: auto; font-size: 11px; padding: 3px 9px; border-radius: 12px;
+      background: #2c2530; color: var(--muted); border: 1px solid #44394a; white-space: nowrap; }
+    #emu-mode-pill[data-mode="playing"] { color: #a9d8ab; border-color: #2f5734; background: #1c2b1f; }
+    #emu-mode-pill[data-mode="fast_forward"] { color: #c9b8ff; border-color: #4f4178; background: #26203a; }
+    #emu-mode-pill[data-mode="paused"] { color: #eed3a0; border-color: #614e2a; background: #2e2618; }
+    #emu-mode-pill[data-mode="agent_held"] { color: #ffcf70; border-color: var(--accent); background: #3a2b10; font-weight: 600; }
+
+    #play-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 720px; max-width: 100%;
+      background: #2b2316; border: 1px solid #6b5224; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #f6d99a; }
+    #play-banner[hidden] { display: none; }
+    #play-banner button { background: var(--accent); border-color: var(--accent); color: #241a08; font-weight: 600; font-size: 12px; }
+    #play-live-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #211c24;
+      border: 1px solid #352c3b; color: var(--muted); white-space: nowrap; }
+    #play-live-chip[data-state="ok"] { color: #a9d8ab; border-color: #355a39; }
+    #play-live-chip[data-state="warn"] { color: #ffb3bd; border-color: #69333c; }
+    #play-live-chip[hidden] { display: none; }
+
+    #screen-stage { position: relative; display: flex; justify-content: center; width: 720px; max-width: 100%; }
+    #screen-badge { position: absolute; top: 8px; right: 8px; padding: 4px 10px; border-radius: 12px;
+      font-size: 11.5px; font-weight: 600; pointer-events: none; background: rgba(24, 20, 26, .88);
+      border: 1px solid #44394a; color: var(--fg); backdrop-filter: blur(2px); }
+    #screen-badge[data-mode="agent_held"] { border-color: var(--accent); color: #ffd47a; background: rgba(46, 33, 10, .92); }
+    #screen-badge[data-mode="paused"] { border-color: #7c6d85; color: #eed3a0; }
+    #screen-badge[data-mode="fast_forward"] { border-color: #7e66c7; color: #d6c8ff; }
+    #screen-badge[hidden] { display: none; }
+
+    #emu-statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 720px; max-width: 100%;
+      font-size: 11.5px; color: var(--muted); padding: 2px 2px; }
+    #emu-toast { margin-left: auto; color: #a9d8ab; }
+    #emu-toast.error { color: #ff8f9c; }
+
+    .emu-modal { position: fixed; inset: 0; background: rgba(11, 9, 12, .78); display: grid; place-items: center; z-index: 30; padding: 16px; }
+    .emu-modal[hidden] { display: none; }
+    .emu-modal-card { width: min(460px, 100%); max-height: 82vh; overflow-y: auto; background: #211c24;
+      border: 1px solid #44394a; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .emu-modal-card h3 { margin: 0; font-size: 15px; color: var(--accent); }
+    .emu-modal-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    #rom-info-body { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 12.5px; }
+    #rom-info-body dt { color: var(--muted); }
+    #rom-info-body dd { margin: 0; font-family: monospace; overflow-wrap: anywhere; }
+    #keys-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+    .key-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+    .key-capture-btn { min-width: 96px; font-family: monospace; font-size: 12px; }
+    .key-capture-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    #keys-error { color: #ff8f9c; font-size: 12px; min-height: 16px; }
+    #emu-log-list { list-style: none; margin: 0; padding: 8px; background: #18141a; border: 1px solid #352c3b;
+      border-radius: 5px; max-height: 260px; overflow-y: auto; font-family: monospace; font-size: 11.5px; display: grid; gap: 4px; }
+    #emu-log-list .muted { color: var(--muted); font-family: system-ui, sans-serif; }
+
+    /* Game state inspector modal (APP-003 Block 2) */
+    .emu-modal-card.wide { width: min(780px, 100%); }
+    .insp-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .insp-header h3 { margin-right: auto; }
+    .insp-tabs { display: flex; gap: 4px; border-bottom: 1px solid #352c3b; padding-bottom: 6px; flex-wrap: wrap; }
+    .insp-tab { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 4px 10px; font-size: 12.5px; }
+    .insp-tab[aria-selected="true"] { background: #352c3b; color: var(--fg); border-color: #584b60; }
+    .insp-pane[hidden] { display: none; }
+    .insp-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .insp-controls select, .insp-controls input[type="text"] { background: var(--bg); color: var(--fg);
+      border: 1px solid #584b60; border-radius: 4px; padding: 4px 7px; font: inherit; }
+    .pal-grids { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .pal-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; background: #18141a; padding: 6px; border-radius: 5px; border: 1px solid #352c3b; }
+    .pal-swatch { width: 100%; aspect-ratio: 1; padding: 0; border-radius: 2px; border: 1px solid rgba(255,255,255,.15); }
+    #pal-selected { font-family: monospace; font-size: 12px; color: var(--fg); min-height: 18px; }
+    #tile-canvas { width: 256px; max-width: 100%; image-rendering: pixelated; background: #18141a; border: 1px solid #352c3b; border-radius: 4px; }
+    .oam-wrap { max-height: 340px; overflow: auto; border: 1px solid #352c3b; border-radius: 5px; background: #18141a; }
+    .oam-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 11.5px; }
+    .oam-table th, .oam-table td { padding: 4px 7px; border-bottom: 1px solid #2b2330; text-align: left; white-space: nowrap; }
+    .oam-table th { position: sticky; top: 0; background: #211c24; color: var(--muted); font-family: system-ui, sans-serif; }
+    .mem-regions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .mem-regions button { font-size: 11.5px; padding: 3px 8px; }
+    .mem-split { display: grid; grid-template-columns: 1fr 220px; gap: 10px; }
+    @media (max-width: 720px) { .mem-split { grid-template-columns: 1fr; } }
+    #mem-decoded { font-family: monospace; font-size: 11.5px; color: var(--accent); margin-bottom: 6px; overflow-wrap: anywhere; }
+    #mem-dump { margin: 0; padding: 8px; background: #18141a; border: 1px solid #352c3b; border-radius: 5px;
+      font-family: monospace; font-size: 11.5px; max-height: 280px; overflow: auto; }
+    #sym-results { list-style: none; margin: 6px 0 0; padding: 0; max-height: 250px; overflow-y: auto; display: grid; gap: 3px; }
+    .sym-row { width: 100%; text-align: left; font-family: monospace; font-size: 11px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #insp-status { font-size: 11.5px; color: var(--muted); }
+    #insp-status.error { color: #ff8f9c; }
   </style>
 </head>
 <body>
@@ -185,21 +295,256 @@
     </div>
     <span id="status">Open a ROM to start.</span>
     <input id="file" type="file" accept=".gba" hidden>
+    <input id="sav-file" type="file" accept=".sav" hidden>
+    <input id="state-file" type="file" accept=".ss,.ss0,.ss1,.ss2,.ss3,.ss4,.ss5,.ss6,.ss7,.ss8,.ss9" hidden>
     <button id="toggle-history">History</button>
     <button id="open">Open ROM…</button>
   </header>
+
+  <nav id="emu-menubar" role="menubar" aria-label="Emulator menu">
+    <div class="menu-item" data-menu="file">
+      <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
+      <div class="menu-dropdown" role="menu">
+        <button type="button" class="menu-entry" role="menuitem" data-action="open-rom">Open ROM… <span class="menu-shortcut">Ctrl+O</span></button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-rom-info" data-action="rom-info">ROM Info…</button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-import-sav" data-action="import-sav">Import Save (.sav)…</button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-export-sav" data-action="export-sav">Export Save (.sav)</button>
+        <div class="menu-sep"></div>
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Quick Save ▸</button>
+          <div class="menu-dropdown" id="menu-slots-save" role="menu"></div>
+        </div>
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Quick Load ▸</button>
+          <div class="menu-dropdown" id="menu-slots-load" role="menu"></div>
+        </div>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-save-state-file" data-action="save-state-file">Save State to File</button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-load-state-file" data-action="load-state-file">Load State from File…</button>
+      </div>
+    </div>
+
+    <div class="menu-item" data-menu="emulation">
+      <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false">Emulation</button>
+      <div class="menu-dropdown" role="menu">
+        <button type="button" class="menu-entry" role="menuitem" id="menu-pause" data-action="pause">Pause <span class="menu-shortcut">Ctrl+P</span></button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-step" data-action="step">Frame Advance (+1) <span class="menu-shortcut">Ctrl+N</span></button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-reset" data-action="reset">Reset <span class="menu-shortcut">Ctrl+R</span></button>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-rewind" data-action="rewind">Rewind <span class="menu-shortcut">Ctrl+B</span></button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitemcheckbox" aria-checked="false" id="menu-ff-toggle" data-action="ff-toggle">Fast Forward <span class="menu-shortcut">Shift+Tab</span></button>
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Speed ▸</button>
+          <div class="menu-dropdown" role="menu">
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="true" data-speed="1">1x (Normal)</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-speed="2">2x</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-speed="4">4x</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-speed="8">8x</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-speed="0">Turbo</button>
+          </div>
+        </div>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitemcheckbox" aria-checked="true" id="menu-blur-pause" data-action="blur-pause">Pause when unfocused</button>
+        <button type="button" class="menu-entry" role="menuitemcheckbox" aria-checked="true" id="menu-rewind-toggle" data-action="rewind-toggle">Enable rewind buffer</button>
+      </div>
+    </div>
+
+    <div class="menu-item" data-menu="av">
+      <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false">Audio / Video</button>
+      <div class="menu-dropdown" role="menu">
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Scale ▸</button>
+          <div class="menu-dropdown" role="menu">
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-scale="fit">Fit width</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-scale="1x">1x (240×160)</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-scale="2x">2x (480×320)</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="true" data-scale="3x">3x (720×480)</button>
+            <button type="button" class="menu-entry" role="menuitemradio" aria-checked="false" data-scale="4x">4x (960×640)</button>
+          </div>
+        </div>
+        <button type="button" class="menu-entry" role="menuitemcheckbox" aria-checked="true" id="menu-aspect" data-action="aspect">Lock aspect ratio (3:2)</button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitemcheckbox" aria-checked="false" id="menu-mute" data-action="mute">Mute audio</button>
+        <div class="menu-volume-row" data-action="volume">
+          <span>Vol</span>
+          <input id="menu-volume" type="range" min="0" max="100" value="100" aria-label="Audio volume">
+          <span id="menu-volume-label">100%</span>
+        </div>
+        <div class="menu-sep"></div>
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Video Layers ▸</button>
+          <div class="menu-dropdown" id="menu-video-layers" role="menu"></div>
+        </div>
+        <div class="menu-sub">
+          <button type="button" class="menu-entry" aria-haspopup="true">Audio Channels ▸</button>
+          <div class="menu-dropdown" id="menu-audio-channels" role="menu"></div>
+        </div>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitem" id="menu-shot" data-action="shot">Take Screenshot (PNG) <span class="menu-shortcut">F12</span></button>
+      </div>
+    </div>
+
+    <div class="menu-item" data-menu="tools">
+      <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false">Tools</button>
+      <div class="menu-dropdown" role="menu">
+        <button type="button" class="menu-entry" role="menuitem" data-action="keys">Key Configuration…</button>
+        <button type="button" class="menu-entry" role="menuitem" data-action="logs">Emulator Log…</button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-entry" role="menuitem" data-action="view-palettes">Palette Viewer…</button>
+        <button type="button" class="menu-entry" role="menuitem" data-action="view-tiles">Tile / VRAM Viewer…</button>
+        <button type="button" class="menu-entry" role="menuitem" data-action="view-oam">Sprite / OAM Viewer…</button>
+        <button type="button" class="menu-entry" role="menuitem" data-action="view-memory">Memory &amp; Symbol Inspector…</button>
+      </div>
+    </div>
+  </nav>
+
+  <div id="emu-transport" aria-label="Emulator controls">
+    <button type="button" id="tb-pause" title="Pause / Resume (Ctrl+P)">⏸ Pause</button>
+    <button type="button" id="tb-step" title="Frame Advance +1 (Ctrl+N)">⏭ +1 Frame</button>
+    <button type="button" id="tb-rewind" title="Rewind (Ctrl+B)">⏪ Rewind (0)</button>
+    <button type="button" id="tb-speed" title="Cycle emulation speed (Shift+Tab toggles 4x)">⏩ 1x</button>
+    <button type="button" id="tb-reset" title="Reset console (Ctrl+R)">↻ Reset</button>
+    <button type="button" id="tb-shot" title="Save PNG screenshot (F12)">📷 Shot</button>
+    <button type="button" id="tb-mute" title="Mute / Unmute audio">🔊 Audio</button>
+    <span id="emu-mode-pill" data-mode="idle">Idle</span>
+  </div>
+
   <div id="play-bar" aria-label="Build and play">
     <div class="select-control"><select id="play-map" aria-label="Map"></select></div>
     x <input id="play-x" type="number" min="0" max="255" aria-label="X">
     y <input id="play-y" type="number" min="0" max="255" aria-label="Y">
     <button id="play-preview" title="Start a fresh preview from the last built ROM without rebuilding">Preview</button>
     <button id="play-build" title="Build the project and boot it at this map and position">Build &amp; play</button>
+    <span id="play-live-chip" hidden></span>
+  </div>
+  <div id="play-banner" hidden role="status">
+    <span id="play-banner-text"></span>
+    <button type="button" id="play-banner-boot">Preview new build</button>
   </div>
   <div id="play-status" role="status"></div>
-  <canvas id="screen" width="240" height="160"></canvas>
+  <div id="screen-stage">
+    <canvas id="screen" width="240" height="160"></canvas>
+    <div id="screen-badge" hidden></div>
+  </div>
+  <div id="emu-statusbar">
+    <span id="emu-frame-readout">Frame 0</span>
+    <span id="emu-audio-readout">Sound: 100%</span>
+    <span id="emu-rewind-readout">Rewind: 0</span>
+    <span id="emu-toast" role="status" aria-live="polite"></span>
+  </div>
   <div id="help">
     <kbd>←↑→↓</kbd> D-pad · <kbd>X</kbd> A · <kbd>Z</kbd> B · <kbd>Enter</kbd> Start ·
-    <kbd>Backspace</kbd> Select · <kbd>A</kbd> L · <kbd>S</kbd> R · click the game to enable sound
+    <kbd>Backspace</kbd> Select · <kbd>A</kbd> L · <kbd>S</kbd> R · click game for audio
+  </div>
+
+  <div id="emu-rom-modal" class="emu-modal" hidden role="dialog" aria-label="ROM Information">
+    <div class="emu-modal-card">
+      <h3>ROM Information</h3>
+      <dl id="rom-info-body"></dl>
+      <div class="emu-modal-actions">
+        <button type="button" id="rom-info-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="emu-keys-modal" class="emu-modal" hidden role="dialog" aria-label="Key Configuration">
+    <div class="emu-modal-card">
+      <h3>Key Configuration</h3>
+      <div id="keys-grid"></div>
+      <div id="keys-error" role="alert"></div>
+      <div class="emu-modal-actions">
+        <button type="button" id="keys-reset">Reset defaults</button>
+        <button type="button" id="keys-cancel">Cancel</button>
+        <button type="button" id="keys-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="emu-log-modal" class="emu-modal" hidden role="dialog" aria-label="Emulator Log">
+    <div class="emu-modal-card">
+      <h3>Emulator Log (mGBA)</h3>
+      <ul id="emu-log-list"></ul>
+      <div class="emu-modal-actions">
+        <button type="button" id="emu-log-refresh">Refresh</button>
+        <button type="button" id="emu-log-clear">Clear</button>
+        <button type="button" id="emu-log-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="emu-inspector-modal" class="emu-modal" hidden role="dialog" aria-label="Game State Viewers">
+    <div class="emu-modal-card wide">
+      <div class="insp-header">
+        <h3>Game State Viewers</h3>
+        <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="insp-auto"> Auto (2 Hz)</label>
+        <button type="button" id="insp-refresh">Refresh</button>
+        <button type="button" id="insp-close">Close</button>
+      </div>
+      <div class="insp-tabs" role="tablist">
+        <button type="button" class="insp-tab" role="tab" data-tab="palettes" aria-selected="true">Palettes</button>
+        <button type="button" class="insp-tab" role="tab" data-tab="tiles" aria-selected="false">Tiles (VRAM)</button>
+        <button type="button" class="insp-tab" role="tab" data-tab="oam" aria-selected="false">Sprites (OAM)</button>
+        <button type="button" class="insp-tab" role="tab" data-tab="memory" aria-selected="false">Memory &amp; Symbols</button>
+      </div>
+      <div id="insp-status" role="status">Ready</div>
+      <div class="insp-pane" data-pane="palettes">
+        <div id="pal-selected">Click a color swatch to inspect BGR555 / RGB values.</div>
+        <div class="pal-grids">
+          <div><div class="insp-controls"><strong>BG Palettes (0–15)</strong></div><div id="pal-bg-grid" class="pal-grid"></div></div>
+          <div><div class="insp-controls"><strong>OBJ Palettes (0–15)</strong></div><div id="pal-obj-grid" class="pal-grid"></div></div>
+        </div>
+      </div>
+      <div class="insp-pane" data-pane="tiles" hidden>
+        <div class="insp-controls">
+          <label>Base <select id="tile-base">
+            <option value="100663296">0x06000000 (BG0)</option>
+            <option value="100679680">0x06004000 (BG1)</option>
+            <option value="100696064">0x06008000 (BG2)</option>
+            <option value="100712448">0x0600C000 (BG3)</option>
+            <option value="100728832">0x06010000 (OBJ0)</option>
+            <option value="100745216">0x06014000 (OBJ1)</option>
+          </select></label>
+          <label>BPP <select id="tile-bpp"><option value="4">4bpp</option><option value="8">8bpp</option></select></label>
+          <label>Bank <select id="tile-bank"><option value="bg">BG</option><option value="obj">OBJ</option></select></label>
+          <label>Pal <select id="tile-pal">
+            <option>0</option><option>1</option><option>2</option><option>3</option>
+            <option>4</option><option>5</option><option>6</option><option>7</option>
+            <option>8</option><option>9</option><option>10</option><option>11</option>
+            <option>12</option><option>13</option><option>14</option><option>15</option>
+          </select></label>
+        </div>
+        <canvas id="tile-canvas" width="128" height="256"></canvas>
+      </div>
+      <div class="insp-pane" data-pane="oam" hidden>
+        <div class="insp-controls">
+          <label><input type="checkbox" id="oam-active-only" checked> Hide disabled/hidden sprites</label>
+        </div>
+        <div class="oam-wrap">
+          <table class="oam-table">
+            <thead><tr><th>#</th><th>Mode</th><th>Pos</th><th>Size</th><th>Tile</th><th>Pal</th><th>Prio</th><th>Flags</th></tr></thead>
+            <tbody id="oam-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="insp-pane" data-pane="memory" hidden>
+        <div id="mem-regions" class="mem-regions"></div>
+        <div class="insp-controls">
+          <label>Addr <input type="text" id="mem-addr" value="0x02000000" size="12"></label>
+          <label><input type="checkbox" id="mem-deref"> Deref ptr</label>
+          <button type="button" id="mem-read">Read</button>
+        </div>
+        <div class="mem-split">
+          <div>
+            <div id="mem-decoded"></div>
+            <pre id="mem-dump"></pre>
+          </div>
+          <div>
+            <input type="text" id="sym-search" placeholder="Search .sym symbols…" style="width:100%;background:var(--bg);color:var(--fg);border:1px solid #584b60;border-radius:4px;padding:4px 7px;font:inherit;font-size:12px">
+            <ul id="sym-results"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <section id="history-panel" aria-label="Change history">
     <div id="history-header">
@@ -348,6 +693,8 @@
     </form>
   </aside>
   <script src="main.js"></script>
+  <script src="emu_ui.js"></script>
+  <script src="emu_inspect_ui.js"></script>
   <script src="voice.js"></script>
   <script src="mapgen.js"></script>
 </body>

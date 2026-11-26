@@ -10,6 +10,7 @@ const KEYS = { KeyX: 0, KeyZ: 1, Backspace: 2, Enter: 3, ArrowRight: 4, ArrowLef
 const BY_KEY = { x: 0, z: 1, Backspace: 2, Enter: 3, ArrowRight: 4, ArrowLeft: 5, ArrowUp: 6, ArrowDown: 7, s: 8, a: 9 };
 const BY_KEYCODE = { 88: 0, 90: 1, 8: 2, 13: 3, 39: 4, 37: 5, 38: 6, 40: 7, 83: 8, 65: 9 };
 function buttonBit(event) {
+  if (window.emuControls) return window.emuControls.buttonBit(event);
   if (event.code in KEYS) return KEYS[event.code];
   const key = event.key && event.key.length === 1 ? event.key.toLowerCase() : event.key;
   if (key in BY_KEY) return BY_KEY[key];
@@ -25,11 +26,13 @@ const ctx2d = canvas.getContext('2d');
 const image = ctx2d.createImageData(WIDTH, HEIGHT);
 const status = document.getElementById('status');
 
-let audio = null, nextTime = 0, frames = 0, lastFps = performance.now(), romName = '', seen = 0;
+let audio = null, gainNode = null, nextTime = 0, frames = 0, lastFps = performance.now(), romName = '', seen = 0;
 
 function ensureAudio() {
   if (!audio) {
     audio = new AudioContext();
+    gainNode = audio.createGain();
+    gainNode.connect(audio.destination);
     audio.onstatechange = () => log(`audio ${audio.state} at ${audio.sampleRate} Hz`);
   }
   if (audio.state === 'suspended') audio.resume();
@@ -39,6 +42,11 @@ function playAudio(samples) {
   if (window.voiceControls?.active) return;
   const n = samples.length / 2;
   if (!audio || audio.state !== 'running' || n === 0) return;
+  if (gainNode) {
+    const muted = window.emuControls?.isMuted();
+    const vol = window.emuControls ? window.emuControls.getVolume() : 1;
+    gainNode.gain.value = muted ? 0 : vol;
+  }
   const now = audio.currentTime;
   if (nextTime < now + 0.03) nextTime = now + 0.06;      // underrun: restart with headroom
   if (nextTime > now + 0.25) return;                      // too far ahead: drop to catch up
@@ -50,7 +58,7 @@ function playAudio(samples) {
   }
   const source = audio.createBufferSource();
   source.buffer = buffer;
-  source.connect(audio.destination);
+  source.connect(gainNode || audio.destination);
   source.start(nextTime);
   nextTime += n / AUDIO_RATE;
 }
@@ -67,8 +75,10 @@ function onFrame(data) {
   if (now - lastFps >= 1000) {
     const fps = frames * 1000 / (now - lastFps);
     if (seen < 400) log(`${fps.toFixed(1)} fps`);
-    status.textContent = `${romName} · ${fps.toFixed(1)} fps` +
-      (audio && audio.state === 'running' ? '' : ' · sound off (click the game)');
+    if (!window.emuControls) {
+      status.textContent = `${romName} · ${fps.toFixed(1)} fps` +
+        (audio && audio.state === 'running' ? '' : ' · sound off (click the game)');
+    }
     frames = 0;
     lastFps = now;
   }
@@ -97,18 +107,25 @@ canvas.tabIndex = 0;
 canvas.addEventListener('mousedown', () => canvas.focus());
 window.addEventListener('load', () => { window.focus(); canvas.focus(); });
 canvas.addEventListener('click', ensureAudio);
-document.addEventListener('visibilitychange', () => invoke('set_paused', { paused: document.hidden }));
 
 document.getElementById('open').addEventListener('click', (e) => { ensureAudio(); document.getElementById('file').click(); e.target.blur(); });
 document.getElementById('file').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
+  const input = e.target;
+  const file = input.files[0];
   if (!file) return;
   try {
-    await invoke('load_rom', new Uint8Array(await file.arrayBuffer()));
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await invoke('load_rom', bytes);
     romName = file.name;
     status.textContent = romName;
+    await invoke('emu_set_rom_name', { name: file.name }).catch(() => {});
+    window.emuControls?.refreshSlots();
   } catch (err) {
+    log(`load_rom failed for ${file.name}: ${err}`);
     status.textContent = `Cannot load ${file.name}: ${err}`;
+    window.emuControls?.showError(`Cannot load ${file.name}: ${err}`);
+  } finally {
+    input.value = '';
   }
 });
 
@@ -250,6 +267,7 @@ function setChatBusy(busy) {
   chatModel.disabled = busy || authBusy || !modelsReady;
   chatStop.hidden = !busy;
   updatePreviewControls();
+  window.emuControls?.setBusy(busy);
   window.voiceControls?.refresh();
 }
 
@@ -307,6 +325,8 @@ function startTurn(text) {
         setChatBusy(false);
         if (historyPanel.classList.contains('open')) loadHistory();
         refreshProjectMaps().catch((err) => log(`project refresh failed: ${err}`));
+        window.emuControls?.refreshProjectContext();
+        window.emuControls?.refreshSlots();
         break;
       }
       default:
@@ -315,7 +335,10 @@ function startTurn(text) {
     chatScroll();
   };
   setChatBusy(true);
-  invoke('chat_send', { text, onEvent: channel }).catch((err) => {
+  const selectedMap = playMap && playMap.value ? playMap.value : null;
+  const selectedX = playX && playX.value !== '' ? Number(playX.value) : null;
+  const selectedY = playY && playY.value !== '' ? Number(playY.value) : null;
+  invoke('chat_send', { text, selectedMap, selectedX, selectedY, onEvent: channel }).catch((err) => {
     setChatBusy(false);
     if (handleAuthRequired(err)) chatAppend('meta', 'Sign in with Google above, then send the message again.');
     else chatAppend('error', `${err}`);
@@ -431,6 +454,8 @@ async function runPreview(build) {
     const report = await invoke(build ? 'build_and_play' : 'preview_map', { map, x, y });
     romName = `${map} (${x}, ${y})`;
     playStatus.textContent = `${build ? 'Built' : 'Previewing last build'} ${report.rom_sha256.slice(0, 12)} at ${romName}.`;
+    window.emuControls?.refreshProjectContext();
+    window.emuControls?.refreshSlots();
   } catch (err) {
     playStatus.className = 'error';
     playStatus.textContent = `${build ? 'Build & play' : 'Preview'} failed: ${err}`;

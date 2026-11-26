@@ -1,5 +1,8 @@
 //! Desktop launch path, chat, change-history and in-process MCP host helpers shared by the Tauri shell and tests.
 pub mod chat;
+pub mod emu_config;
+pub mod emu_files;
+pub mod emu_inspect;
 pub mod history;
 pub mod launch;
 pub mod mcp_host;

@@ -111,7 +111,13 @@ fn probe_state_restores_and_replays() {
     eprintln!("probe state: {} bytes", state.len());
     assert!(matches!(emu.load_state(&state[1..]), Err(EmuError::State(_))));
     emu.run_frame().unwrap();
+    let info = emu.rom_info().expect("probe rom_info");
+    assert_eq!(info.code, "AGB-TAUR");
+    assert_eq!(info.rom_size, probe_rom().len());
+    assert!(info.frame_count >= 31);
     assert!(matches!(Mgba::gba().unwrap().save_state(), Err(EmuError::NoRom)));
+    assert!(matches!(Mgba::gba().unwrap().export_save(), Err(EmuError::NoRom)));
+    assert!(matches!(Mgba::gba().unwrap().import_save(&[1, 2]), Err(EmuError::NoRom)));
 }
 
 #[test]
@@ -135,4 +141,15 @@ fn emerald_state_restores_and_symbols_read_back() {
     eprintln!("gSaveBlock2Ptr {sb2:#x}, gSaveBlock1Ptr {sb1:#x}, offset {offset}");
     assert!(offset < 128 && offset.is_multiple_of(4), "gSaveBlock2Ptr {sb2:#x} is not inside gSaveblock2's move range");
     assert_eq!(sb1.wrapping_sub(symbol("gSaveblock1")), offset, "save blocks moved by different offsets");
+
+    let info = emu.rom_info().expect("rom_info present");
+    assert_eq!(info.code, "AGB-BPEE");
+    assert_eq!(info.rom_size, rom.len());
+    let mut sav = emu.export_save().expect("Emerald save memory should be active");
+    assert!(sav.len() >= 64 * 1024);
+    sav[0] ^= 0x5A;
+    emu.import_save(&sav).expect("import_save succeeds");
+    assert_eq!(emu.export_save().unwrap()[0], sav[0]);
+    assert!(emu.import_save(&[]).is_err());
+    let _ = emu.take_logs();
 }
