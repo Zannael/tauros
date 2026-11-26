@@ -1006,13 +1006,13 @@
       ],
       "id": "APP-006",
       "incomplete_prerequisites": [],
-      "note": "Owner requested on 2026-11-21; schedule after voice and before new Phase 5 feature development. AGT-005 and AGT-009 remain deferred for local personal use. Do not start this audit during AGT-004.",
+      "note": "Handoff 2026-11-26 by Claude Code: Owner-accepted direction and the classified audit of the current app are in docs/design/app-006-feature-brief.md; implementation not started.",
       "owner": null,
       "prerequisites": [
         "AGT-004"
       ],
       "responsible": "Agent",
-      "scope": "Perform a complete audit of the actual desktop app through screenshots and interactive walkthroughs, covering launch/project context, navigation, chat/providers/models/sign-in, voice, tools/results, preview/build/emulator, history/restore and failure/recovery states. Establish and implement a coherent visual and interaction foundation: clear hierarchy and grouping, discoverable existing functions, understandable labels, persistent/actionable feedback, predictable keyboard/focus behaviour, accessible controls/contrast and usable window sizes. Record concrete findings and their resolution in this task and verified evidence in master.md; no parallel backlog. Preserve existing capabilities and safeguards. Refs: plan §\"Layered architecture\" (layer 1), plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Decisions made\" (complete beta, not an MVP).",
+      "scope": "Perform a complete audit of the actual desktop app through screenshots and interactive walkthroughs, covering launch/project context, navigation, chat/providers/models/sign-in, voice, tools/results, preview/build/emulator, history/restore and failure/recovery states. Establish and implement a coherent visual and interaction foundation: clear hierarchy and grouping, discoverable existing functions, understandable labels, persistent/actionable feedback, predictable keyboard/focus behaviour, accessible controls/contrast and usable window sizes. Owner review 2026-11-26 of generated mockups accepted the direction in `docs/design/app-006-feature-brief.md` (\"Accepted direction\") and master.md \"APP-006 UI direction\": one function in one place; left navigation, project bar and status bar with command palette; view-declared modular header actions; collapsible right-docked agent panel in every view, sole place for provider/model choice; Play here without leaving the editor; icon-based emulator speed/scale; compact density usable at 1280×720; merged Project view (overview, build, tests); light and dark themes with the mockups' palette meeting WCAG AA; own logo; slimmed inspector without breakpoints; UI moved to Svelte with Vite. Maps are edited in Tauros (APP-001). The 2026-11-26 audit of the current app is classified (keep / evolve / remove / to do) in the brief's \"Audit of the current app\" section and is the checklist for this task. Planned but unimplemented functions are shown disabled with a Work-in-progress tooltip naming their task (Owner 2026-11-26); building them is out of scope. Record concrete findings and their resolution in this task and verified evidence in master.md; no parallel backlog. Preserve existing capabilities and safeguards. Refs: plan §\"Layered architecture\" (layer 1), plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Decisions made\" (complete beta, not an MVP).",
       "section": "Tauros roadmap / Before Phase 5 — UX/UI foundation",
       "source_line": 428,
       "status": "Not started",
@@ -1648,7 +1648,7 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "a1f21e1fe90e930fb305320d8cbae2c7ba0bfaa0705b71237a3413f396c08170",
+  "todo_sha256": "6d95acb43d17f9761e170a4435821cbee6f64fcf003e7f4f9a1e3f50e1c00aa2",
   "topological_layers": [
     [
       "AGT-005",

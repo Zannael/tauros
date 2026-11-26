@@ -3088,3 +3088,35 @@ yet verified. If it does not, the GFX-012 dependency is added to GFX-004 and rec
 - `crates/app/tauri.conf.json` + `crates/app/src/main.rs`: WebKitGTK's `ipc://` custom-protocol binary `fetch()` requires `connect-src 'self' ipc: http://ipc.localhost` in CSP; `extract_binary_body` also accepts Tauri's JSON byte-array fallback for `load_rom`, `emu_import_save`, and `emu_load_state_file`.
 - Implemented and verified (`cargo test -p tauros-emu`, `cargo test -p tauros-app --lib --bins`, `node tests/emu_ui.cjs`, and Owner desktop confirmation): File/Emulation/Audio-Video/Tools menus, transport strip, ROM info, `.sav` import/export, quick savestate slots 1-9 and `.ss` file save/load, Pause/Reset/Frame Advance/Fast Forward/Rewind, Scale/Aspect/Mute/Volume/PNG screenshot, persisted key remapping, mGBA log panel, Video Layers (`BG0`–`BG3`, `OBJ`) and Audio Channels (`PSG 1`–`4`, `FIFO A`/`B`) toggles, tabbed Game State Viewers (Palette, Tile/VRAM, OAM/Sprite, Memory & `.sym` inspector), `Agent held` status badge, automatic selected/live agent context, and post-build preview banner.
 - **Limits:** `codex_adapter` and `codex_lists_visible_models_and_overrides_following_turns` failed under the restricted sandbox (`bwrap` / `Codex disconnected`, untouched); UI tabs and layer toggles were verified via unit tests on GBA hardware RAM and Owner desktop trial rather than automated WebKitGTK click-through.
+
+## APP-006 UI direction (Owner decisions, 2026-11-26)
+
+**Accepted Owner decisions (Simone, 2026-11-26),** after reviewing thirteen
+image-model mockups generated from `docs/design/app-006-feature-brief.md`. The
+mockups are a structural and palette reference only and are not stored in the
+repository (invented and third-party art). The full list is the brief's
+"Accepted direction" section; the decisions with wider consequences are:
+
+- One function, one place: no duplicated controls between views or Settings.
+- The agent becomes a collapsible right-docked panel available in every view;
+  provider and model are chosen only there.
+- Maps are edited inside Tauros (APP-001), keeping Porymap compatibility; Porymap
+  functions are not duplicated.
+- Light and dark themes with the mockups' lavender/violet palette, WCAG AA contrast.
+- The frontend moves from plain JavaScript to Svelte built with Vite.
+
+These are decisions, not verified implementation; nothing has been built yet.
+
+**Verified 2026-11-26 (APP-006 audit, before state):** the debug app was run with
+`--project` on director-scene-mcp004 on an isolated Xvfb display at 1600×900 and
+1280×720 and its Play view, emulator menus, viewers, key configuration, log, ROM
+information, History, Map generator and agent panel were captured (screenshots kept
+outside the repository). Observed facts: every transport function exists both as a
+button and a menu entry; the persisted emulator speed restarted the emulator at 8×
+on launch; Game State Viewers, Emulator Log and ROM Information are modal and cover
+the game; the log has no level filter and fills with DMA INFO lines; History opens
+below the game and the menubar scrolls away with the page; the Map generator view
+shifts the layout horizontally compared with Play. The classified list is in
+`docs/design/app-006-feature-brief.md`. Not exercised: agent turns, sign-in,
+dictation, builds and full keyboard/focus traversal.
+
