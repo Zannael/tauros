@@ -14,7 +14,7 @@
   import { emuLog } from '../lib/emulog.js';
   import { t } from '../lib/i18n.js';
   const { status, config, slots, busy } = emu;
-  const { info, point, operation, live } = project;
+  const { info, point, operation, live, suggestion } = project;
   const { busy: agentBusy } = chat;
 
   let panel = $state('slots');
@@ -76,6 +76,7 @@
   });
   const logEntries = $derived($emuLog.filter((e) => logLevel === 'all' || !['INFO', 'DEBUG', 'STUB'].includes(e.level)));
   const bounds = $derived($point.map ? project.bounds($point.map) : null);
+  const refused = $derived($info ? $info.maps.filter((m) => project.refusal(m)) : []);
   const pointOk = $derived(!!bounds && $point.x !== '' && $point.y !== '' && Number.isInteger(Number($point.x)) && Number.isInteger(Number($point.y))
     && Number($point.x) >= 0 && Number($point.y) >= 0 && Number($point.x) < bounds.width && Number($point.y) < bounds.height);
   $effect(() => { $point.map; untrack(() => project.refreshLive()); });
@@ -129,7 +130,12 @@
         <label class="field map"><span>{$t('Map')}</span>
           <select value={$point.map} disabled={!!$operation} title={bounds ? $t('{w} × {h} tiles; choose a walkable point', { w: bounds.width, h: bounds.height }) : ''}
             onchange={(e) => project.chooseMap(e.currentTarget.value)}>
-            {#each $info.maps as m (m)}<option value={m}>{m}</option>{/each}
+            {#each $info.maps.filter((m) => !project.refusal(m)) as m (m)}<option value={m}>{m}</option>{/each}
+            {#if refused.length}
+              <optgroup label={$t('Not bootable in this build')}>
+                {#each refused as m (m)}<option value={m} disabled title={project.refusal(m)}>{m}</option>{/each}
+              </optgroup>
+            {/if}
           </select></label>
         <label class="field coord"><span>X</span><input type="number" min="0" max={bounds ? bounds.width - 1 : 0} value={$point.x}
           disabled={!!$operation} oninput={(e) => project.setCoordinate('x', e.currentTarget.value)} /></label>
@@ -151,6 +157,11 @@
             {:else}{$live.live_status.replace(/_/g, ' ')}{/if}</span>
         {/if}
         {#if !pointOk && $point.map}<p class="small error-text hint">{$t('Choose integer coordinates inside this map.')}</p>{/if}
+        {#if $suggestion}
+          <p class="small hint">{$t('This tile cannot be walked on.')}
+            <button type="button" disabled={!!$operation} onclick={() => { const { x, y } = $suggestion; project.setCoordinate('x', x); project.setCoordinate('y', y); }}>
+              {$t('Use the nearest walkable tile ({x}, {y})', $suggestion)}</button></p>
+        {/if}
       </form>
       {#if $live?.new_build_pending}
         <div class="banner" role="status">

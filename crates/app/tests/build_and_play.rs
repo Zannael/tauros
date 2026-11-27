@@ -85,6 +85,13 @@ impl Mcp {
         }
     }
 
+    /// Calls a tool that must fail and returns its error text.
+    async fn call_failing(&mut self, name: &str, arguments: Value) -> String {
+        let reply = self.request("tools/call", json!({ "name": name, "arguments": arguments })).await;
+        assert_eq!(reply["result"]["isError"], json!(true), "{name} should have failed: {reply}");
+        reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned()
+    }
+
     /// Calls a tool and returns its JSON result, failing on a tool error.
     async fn call(&mut self, name: &str, arguments: Value) -> Value {
         let reply = self.request("tools/call", json!({ "name": name, "arguments": arguments })).await;
@@ -129,6 +136,13 @@ async fn build_and_boot_shares_the_emulator_with_the_agent() {
     let built = fs::read(dir.join("pokeemerald.gba")).unwrap();
     assert_ne!(built, base_rom, "the build includes the agent's trainer");
     assert_eq!(project.emulator().lock().unwrap().rom_sha256(), Some(report.rom_sha256.as_str()));
+
+    // The agent's own boot tool follows the same rules: Petalburg's gym wall is
+    // refused with the nearest walkable tile, and a Kanto map is refused outright.
+    let wall = agent.call_failing("emu_boot", json!({ "kind": "boot_to", "map": "MAP_PETALBURG_CITY", "x": 0, "y": 0 })).await;
+    assert!(wall.contains("the tile is") && wall.contains("nearest walkable tile is"), "{wall}");
+    let kanto = agent.call_failing("emu_boot", json!({ "kind": "boot_to", "map": "MAP_CELADON_CITY", "x": 24, "y": 20 })).await;
+    assert!(kanto.contains("REGION_KANTO"), "{kanto}");
 
     // Frames the agent runs are frames of the window's session.
     let before = project.emulator().lock().unwrap().emulator().frame_count();

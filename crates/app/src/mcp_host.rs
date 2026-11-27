@@ -11,6 +11,7 @@ use std::thread::{self, JoinHandle};
 
 use tauros_agent_bridge::McpServerConfig;
 use tauros_connector_gen3::boot::{map_numbers, read_live_location, BootPlan, BootTarget, GameLayout, Symbols};
+use tauros_connector_gen3::preflight::{assess_boot_point, check_boot_point, map_usability, PointAssessment};
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
 use tauros_emu::{Emulator, Mgba};
@@ -112,15 +113,14 @@ fn git_head_revision(project_dir: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&revision.stdout).trim().to_owned())
 }
 
-impl BootHook for Gen3BootHook {
-    fn boot_to(
-        &mut self,
-        emu: &mut dyn Emulator,
-        map: &str,
-        x: i16,
-        y: i16,
-        flags: &[String],
-    ) -> Result<u32, String> {
+/// Failed boots reach the terminal with the map, the point and the cause, whoever
+/// asked: the window, the command line or the agent.
+pub fn log_boot_failure(map: &str, x: i16, y: i16, cause: &str) {
+    eprintln!("tauros: boot failed at {map} ({x}, {y}): {cause}");
+}
+
+impl Gen3BootHook {
+    fn boot_checked(&mut self, emu: &mut dyn Emulator, map: &str, x: i16, y: i16, flags: &[String]) -> Result<u32, String> {
         let sym_path = self.project_dir.join("pokeemerald.sym");
         let sym_text = fs::read_to_string(&sym_path)
             .map_err(|e| format!("failed to read {}: {e}", sym_path.display()))?;
@@ -132,6 +132,7 @@ impl BootHook for Gen3BootHook {
                 .map_err(|_| "connector lock poisoned".to_owned())?;
             guard.load().map_err(|e| e.to_string())?
         };
+        check_boot_point(&self.project_dir, &snapshot.maps, &MapId::from(map), x, y).map_err(|e| e.0)?;
         let layout = self.layout()?;
         let target = BootTarget {
             map: MapId::from(map),
@@ -142,7 +143,30 @@ impl BootHook for Gen3BootHook {
         let plan = BootPlan::new(target, &snapshot, &maps, &Symbols::parse(&sym_text), layout)
             .map_err(|e| e.to_string())?;
         let report = plan.boot(emu).map_err(|e| e.to_string())?;
+        if report.moved_by_map_script {
+            eprintln!(
+                "tauros: booted {map}; its own script moved the player from ({x}, {y}) to ({}, {})",
+                report.location.x, report.location.y
+            );
+        }
         Ok(report.frames)
+    }
+}
+
+impl BootHook for Gen3BootHook {
+    fn boot_to(
+        &mut self,
+        emu: &mut dyn Emulator,
+        map: &str,
+        x: i16,
+        y: i16,
+        flags: &[String],
+    ) -> Result<u32, String> {
+        let result = self.boot_checked(emu, map, x, y, flags);
+        if let Err(cause) = &result {
+            log_boot_failure(map, x, y, cause);
+        }
+        result
     }
 }
 
@@ -247,14 +271,29 @@ pub struct MapPreviewInfo {
     pub id: String,
     pub width: u16,
     pub height: u16,
+    /// The walkable tile nearest the centre (the centre itself when it is walkable).
     pub default_x: i16,
     pub default_y: i16,
+    /// False when the build cannot boot into the map; `refusal` says why.
+    pub bootable: bool,
+    pub refusal: Option<String>,
 }
+
+/// The answer to "can the player start here?", with the nearest walkable tile.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PointReport {
+    pub ok: bool,
+    /// The map itself cannot be booted (as opposed to a blocked tile).
+    pub map_refused: bool,
+    pub problem: Option<String>,
+    pub nearest: Option<(i16, i16)>,
+}
+
 impl MapPreviewInfo {
     fn from_map(map: &tauros_model::Map) -> Option<Self> {
         let tauros_model::MapGeometry::Grid { width, height, .. } = map.geometry else { return None };
         Some(Self { id: map.id.0.clone(), width, height,
-            default_x: (width / 2) as i16, default_y: (height / 2) as i16 })
+            default_x: (width / 2) as i16, default_y: (height / 2) as i16, bootable: true, refusal: None })
     }
     pub fn validate(&self, x: i16, y: i16) -> Result<(), String> {
         if x < 0 || y < 0 || x as u16 >= self.width || y as u16 >= self.height {
@@ -366,14 +405,50 @@ impl ProjectSession {
     pub fn preview_maps(&self) -> Result<Vec<MapPreviewInfo>, String> {
         let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
         let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
-        Ok(snapshot.maps.values().filter_map(MapPreviewInfo::from_map).collect())
+        let usability = map_usability(&self.dir, &snapshot.maps).map_err(|e| e.0)?;
+        Ok(usability
+            .into_iter()
+            .map(|(id, width, height, u)| MapPreviewInfo {
+                id: id.0,
+                width,
+                height,
+                default_x: u.default_point.0,
+                default_y: u.default_point.1,
+                bootable: u.refusal.is_none(),
+                refusal: u.refusal,
+            })
+            .collect())
+    }
+
+    /// Whether the player can start at (`x`, `y`) of `map`, and the nearest walkable
+    /// tile when not. Does not build or touch the emulator.
+    pub fn check_point(&self, map: &str, x: i16, y: i16) -> Result<PointReport, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+        let assessment = assess_boot_point(&self.dir, &snapshot.maps, &MapId::from(map), x, y).map_err(|e| e.0)?;
+        Ok(PointReport {
+            ok: assessment == PointAssessment::Fine,
+            map_refused: matches!(assessment, PointAssessment::MapRefused(_)),
+            problem: assessment.problem(),
+            nearest: match &assessment {
+                PointAssessment::Blocked { nearest, .. } => *nearest,
+                _ => None,
+            },
+        })
     }
 
     // Caller owns the project operation gate. Run before build or ROM reload.
     fn validate_preview_target(&self, map: &str, x: i16, y: i16) -> Result<(), String> {
-        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
-        snapshot.maps.get(&MapId::from(map)).and_then(MapPreviewInfo::from_map)
-            .ok_or_else(|| format!("unknown or unsupported preview map {map}"))?.validate(x, y)
+        let checked = (|| {
+            let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+            snapshot.maps.get(&MapId::from(map)).and_then(MapPreviewInfo::from_map)
+                .ok_or_else(|| format!("unknown or unsupported preview map {map}"))?.validate(x, y)?;
+            check_boot_point(&self.dir, &snapshot.maps, &MapId::from(map), x, y).map_err(|e| e.0)
+        })();
+        if let Err(cause) = &checked {
+            log_boot_failure(map, x, y, cause);
+        }
+        checked
     }
 
     /// Boot a fresh preview from the existing ROM/symbol build pair. Does not
@@ -399,10 +474,14 @@ impl ProjectSession {
         self.validate_preview_target(map, x, y)?;
         let built = {
             let mut connector = self.connector.lock().map_err(|_| "connector lock poisoned")?;
-            domain::build(connector.as_mut()).map_err(|e| format!("{}: {}", e.kind, e.message))?
+            domain::build(connector.as_mut()).map_err(|e| {
+                let cause = format!("{}: {}", e.kind, e.message);
+                log_boot_failure(map, x, y, &format!("the build failed first: {cause}"));
+                cause
+            })?
         };
         let mut session = self.emulator.lock().map_err(|_| "emulator lock poisoned")?;
-        reload_project_artifacts(&self.dir, &mut session)?;
+        reload_project_artifacts(&self.dir, &mut session).inspect_err(|cause| log_boot_failure(map, x, y, cause))?;
         let request = EmuBootRequest { kind: BootKind::BootTo, map: Some(map.to_owned()), x: Some(x), y: Some(y), flags: flags.to_vec(), frames: 0 };
         let booted = emu_boot(&mut session, request).map_err(|e| format!("{}: {}", e.kind, e.message))?;
         self.record_boot(map, x, y, flags, &built.rom_sha256);
@@ -704,6 +783,15 @@ mod preview_tests {
         fs::create_dir(&dir).unwrap();
         fs::write(dir.join("pokeemerald.gba"), [1, 2, 3]).unwrap();
         fs::write(dir.join("pokeemerald.sym"), "02000000 g 00000004 Synthetic\n").unwrap();
+        // The point checks read the layout table and the blockdata of the project.
+        fs::create_dir_all(dir.join("data/layouts/Test")).unwrap();
+        fs::create_dir_all(dir.join("data/maps")).unwrap();
+        fs::write(dir.join("data/maps/map_groups.json"), r#"{"group_order":["g"],"g":["Test"]}"#).unwrap();
+        fs::write(dir.join("data/layouts/layouts.json"), r#"{"layouts_table_label":"gMapLayouts","layouts":[{"id":"TEST","name":"Test_Layout","width":11,"height":8,"primary_tileset":"a","secondary_tileset":"b","border_filepath":"data/layouts/Test/border.bin","blockdata_filepath":"data/layouts/Test/map.bin"}]}"#).unwrap();
+        // Floor (elevation 3) everywhere except a wall in the centre tile (5, 4).
+        let mut blocks = [3u16 << 12; 11 * 8];
+        blocks[4 * 11 + 5] |= 1 << 10;
+        fs::write(dir.join("data/layouts/Test/map.bin"), blocks.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
         let calls = Arc::new(Mutex::new(Vec::new()));
         let emu = preview_framebuffer::SyntheticFramebuffer(Arc::new(Mutex::new(preview_framebuffer::picture(false, false))));
         let emulator = EmuSession::new(emu).with_rom(vec![9]).unwrap().with_boot_hook(SyntheticBoot(Arc::clone(&calls)));
@@ -718,7 +806,11 @@ mod preview_tests {
         assert!(ctx_before.rom_stale);
         assert!(!ctx_before.new_build_pending);
         let bounds = project.preview_maps().unwrap();
-        assert_eq!((bounds[0].default_x, bounds[0].default_y), (5, 4));
+        assert!(bounds[0].bootable);
+        assert_eq!((bounds[0].default_x, bounds[0].default_y), (5, 3), "the walled centre moves to its nearest walkable tile");
+        let wall = project.check_point("MAP_TEST_MART", 5, 4).unwrap();
+        assert!(!wall.ok && !wall.map_refused && wall.nearest == Some((5, 3)), "{wall:?}");
+        assert!(project.check_point("MAP_TEST_MART", 3, 3).unwrap().ok);
         let original_hash = project.emulator.lock().unwrap().rom_sha256().unwrap().to_owned();
         // MemoryConnector::build always fails; the coordinate error must precede it.
         assert!(project.build_and_boot("MAP_TEST_MART", 15, 10, &[]).unwrap_err().contains("outside"));
@@ -726,17 +818,20 @@ mod preview_tests {
                             ("MAP_TEST_MART", -1, 0), ("MAP_MISSING", 0, 0)] {
             assert!(project.preview_built(map, x, y, &[]).is_err());
         }
+        let blocked = project.preview_built("MAP_TEST_MART", 5, 4, &[]).unwrap_err();
+        assert!(blocked.contains("solid") && blocked.contains("nearest walkable tile is (5, 3)"), "{blocked}");
+        assert!(project.build_and_boot("MAP_TEST_MART", 5, 4, &[]).unwrap_err().contains("solid"), "refused before the build");
         assert_eq!(project.emulator.lock().unwrap().rom_sha256(), Some(original_hash.as_str()));
         assert!(calls.lock().unwrap().is_empty());
-        let report = project.preview_built("MAP_TEST_MART", 5, 4, &["FLAG_TEST".into()]).unwrap();
+        let report = project.preview_built("MAP_TEST_MART", 5, 3, &["FLAG_TEST".into()]).unwrap();
         assert_eq!(report.boot_frames, 42);
         assert_ne!(report.rom_sha256, original_hash);
-        assert_eq!(calls.lock().unwrap().as_slice(), &[("MAP_TEST_MART".into(), 5, 4, vec!["FLAG_TEST".into()])]);
+        assert_eq!(calls.lock().unwrap().as_slice(), &[("MAP_TEST_MART".into(), 5, 3, vec!["FLAG_TEST".into()])]);
         let gate = project.operation_gate.lock().unwrap();
-        assert!(project.preview_built("MAP_TEST_MART", 5, 4, &[]).unwrap_err().contains("operation"));
+        assert!(project.preview_built("MAP_TEST_MART", 5, 3, &[]).unwrap_err().contains("operation"));
         drop(gate);
         assert_eq!(fs::read(dir.join("pokeemerald.gba")).unwrap(), [1, 2, 3]);
-        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 3, "only the fixture files: no build output, no snapshot");
         fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -3191,3 +3191,75 @@ and booted there. Not checked: the Owner's native run, opening while an agent
 reply runs, and a relaunch from a terminal that closes (the new instance keeps the
 parent's terminal output).
 
+
+## Boot points: usable maps and walkable spawn (EMU-006, 2026-11-27)
+
+Facts below were measured by booting the maps of the pinned expansion base build
+(commit 3796c72, a `cp -a` copy of the FND-002 base build, `MAP_VERSION ?= emerald`)
+headless through `BootPlan` at each map's centre; they are not inferred from names.
+The probes are the opt-in tests `probe_every_map` and the walk test in
+`crates/connector-gen3/tests/boot.rs` (`TAUROS_DOCKER_TESTS=1`).
+
+**Verified: which maps boot.**
+- The base has 939 maps. Every map of the FireRed/LeafGreen set hangs: the load
+  never finishes (`gMain.callback2` stays `CB2_LoadMap2`, `gMain.state` 0, for 12000
+  frames after the 900-frame wait). 161 of them were booted in a first run that was
+  stopped, and 41 more (every tenth of the refused maps) in a second one, none
+  loaded. The cause is in the build: `tools/mapjson/mapjson.cpp` generates the map
+  groups, headers and layouts for the `MAP_VERSION` (`emerald`); a map whose
+  `region` is not `REGION_HOENN` (absent means Hoenn) is left out of `groups.inc`
+  (a group with no kept map becomes `NULL` in `gMapGroups`) and a layout whose
+  `layout_version` is not `emerald` gets `.4byte NULL` in `gMapLayouts`.
+  `include/constants/map_groups.h` still defines their `MAP_*` constants, which is
+  why the boot was accepted. 417 maps are refused for their region (419 `_Frlg`
+  folders: 417 plus 2 of the 4 maps below).
+- 4 maps (`Route6_UnusedHouse_Frlg`, `Route19_UnusedHouse_Frlg`,
+  `Route23_UnusedHouse`, `SevenIsland_UnusedHouse`) are in no group of
+  `map_groups.json`: no constant, no boot.
+- 7 maps have no tile to stand on: `MAP_ROUTE130` (all deep water) and
+  `MAP_UNUSED_CONTEST_HALL1..6` (1x1 walls). They do boot; the rule refuses them
+  because no boot point can be walkable.
+- **Counter to the premise of the Owner report:** the unused Ruby/Sapphire maps
+  (`CaveOfOrigin_UnusedRubySapphireMap1..3`, `AquaHideout_UnusedRubyMap1..3`,
+  `LilycoveCity_UnusedMart`) are Hoenn maps and boot normally at their centre; their
+  errors were not reproduced. The refused set is therefore 428 of 939; 511 are
+  bootable.
+- Of the 518 kept maps probed in the second run, 473 reached the requested
+  tile, 44 reached the right map but their own script moved the player before the
+  boot settled (Battle Frontier corridors and rooms, secret bases, Ever Grande
+  champion/Hall of Fame rooms, battle tent corridors, Trainer Hill elevator). That
+  is now a successful boot with `moved_by_map_script`, not an error. One kept map,
+  `MAP_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_NORMAL`, hangs like the FRLG maps for a
+  reason not found (its siblings boot). The 511 selectable maps include it.
+
+**Verified: walkability.** `map.bin` words carry collision (bits 10-11) and elevation
+(bits 12-15). Over the 518 Emerald-layout Hoenn maps, 184 have a solid or water
+centre tile, so the old default spawn was often unusable. A tile is walkable when its
+collision is 0 and its elevation is not 1 (`ELEVATION_SURF`: land next to it is an
+elevation mismatch); elevation 0 and 15 match every elevation. The nearest walkable
+tile prefers tiles with a walkable neighbour of a matching elevation. NPCs are not
+considered: the Petalburg gym point (15, 10) of EMU-005 is an NPC tile and boots.
+Checked by walking: from the default point of the 463 bootable maps that boot in place (not moved by a
+script), 455 let
+the player move within 40 frames of holding a direction. The 8 that did not
+(`BATTLE_FRONTIER_LOUNGE3`, `BATTLE_PYRAMID_SQUARE07`, `MAGMA_HIDEOUT_2F_1R`,
+`MT_PYRE_6F`, `ROUTE104_PROTOTYPE` (1x1), `ROUTE119_WEATHER_INSTITUTE_1F`,
+`SOOTOPOLIS_CITY_GYM_B1F`, `UNION_ROOM`) have open terrain and no common script;
+their cause is **unknown** (a metatile behaviour the check does not model is the
+first suspect) and the test lists them as the only accepted exceptions. Maps with an
+`ON_FRAME` script were excluded from that check, since they may hold the player.
+
+**Accepted decisions.** The checks live in `connector_gen3::{walk, preflight}` and
+run in `Gen3BootHook` (so the agent's `emu_boot`, Preview and Build & play share
+them), in `Launch::prepare` (command line and relaunch) and, before any build,
+in `ProjectSession`. A blocked point is refused with the cause and the nearest
+walkable tile rather than silently moved; the UI offers that tile as a button and
+moves a blocked remembered or launch point itself, with a notification. The selector
+shows refused maps disabled with their reason. Boot failures go to stderr as
+`tauros: boot failed at MAP (x, y): cause`.
+
+**Not verified / limits.** Only the Emerald build of the pinned expansion was
+booted; the `firered` and `ruby` branches of the rule follow `mapjson` but were not
+run. Metatile behaviours, NPC occupation and script-driven moves are not modelled.
+The integration test `phase2_integration` had a stale assertion since APP-003 (the
+first picture after a load is video only); it was corrected on the way.

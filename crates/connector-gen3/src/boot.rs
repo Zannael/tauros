@@ -250,6 +250,9 @@ pub struct BootReport {
     /// Frames emulated from reset to the settled target map.
     pub frames: u32,
     pub location: Location,
+    /// The map loaded but its own script (an arrival walk, a cutscene) moved the
+    /// player off the requested tile before the boot settled.
+    pub moved_by_map_script: bool,
 }
 
 /// Reads the player's live map group/num and coordinates from `gSaveBlock1Ptr`,
@@ -352,15 +355,16 @@ impl BootPlan {
 
         let location = self.location(emu)?;
         let want = Location { group: self.group, num: self.num, x: t.x, y: t.y };
-        if location != want {
+        if (location.group, location.num) != (want.group, want.num) {
             return err(format!("arrived at {location:?}, wanted {want:?}"));
         }
+        let moved_by_map_script = location != want;
         for (&n, id) in self.flag_numbers.iter().zip(&t.flags) {
             if !self.flag(emu, n)? {
                 return err(format!("flag {} was cleared while loading the map", id.0));
             }
         }
-        Ok(BootReport { frames, location })
+        Ok(BootReport { frames, location, moved_by_map_script })
     }
 }
 

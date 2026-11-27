@@ -334,12 +334,38 @@ the selected map and coordinates:
 - **Build & play** validates, snapshots and builds, then boots to that point.
 
 Changing maps remembers valid points for previously selected maps and otherwise
-chooses the new map's centre. X/Y limits follow its dimensions; invalid integer
-coordinates are rejected before building or reloading the emulator. Bounds do
-not prove walkability: adjust the point if it lands on a blocked tile. The launch
-flags apply to both actions. Preview still runs the game's boot sequence and can
-measure/cache struct offsets on its first boot at a source revision; it does not
-promise instantaneous switching. Errors appear as notifications.
+chooses the walkable tile nearest the new map's centre. X/Y limits follow its
+dimensions; invalid integer coordinates are rejected before building or reloading
+the emulator. The launch flags apply to both actions. Preview still runs the
+game's boot sequence and can measure/cache struct offsets on its first boot at a
+source revision; it does not promise instantaneous switching.
+
+**Which maps can be booted (EMU-006).** The map selector lists the maps the build
+can boot into; the others stay visible but greyed out under *Not bootable in this
+build*, with the reason as a tooltip, and are refused before any boot. An Emerald
+build (`MAP_VERSION ?= emerald` in the Makefile) does not contain the maps whose
+`region` is not `REGION_HOENN` (every FireRed/LeafGreen map of the expansion, the
+`_Frlg` folders) because the project's `mapjson` leaves them out of the map groups
+and gives their `frlg` layouts a NULL layout; `map_groups.h` still defines their
+constants, so the game accepts the boot and then hangs while loading. Maps in no
+group of `data/maps/map_groups.json` have no constant, and maps with no tile the
+player can stand on (an all-water route, the 1x1 unused contest halls) are refused
+too. The unused Ruby/Sapphire maps are part of an Emerald build and boot normally.
+
+**Walkable points.** Before booting, the point is checked against the layout's
+`map.bin`: collision other than 0 is solid, and elevation 1 is water that needs
+Surf. A blocked point is refused with the reason and the nearest walkable tile,
+which the Emulator view offers as a button; the default point of each map, the
+remembered point and a launch point follow the same rule (a blocked remembered
+point moves to the nearest tile and a notification says so). The agent's boot tool
+and the command line use the same check. Objects (NPCs, items) and metatile
+behaviours are not examined, and some maps move the player at arrival with their
+own script (Battle Frontier corridors, secret bases, Ever Grande rooms): the boot
+still succeeds and the terminal says where the player ended up.
+
+Every boot failure (refused point, failed build before the boot, boot that never
+reaches the map) is written to the terminal as `tauros: boot failed at MAP (x, y):
+cause` and stays in the notification list with the same map, point and cause.
 
 Replace the project path with your built project's directory. Supply `--project`,
 `--map`, `--x` and `--y` together; repeat `--flag` to set several saved flags.
@@ -355,8 +381,8 @@ Taking the project over disables remote pushes and snapshots pending source edit
 before writing the layout probe under ignored `build/tauros/`.
 
 Boot-to-point starts a fresh game (empty name, default gender, no party); it does
-not resume a save. Coordinates are checked against map bounds, not walkability.
-Only the pinned Emerald expansion and Linux desktop have been checked; there is
+not resume a save. Points are checked against map bounds and walkability (see
+above), not against what an NPC or a map script does on arrival. Only the pinned Emerald expansion and Linux desktop have been checked; there is
 no gamepad support yet.
 
 ### Desktop interface (APP-006)

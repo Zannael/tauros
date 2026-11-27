@@ -3,7 +3,6 @@
     "DEC-004"
   ],
   "ready_ids": [
-    "EMU-006",
     "AGT-005",
     "AGT-009",
     "APP-001",
@@ -18,7 +17,6 @@
     "NDS-001"
   ],
   "ready_unassigned_ids": [
-    "EMU-006",
     "AGT-005",
     "AGT-009",
     "APP-001",
@@ -677,19 +675,19 @@
       "dependents": [],
       "id": "EMU-006",
       "incomplete_prerequisites": [],
-      "note": "Owner report 2026-11-27: several maps fail with error notifications in Preview / Build & play and the spawn must land on a walkable tile. Found the same day: director-scene-mcp004 (pokeemerald-expansion) ships 419 FireRed/LeafGreen map folders with the `_Frlg` suffix (e.g. `CeruleanCity_House1_Frlg`, `CeruleanCave_1F_Frlg`) plus unused Ruby/Sapphire maps (e.g. `CaveOfOrigin_UnusedRubySapphireMap1`), all listed in the boot point selector of an Emerald build; boot failures are shown only as transient UI notifications and never reach the terminal, so the Owner's errors were not recoverable.",
-      "owner": null,
+      "note": null,
+      "owner": "Claude Code",
       "prerequisites": [
         "EMU-003",
         "APP-008"
       ],
       "responsible": "Agent",
-      "scope": "Investigate and record in master.md which maps an Emerald build of the pinned expansion can actually boot into (FRLG and unused maps, maps without a usable layout or tileset) and why the failing ones fail. The boot point selector lists only bootable maps, or marks the others and refuses them before booting, with a clear reason. A boot point must be walkable: check the layout's metatile collision (and elevation where relevant) at x, y before booting and offer the nearest walkable tile instead of booting into a wall; default map centres and remembered points follow the same rule. Boot failures are logged to stderr and kept in the notification list with the map, the point and the cause. Applies to Preview, Build & play, the remembered point of APP-008 and the agent's boot tool where it shares the code. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2), plan §\"Rules for the agents writing the code\" (Targeted tests).",
+      "scope": "Owner report 2026-11-27: several maps fail with error notifications in Preview / Build & play and the spawn must land on a walkable tile. Found the same day: director-scene-mcp004 (pokeemerald-expansion) ships 419 FireRed/LeafGreen map folders with the `_Frlg` suffix (e.g. `CeruleanCity_House1_Frlg`, `CeruleanCave_1F_Frlg`) plus unused Ruby/Sapphire maps (e.g. `CaveOfOrigin_UnusedRubySapphireMap1`), all listed in the boot point selector of an Emerald build; boot failures are shown only as transient UI notifications and never reach the terminal, so the Owner's errors were not recoverable. Investigate and record in master.md which maps an Emerald build of the pinned expansion can actually boot into (FRLG and unused maps, maps without a usable layout or tileset) and why the failing ones fail. The boot point selector lists only bootable maps, or marks the others and refuses them before booting, with a clear reason. A boot point must be walkable: check the layout's metatile collision (and elevation where relevant) at x, y before booting and offer the nearest walkable tile instead of booting into a wall; default map centres and remembered points follow the same rule. Boot failures are logged to stderr and kept in the notification list with the map, the point and the cause. Applies to Preview, Build & play, the remembered point of APP-008 and the agent's boot tool where it shares the code. Refs: plan §\"Layered roadmap toward the beta\" (Phase 2), plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Phase 2 — Emulator",
       "source_line": 296,
-      "status": "Not started",
+      "status": "Done",
       "title": "Boot points: walkable spawn, usable maps and visible boot errors.",
-      "verification": null
+      "verification": "2026-11-27 UTC: probed the pinned expansion base build (3796c72, Emerald) by booting its 939 maps headless at their centre (opt-in `probe_every_map`, `TAUROS_DOCKER_TESTS=1`): every FRLG map hangs in its map load (161 booted in an interrupted first run plus a sample of 41 in a second), because `mapjson` leaves other-region maps out of the groups and gives `frlg` layouts a NULL layout; the unused Ruby/Sapphire maps boot. `boot.rs` tests with Docker passed: 428 of 939 maps refused (417 region, 4 in no group, 7 without a tile to stand on), a refused FRLG map really hangs while a kept map loads, and from the default point of 463 bootable maps 455 let the player move (8 unexplained, listed in master.md). `cargo test -p tauros-connector-gen3 --lib` (34, walkability and preflight rules), `cargo test -p tauros-app --lib` (17), with Docker `build_and_play` (agent `emu_boot` refused on a wall and on a Kanto map) and `phase2_integration` passed; `cargo clippy --workspace --tests -- -D warnings` clean; `npm --prefix crates/app/ui test` 48 passed (selector refusal, saved point moved, blocked point with suggestion, error naming map/point/cause, complete Italian translations); 126 Python tests, `check_roadmap` and `check_private --all` passed. Private Xvfb display with a disposable copy of the base build: a Kanto map and a wall point from the command line each wrote `tauros: boot failed at MAP (x, y): cause` to stderr, the Emulator view showed the error toast, the nearest-tile button and a boot on the walkable tile, and a blocked remembered point moved on startup. Owner tested in the app and accepted on 2026-11-27 (\"accettato\"). Limits: only the Emerald build of the pinned expansion was booted (`firered`/`ruby` rule branches not run); NPCs, metatile behaviours and arrival scripts are not modelled (44 maps are moved by their own script and boot with a note); `MAP_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_NORMAL` hangs for an unknown reason; 8 default points could not be walked from for an unknown reason; the Owner's check was manual and its details are not recorded beyond his acceptance."
     },
     {
       "completion": "A trivial tool is listed and callable over stdio from Codex and Gemini CLI or Antigravity, and from an MCP test client, with commands recorded and README config snippets for all clients. Owner amendment on 2026-11-18: document the expired Claude Code OAuth session and defer its live call to the Owner after login renewal; supply its configuration and retry command.",
@@ -1688,10 +1686,9 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "f277bf80aa4aba4217303ce8441fe70ed27be2b8ee9999abfeb7271944c78995",
+  "todo_sha256": "9e978afdd25f430eef0cdc62f30463fad09e47f11d38411f2dce5fdfd84bf949",
   "topological_layers": [
     [
-      "EMU-006",
       "AGT-005",
       "AGT-009",
       "APP-001",

@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauros_connector_gen3::boot::{map_numbers, BootPlan, BootTarget, GameLayout, Symbols};
+use tauros_connector_gen3::preflight::check_boot_point;
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
 use tauros_model::{Connector, FlagId, MapId};
@@ -86,6 +87,7 @@ impl Launch {
                 let connector = Gen3Connector::open(project, None).map_err(|e| e.to_string())?;
                 let snapshot = connector.load().map_err(|e| e.to_string())?;
                 let maps = map_numbers(project).map_err(|e| e.to_string())?;
+                check_boot_point(project, &snapshot.maps, &target.map, target.x, target.y).map_err(|e| e.0)?;
                 connector.guard().snapshot("measure boot layout").map_err(|e| e.to_string())?;
                 let toolchain = Toolchain::for_repository(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))?;
                 let layout = GameLayout::measure(&toolchain, project).map_err(|e| e.to_string())?;

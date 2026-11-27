@@ -114,6 +114,14 @@ fn load(app: &App, launch: PreparedLaunch) -> Result<(), String> {
     Ok(())
 }
 
+/// A launch that could not start reaches the terminal with its boot point.
+fn log_launch_failure(launch: &Launch, cause: &str) {
+    match launch {
+        Launch::Point { target, .. } => tauros_app::mcp_host::log_boot_failure(&target.map.0, target.x, target.y, cause),
+        _ => eprintln!("tauros: launch failed: {cause}"),
+    }
+}
+
 /// Attaches the window's frame channel and starts the CLI-selected launch, if any.
 /// Off the main thread: the first boot can take a while and the window must paint.
 #[tauri::command(async)]
@@ -130,10 +138,10 @@ fn attach(
             return Ok(None);
         }
     }
-    let prepared = launch.prepare()?;
+    let prepared = launch.prepare().inspect_err(|cause| log_launch_failure(launch, cause))?;
     let name = prepared.name.clone();
     let layout = prepared.layout;
-    load(&app, prepared)?;
+    load(&app, prepared).inspect_err(|cause| log_launch_failure(launch, cause))?;
     *app.rom_name.lock().unwrap() = name.clone();
     if let (Some(project), Some(Launch::Point { target, .. })) = (&app.project, &app.initial_launch) {
         if let Some(l) = layout {
@@ -815,6 +823,12 @@ fn project_test(app: tauri::State<'_, App>, filter: Option<String>) -> Result<ta
     project.run_tests(filter.filter(|f| !f.trim().is_empty()))
 }
 
+/// Whether the player can start at a point, and the nearest walkable tile when not.
+#[tauri::command(async)]
+fn boot_point_check(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<tauros_app::mcp_host::PointReport, String> {
+    app.project.as_ref().ok_or("no game project is open")?.check_point(&map, x, y)
+}
+
 /// Preview the last built ROM without running the ROM build.
 #[tauri::command(async)]
 fn preview_map(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<BuildAndBoot, String> {
@@ -1149,6 +1163,7 @@ fn main() {
             projects_list,
             project_open,
             preview_map,
+            boot_point_check,
             mapgen_run,
             mapgen_cancel,
             mapgen_image

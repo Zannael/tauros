@@ -11,10 +11,12 @@ pub mod maps;
 pub mod limits;
 pub mod names;
 pub mod party;
+pub mod preflight;
 pub mod project;
 pub mod scripts;
 pub mod snapshot;
 pub mod toolchain;
 pub mod trainers;
+pub mod walk;
 
 pub use project::Gen3Connector;

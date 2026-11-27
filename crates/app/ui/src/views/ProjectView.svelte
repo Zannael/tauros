@@ -52,7 +52,7 @@
       <div class="row"><Icon name="folder" /><h2 class="grow ellipsis">{name}</h2></div>
       <p class="muted small mono path">{$path}</p>
       <dl>
-        <dt>{$t('Maps')}</dt><dd>{$info.maps.length}</dd>
+        <dt>{$t('Maps')}</dt><dd>{$t('{n} ({k} can be booted)', { n: $info.maps.length, k: $info.map_bounds.filter((m) => m.bootable).length })}</dd>
         <dt>{$t('Boot point')}</dt><dd>{$point.map} ({$point.x}, {$point.y})</dd>
         <dt>{$t('Game in the emulator')}</dt>
         <dd>{#if !$info.built}<span class="warn-text">{$t('no build yet: press Build')}</span>{:else if !$live}—{:else if $live.live_status === 'stale_rom'}<span class="warn-text">{$t('older than the last build')}</span>
