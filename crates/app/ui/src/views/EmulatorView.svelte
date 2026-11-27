@@ -136,8 +136,8 @@
         <label class="field coord"><span>Y</span><input type="number" min="0" max={bounds ? bounds.height - 1 : 0} value={$point.y}
           disabled={!!$operation} oninput={(e) => project.setCoordinate('y', e.currentTarget.value)} /></label>
         <div class="row buttons">
-          <button type="button" disabled={!!$operation || $agentBusy || !pointOk} onclick={() => project.boot(false)}
-            title={$t('Start a fresh preview from the last built ROM without rebuilding')}>
+          <button type="button" disabled={!!$operation || $agentBusy || !pointOk || !$info.built} onclick={() => project.boot(false)}
+            title={$info.built ? $t('Start a fresh preview from the last built ROM without rebuilding') : $t('No build yet: use Build & play')}>
             {#if $operation === 'preview'}<span class="spin"></span>{:else}<Icon name="play" size={15} />{/if}{$t('Preview')}</button>
           <button type="button" class="primary" disabled={!!$operation || $agentBusy || !pointOk} onclick={() => project.boot(true)}
             title={$t('Build the project and boot it at this map and position')}>

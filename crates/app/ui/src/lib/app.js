@@ -12,6 +12,7 @@ import { createProject } from './project.js';
 import { createHistory } from './history.js';
 import { createMapgen } from './mapgen.js';
 import { createGame } from './game.js';
+import { createProjects, pointsStore } from './projects.js';
 
 // Views in navigation order. Planned ones are shown disabled with their task.
 export const VIEWS = [
@@ -52,7 +53,10 @@ voice = createVoice({
   blocked: () => get(chat.busy) || get(chat.auth).busy,
 });
 export { voice };
-export const project = createProject({ ipc, t: tr, notify, isAgentBusy: () => get(chat.busy) });
+const points = pointsStore(uiPrefs, setPref);
+export const project = createProject({ ipc, t: tr, notify, isAgentBusy: () => get(chat.busy),
+  lastPoint: points.last, rememberPoint: points.remember });
+export const projects = createProjects({ ipc, prefs: uiPrefs, setPref, notify, t: tr });
 export const history = createHistory({ ipc, t: tr, notify, isAgentBusy: () => get(chat.busy) });
 export const mapgen = createMapgen({ ipc });
 export const game = createGame({ ipc, emu, voiceActive: () => voice.active });
@@ -103,10 +107,15 @@ export async function start() {
   document.addEventListener('visibilitychange', () => {
     if (get(emu.config).prefs.pause_on_blur) ipc.invoke('set_paused', { paused: document.hidden }).catch(() => {});
   });
-  game.attach().catch((err) => notify(`${err}`, 'error'));
+  const attached = game.attach().catch((err) => { notify(`${err}`, 'error'); return null; });
   await emu.init();
+  await projects.init();
+  projects.refresh();
   await project.refresh();
-  if (get(project.info)) view.set('project'); else view.set('emulator');
+  // A ROM opened from the command line goes straight to the game; otherwise the
+  // Project view shows the project or the projects to open.
+  if (!get(project.info) && !get(chat.project) && (await Promise.race([attached, new Promise((r) => setTimeout(() => r(null), 300))]))) view.set('emulator');
+  else view.set('project');
   chat.init();
   voice.status();
 }

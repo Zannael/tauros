@@ -3,7 +3,7 @@
   // chosen in the agent panel, where they are used.
   import { onDestroy } from 'svelte';
   import KeyConfig from '../components/KeyConfig.svelte';
-  import { emu, chat, voice, viewActions } from '../lib/app.js';
+  import { emu, chat, voice, projects, viewActions } from '../lib/app.js';
   import { uiPrefs, setPref } from '../lib/prefs.js';
   import { LANGUAGES, t } from '../lib/i18n.js';
   const { config } = emu;
@@ -12,6 +12,12 @@
   viewActions.set([]);
   onDestroy(() => viewActions.set([]));
   const prefs = $derived($config.prefs);
+  const { defaultDir } = projects;
+  const folder = $derived($uiPrefs.projectsDir || $defaultDir);
+  async function chooseFolder() {
+    const dir = await projects.chooseFolder(folder, $t('Projects folder'));
+    if (dir) projects.setFolder(dir);
+  }
   function setEngine(engine) { setPref('voiceEngine', engine); voice.status(); }
 </script>
 
@@ -30,6 +36,19 @@
       <select value={$uiPrefs.language} onchange={(e) => setPref('language', e.currentTarget.value)}>
         {#each Object.entries(LANGUAGES) as [id, name]}<option value={id}>{name}</option>{/each}
       </select></label>
+  </section>
+
+  <section class="card">
+    <h2>{$t('Projects')}</h2>
+    <div class="field-row">
+      <span class="label">{$t('Projects folder')}</span>
+      <code class="folder grow" title={folder}>{folder}</code>
+    </div>
+    <div class="row">
+      <button type="button" onclick={chooseFolder}>{$t('Choose…')}</button>
+      <button type="button" disabled={!$uiPrefs.projectsDir} onclick={() => projects.setFolder($defaultDir)}>{$t('Use the default folder')}</button>
+    </div>
+    <p class="small muted">{$t('The Project view lists the game projects in this folder. The default is the projects folder in the Tauros data folder.')}</p>
   </section>
 
   <section class="card">
@@ -77,6 +96,7 @@
   .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
   .seg button { border: 0; border-radius: 0; }
   .seg button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .folder { overflow-wrap: anywhere; padding: 5px 9px; background: var(--surface-2); border-radius: var(--radius-sm); }
   dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
   dt { color: var(--muted); }
   dd { margin: 0; overflow-wrap: anywhere; }

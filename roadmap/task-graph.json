@@ -1049,7 +1049,7 @@
       "dependents": [],
       "id": "APP-008",
       "incomplete_prerequisites": [],
-      "note": "(owner: Claude Code, implementing the projects folder setting, the project list and relaunch)",
+      "note": "(owner: Claude Code, implemented and checked on an isolated display; awaiting the Owner's check in the native app)",
       "owner": "Claude Code",
       "prerequisites": [
         "APP-006"
@@ -1665,7 +1665,7 @@
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "f73ff57dc8528c8ece9feb862f0164259c498c989852c63687212a6057a145bd",
+  "todo_sha256": "57c351f6c902299b952b8d4ae34b81b9d251412f1c8d0640a64fa79e5f69127d",
   "topological_layers": [
     [
       "AGT-005",

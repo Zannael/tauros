@@ -1,7 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window may use the core IPC (channels, events).",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "The main window may use the core IPC (channels, events) and the folder chooser.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
 }

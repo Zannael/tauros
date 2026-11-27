@@ -447,7 +447,7 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Depends on: `APP-006`.
   Responsible: Agent
   Owner: Claude Code
-  Note: (owner: Claude Code, implementing the projects folder setting, the project list and relaunch)
+  Note: (owner: Claude Code, implemented and checked on an isolated display; awaiting the Owner's check in the native app)
   Scope: Owner request 2026-11-27. Settings gets a projects folder, defaulting to `$TAUROS_DATA/projects`. The Project view lists the projects in that folder (searchable, showing whether each has a build) and opens any folder through the system folder dialog starting there (official Tauri dialog plugin). Opening a project relaunches Tauros on it through the normal APP-007 shutdown, because the project is wired into the emulator, agent, MCP tools and history at startup. Owner decision 2026-11-27: the game starts at the last boot point used for that project; the first time, and for a project without a build, it starts normally without a boot point and the point is chosen in the Emulator view. A project without a build still opens and invites a build. Excludes in-process project switching and creating new projects. Refs: plan §"Layered architecture" (layer 1), plan §"Rules for the agents writing the code" (Never destructive).
   Completion: From the running app the Owner opens another project from the list and through the folder dialog; Tauros relaunches on it with the remembered point or a normal start, the previous agent work and recordings are cleaned up as on exit, and an unbuilt project opens without exiting. Targeted tests cover project discovery, the launch without a point and the remembered point; README and master.md record behaviour and limits.
 

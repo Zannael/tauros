@@ -3,6 +3,7 @@
   // the built ROM and the latest recorded changes.
   import { onDestroy } from 'svelte';
   import Icon from '../components/Icon.svelte';
+  import ProjectsCard from '../components/ProjectsCard.svelte';
   import { chat, project, history, navigate, viewActions } from '../lib/app.js';
   import { t } from '../lib/i18n.js';
   const { project: path, busy: agentBusy } = chat;
@@ -15,6 +16,7 @@
   const blocked = $derived(!!$operation || $agentBusy || !$info);
 
   $effect(() => {
+    if (!$info) { viewActions.set([]); return; }
     viewActions.set([
       { id: 'build', primary: true, icon: 'hammer', label: $t('Build'), busy: $operation === 'build', disabled: blocked,
         title: $t('Validate and build the ROM (a snapshot is recorded first)'), run: project.runBuild },
@@ -37,12 +39,12 @@
 </script>
 
 {#if !$info}
-  <div class="empty pad">
-    <Icon name="folder" size={30} />
-    <h2>{$t('No game project is open')}</h2>
-    <p>{$t('Start Tauros with --project and a boot point to build, test and edit a game. You can still play a ROM in the Emulator view.')}</p>
-    <pre class="mono cmd">cargo run -p tauros-app -- --project path/to/project --map MAP_PETALBURG_CITY --x 15 --y 10</pre>
-    <button type="button" class="primary" onclick={() => navigate('emulator')}><Icon name="gamepad" size={16} />{$t('Open the Emulator view')}</button>
+  <div class="pad scroll">
+    <div class="intro">
+      <h2>{$t('Open a game project')}</h2>
+      <p class="muted">{$t('Choose a project to build, test and edit it with the agent. You can still play a ROM in the Emulator view.')}</p>
+    </div>
+    <ProjectsCard prominent />
   </div>
 {:else}
   <div class="grid scroll">
@@ -53,7 +55,7 @@
         <dt>{$t('Maps')}</dt><dd>{$info.maps.length}</dd>
         <dt>{$t('Boot point')}</dt><dd>{$point.map} ({$point.x}, {$point.y})</dd>
         <dt>{$t('Game in the emulator')}</dt>
-        <dd>{#if !$live}—{:else if $live.live_status === 'stale_rom'}<span class="warn-text">{$t('older than the last build')}</span>
+        <dd>{#if !$info.built}<span class="warn-text">{$t('no build yet: press Build')}</span>{:else if !$live}—{:else if $live.live_status === 'stale_rom'}<span class="warn-text">{$t('older than the last build')}</span>
           {:else if $live.new_build_pending}<span class="warn-text">{$t('a newer build is ready')}</span>
           {:else if $live.live_status === 'no_rom'}{$t('not started')}{:else}{$t('up to date')}{/if}</dd>
       </dl>
@@ -113,6 +115,8 @@
       {/if}
     </section>
 
+    <ProjectsCard />
+
     <section class="card">
       <header class="row"><Icon name="history" /><h2 class="grow">{$t('Recent changes')}</h2>
         <button type="button" class="ghost" onclick={() => navigate('history')}>{$t('Open History')}</button></header>
@@ -126,9 +130,8 @@
 {/if}
 
 <style>
-  .pad { flex: 1; align-content: center; }
-  .pad p { max-width: 520px; }
-  .cmd { background: var(--surface-2); padding: 8px 12px; border-radius: var(--radius-sm); white-space: pre-wrap; max-width: 640px; }
+  .pad { flex: 1; padding: 24px 16px; display: grid; gap: 16px; align-content: start; justify-items: center; }
+  .intro { text-align: center; display: grid; gap: 6px; max-width: 560px; }
   .grid { flex: 1; padding: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; align-content: start; }
   .card { padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
   .card header { gap: 8px; }

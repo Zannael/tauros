@@ -3,7 +3,10 @@
 import { writable } from 'svelte/store';
 
 const KEY = 'tauros.ui.v1';
-const DEFAULTS = { theme: 'system', language: 'en', voiceEngine: 'offline', voiceLanguage: 'it', agentOpen: true };
+// projectsDir '' means the default folder; lastPoints maps a project path to its
+// last boot point { map, x, y }.
+const DEFAULTS = { theme: 'system', language: 'en', voiceEngine: 'offline', voiceLanguage: 'it', agentOpen: true,
+  projectsDir: '', lastPoints: {} };
 
 function load() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...DEFAULTS }; }

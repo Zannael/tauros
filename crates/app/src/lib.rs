@@ -18,3 +18,4 @@ pub mod claude_dictation;
 pub mod mapgen;
 
 pub mod shutdown;
+pub mod projects;

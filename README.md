@@ -392,6 +392,23 @@ function lives in one place:
 - **Settings**: theme (system, light, dark), interface language (English,
   Italian), dictation engine and speech language, emulator preferences and keys.
 
+**Opening projects (APP-008).** Without a project (for example
+`cargo run -p tauros-app` with no arguments) the Project view lists the game
+projects of the projects folder; with one open, the same list sits below build and
+tests. The folder defaults to `$TAUROS_DATA/projects` and can be changed in
+Settings › Projects. A project is a decomp folder containing
+`data/maps/map_groups.json`; the list shows whether it has a build. **Open from a
+folder…** uses the system folder chooser, starting in the projects folder.
+Opening a project closes Tauros with the normal shutdown (an agent reply in
+progress stops, after a second click) and starts it again on that project,
+because the project is wired into the emulator, the agent and its tools at
+startup. The game starts at the last Preview or Build & play point used for that
+project; the first time it starts normally and the boot point defaults to
+Littleroot Town. A project without a build opens without a game; Build in the
+Project view creates one. `--project DIR` alone also opens a project without a
+boot point. As with any launch, opening a project may record a snapshot of
+pending edits in that project.
+
 The game pauses while neither the Emulator view nor the compact player shows it,
 and resumes when it becomes visible again. Interface preferences (theme,
 language, dictation defaults, panel visibility) stay in the app's local storage;

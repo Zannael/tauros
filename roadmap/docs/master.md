@@ -3157,3 +3157,37 @@ dictation, builds and full keyboard/focus traversal.
   clock (the VRAM palettes in the inspector are tinted too); the screen canvas
   applies no filter. The top-bar logo is now `assets/brand/logo.avif` with its
   black background removed and a uniform dark outline redrawn (transparent PNG).
+
+## Opening projects from the interface (APP-008, 2026-11-27)
+
+**Owner decisions (Simone, 2026-11-27):** a projects folder in Settings, defaulting
+to `$TAUROS_DATA/projects`; the Project view lists and searches its projects and
+opens any folder through the system chooser starting there; a project opens at the
+last boot point used for it, otherwise with a normal start; tracked as APP-008,
+separate from APP-006.
+
+**Implementation decision:** opening a project relaunches Tauros (normal APP-007
+shutdown, then `current_exe` with `--project DIR [--map --x --y]` spawned on
+`RunEvent::Exit`), because `App.project`, the chat with its MCP server and the
+shared emulator session are created once at startup; switching in process would
+rebuild all of them. `Launch::Project` (`--project` alone) opens a project
+without a boot point and loads its built ROM, if any, with a normal start. The
+folder chooser uses `tauri-plugin-dialog` 2.8.4 (Tauri's official plugin,
+MIT/Apache-2.0) with only the `dialog:allow-open` permission. Remembered points
+and the chosen folder are interface preferences in the webview's local storage.
+
+**Verified 2026-11-27:** `cargo test -p tauros-app --lib` (17 passed, including
+project discovery, launch arguments and `--project` parsing), `npm --prefix
+crates/app/ui test` (43 passed, including the projects folder, the point sent on
+open and the remembered or default point), `cargo clippy -p tauros-app --tests
+-- -D warnings`, and the shutdown tests (including the ignored native one) under
+`xvfb-run`. On an isolated Xvfb display: no-argument start showed the picker with
+six projects and their build state; opening `porymap-check-g3-010` (unbuilt)
+relaunched on it with Littleroot as default point and the Build invitation; the
+folder chooser opened in the projects folder; after a Preview at Littleroot
+(10, 10) in director-scene-mcp004, opening gfx001-scratch and then
+director-scene-mcp004 relaunched with `--map MAP_LITTLEROOT_TOWN --x 10 --y 10`
+and booted there. Not checked: the Owner's native run, opening while an agent
+reply runs, and a relaunch from a terminal that closes (the new instance keeps the
+parent's terminal output).
+

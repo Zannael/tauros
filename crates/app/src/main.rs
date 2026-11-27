@@ -72,14 +72,13 @@ struct App {
     voice: tauros_app::voice::Voice,
     claude_voice: tauros_app::claude_dictation::ClaudeDictation,
     mapgen: tauros_app::mapgen::MapGen,
+    /// Arguments of the instance to start after exit (opening another project).
+    relaunch: Mutex<Option<Vec<std::ffi::OsString>>>,
 }
 
 impl App {
     fn project_root(&self) -> Option<PathBuf> {
-        match &self.initial_launch {
-            Some(Launch::Point { project, .. }) => Some(project.clone()),
-            _ => None,
-        }
+        self.initial_launch.as_ref().and_then(Launch::project).map(Path::to_path_buf)
     }
 }
 
@@ -125,6 +124,12 @@ fn attach(
     eprintln!("tauros: window attached");
     send(&app, Command::Attach(on_frame))?;
     let Some(launch) = &app.initial_launch else { return Ok(None) };
+    // A project without a build opens without a game; the Project view offers Build.
+    if let Launch::Project { project } = launch {
+        if !tauros_app::projects::is_built(project) {
+            return Ok(None);
+        }
+    }
     let prepared = launch.prepare()?;
     let name = prepared.name.clone();
     let layout = prepared.layout;
@@ -695,17 +700,79 @@ fn repo_root() -> PathBuf {
 struct ProjectInfo {
     maps: Vec<String>,
     map_bounds: Vec<tauros_app::mcp_host::MapPreviewInfo>,
-    map: String,
-    x: i16,
-    y: i16,
+    /// The launch's boot point; absent when the project opened without one.
+    map: Option<String>,
+    x: Option<i16>,
+    y: Option<i16>,
+    path: String,
+    built: bool,
 }
 
 #[tauri::command(async)]
 fn project_info(app: tauri::State<'_, App>) -> Result<Option<ProjectInfo>, String> {
-    let (Some(project), Some(Launch::Point { target, .. })) = (&app.project, &app.initial_launch) else { return Ok(None) };
+    let (Some(project), Some(launch)) = (&app.project, &app.initial_launch) else { return Ok(None) };
+    let Some(dir) = launch.project() else { return Ok(None) };
     let map_bounds = project.preview_maps()?;
-    Ok(Some(ProjectInfo { maps: map_bounds.iter().map(|map| map.id.clone()).collect(),
-        map_bounds, map: target.map.0.clone(), x: target.x, y: target.y }))
+    let point = match launch {
+        Launch::Point { target, .. } => Some((target.map.0.clone(), target.x, target.y)),
+        _ => None,
+    };
+    Ok(Some(ProjectInfo {
+        maps: map_bounds.iter().map(|map| map.id.clone()).collect(),
+        map_bounds,
+        map: point.as_ref().map(|p| p.0.clone()),
+        x: point.as_ref().map(|p| p.1),
+        y: point.as_ref().map(|p| p.2),
+        path: dir.display().to_string(),
+        built: tauros_app::projects::is_built(dir),
+    }))
+}
+
+/// `$TAUROS_DATA/projects`, the default projects folder.
+#[tauri::command]
+fn projects_default_dir() -> String {
+    tauros_app::projects::default_projects_dir().display().to_string()
+}
+
+/// Game projects directly inside `dir`.
+#[tauri::command(async)]
+fn projects_list(dir: String) -> Result<Vec<tauros_app::projects::ProjectEntry>, String> {
+    tauros_app::projects::list_projects(Path::new(&dir))
+}
+
+/// Opens another project by relaunching Tauros on it after the normal shutdown:
+/// the project is wired into the emulator, the agent and its tools at startup.
+#[tauri::command]
+fn project_open(
+    app: tauri::State<'_, App>,
+    handle: tauri::AppHandle,
+    path: String,
+    map: Option<String>,
+    x: Option<i16>,
+    y: Option<i16>,
+) -> Result<(), String> {
+    let dir = PathBuf::from(&path);
+    let point = match (&map, x, y) {
+        (Some(map), Some(x), Some(y)) => Some((map.as_str(), x, y)),
+        _ => None,
+    };
+    let args = tauros_app::projects::launch_args(&dir, point)?;
+    // Fail here rather than in the relaunched process, which would exit.
+    tauros_connector_gen3::Gen3Connector::open(&dir, None).map_err(|e| format!("cannot open {}: {e}", dir.display()))?;
+    *app.relaunch.lock().unwrap() = Some(args);
+    handle.exit(0);
+    Ok(())
+}
+
+/// Starts the requested new instance once this one has finished its shutdown.
+fn relaunch_after_exit(handle: &tauri::AppHandle, event: &tauri::RunEvent) {
+    use tauri::Manager;
+    if !matches!(event, tauri::RunEvent::Exit) { return; }
+    let Some(args) = handle.state::<App>().relaunch.lock().unwrap().take() else { return };
+    match std::env::current_exe().and_then(|exe| std::process::Command::new(exe).args(&args).spawn()) {
+        Ok(child) => eprintln!("tauros: relaunched as process {}", child.id()),
+        Err(error) => eprintln!("tauros: cannot relaunch: {error}"),
+    }
 }
 
 /// Builds the project and boots the shared emulator at `map` (`x`, `y`) with the
@@ -938,8 +1005,8 @@ fn main() {
     let emu_config = Arc::new(RwLock::new(initial_config));
     let (tx, rx) = mpsc::channel();
     let typing = Arc::new(AtomicBool::new(false));
-    let project = match &initial_launch {
-        Some(Launch::Point { project, .. }) => {
+    let project = match initial_launch.as_ref().and_then(Launch::project) {
+        Some(project) => {
             let toolchain = Toolchain::for_repository(&repo_root()).ok();
             match ProjectSession::open(project, toolchain, None) {
                 Ok(session) => Some(Arc::new(session)),
@@ -974,6 +1041,7 @@ fn main() {
     let _ = tx.send(Command::SetSpeed(initial_speed));
     let _ = tx.send(Command::SetRewindEnabled(initial_rewind));
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(App {
             commands: Mutex::new(tx),
             emu_session: session,
@@ -994,6 +1062,7 @@ fn main() {
             voice: Default::default(),
             claude_voice: Default::default(),
             mapgen: Default::default(),
+            relaunch: Mutex::default(),
         })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
@@ -1076,6 +1145,9 @@ fn main() {
             build_and_play,
             project_build,
             project_test,
+            projects_default_dir,
+            projects_list,
+            project_open,
             preview_map,
             mapgen_run,
             mapgen_cancel,
@@ -1085,7 +1157,10 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building Tauros")
-        .run(tauros_app::shutdown::on_event::<App, _>);
+        .run(|handle, event| {
+            relaunch_after_exit(handle, &event);
+            tauros_app::shutdown::on_event::<App, _>(handle, event)
+        });
 }
 
 #[cfg(test)]

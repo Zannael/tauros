@@ -7,15 +7,25 @@ use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
 use tauros_model::{Connector, FlagId, MapId};
 
-pub const USAGE: &str = "Usage: tauros-app [ROM.gba]\n       tauros-app --project DIR --map MAP_NAME --x X --y Y [--flag FLAG_NAME ...]";
+pub const USAGE: &str = "Usage: tauros-app [ROM.gba]\n       tauros-app --project DIR [--map MAP_NAME --x X --y Y [--flag FLAG_NAME ...]]";
 
 #[derive(Clone, Debug)]
 pub enum Launch {
     Rom(PathBuf),
     Point { project: PathBuf, target: BootTarget },
+    /// A project opened without a boot point: its built ROM, if any, starts normally.
+    Project { project: PathBuf },
 }
 
 impl Launch {
+    /// The game project this launch opens, if any.
+    pub fn project(&self) -> Option<&Path> {
+        match self {
+            Self::Point { project, .. } | Self::Project { project } => Some(project),
+            Self::Rom(_) => None,
+        }
+    }
+
     /// Parses all arguments after the executable name. Empty means file picker.
     pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Option<Self>, String> {
         let args: Vec<_> = args.into_iter().collect();
@@ -43,6 +53,9 @@ impl Launch {
             return Err(format!("missing option value\n{USAGE}"));
         }
         let missing = || format!("--project, --map, --x and --y must be supplied together\n{USAGE}");
+        if let (Some(project), None, None, None, true) = (&project, &map, &x, &y, flags.is_empty()) {
+            return Ok(Some(Self::Project { project: project.clone() }));
+        }
         Ok(Some(Self::Point {
             project: project.ok_or_else(missing)?,
             target: BootTarget { map: map.ok_or_else(missing)?, x: x.ok_or_else(missing)?, y: y.ok_or_else(missing)?, flags },
@@ -55,6 +68,12 @@ impl Launch {
     pub fn prepare(&self) -> Result<PreparedLaunch, String> {
         let read = |path: &Path| fs::read(path).map_err(|e| format!("{}: {e}", path.display()));
         match self {
+            Self::Project { project } => Ok(PreparedLaunch {
+                name: project.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+                rom: read(&project.join("pokeemerald.gba"))?,
+                boot: None,
+                layout: None,
+            }),
             Self::Rom(path) => Ok(PreparedLaunch {
                 name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
                 rom: read(path)?,
@@ -87,5 +106,23 @@ pub struct PreparedLaunch {
 impl PreparedLaunch {
     pub fn rom_only(name: String, rom: Vec<u8>) -> Self {
         Self { name, rom, boot: None, layout: None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Option<Launch>, String> {
+        Launch::parse(args.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn a_project_opens_with_or_without_a_complete_boot_point() {
+        assert!(matches!(parse(&["--project", "p"]), Ok(Some(Launch::Project { .. }))));
+        assert!(matches!(parse(&["--project", "p", "--map", "MAP_A", "--x", "1", "--y", "2"]), Ok(Some(Launch::Point { .. }))));
+        assert!(parse(&["--project", "p", "--map", "MAP_A"]).is_err());
+        assert!(parse(&["--project", "p", "--flag", "FLAG_A"]).is_err());
+        assert_eq!(parse(&["--project", "p"]).unwrap().unwrap().project(), Some(Path::new("p")));
     }
 }
