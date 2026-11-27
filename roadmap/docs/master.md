@@ -3120,3 +3120,40 @@ shifts the layout horizontally compared with Play. The classified list is in
 `docs/design/app-006-feature-brief.md`. Not exercised: agent turns, sign-in,
 dictation, builds and full keyboard/focus traversal.
 
+**Verified 2026-11-26 (APP-006 implementation, before the Owner's native check):**
+- The interface was rewritten in Svelte 5.59.2 with Vite 8.4.0 and
+  `@sveltejs/vite-plugin-svelte` 7.3.2 (exact versions, `package-lock.json`) under
+  `crates/app/ui`; `build.rs` runs `npm run build` into `ui/dist` when
+  `ui/node_modules` exists and otherwise requires an existing `dist`; Tauri serves
+  `ui/dist`. Controllers in `ui/src/lib` are plain modules over `svelte/store` with
+  injected IPC, so `npm --prefix crates/app/ui test` (Node test runner) exercises
+  them against mocks: 40 tests passed (emulator, chat, dictation ported from the
+  former `tests/emu_ui.cjs` and `tests/voice_ui.cjs`, boot point, complete Italian
+  translations of 395 strings, WCAG AA contrast of both themes).
+- Backend changes: `project_build` and `project_test` commands (build without
+  boot, headless tests; refused while the agent works, under the operation gate);
+  `EmuPrefs.ff_speed` with `start_at_normal_speed` so a launch never resumes fast
+  forward; scale `auto` (largest integer fit) replaces `fit` and is the default;
+  `attach` and the emulator commands that lock the session during a boot became
+  async. Before that change the window stayed blank for about 30 seconds during a
+  first boot after a rebuild, because the synchronous `attach` blocked the main
+  thread.
+- Checks run: `cargo test -p tauros-app --no-fail-fast` (all non-ignored tests
+  passed; one earlier run of `tests/voice.rs` failed a timing assertion in
+  untouched code and passed on two of three reruns), `cargo clippy -p tauros-app
+  --tests -- -D warnings`, the ignored native shutdown test under `xvfb-run`,
+  126 Python tests (2 skipped), `check_private.py --all` and the roadmap check.
+- Isolated-display walkthrough (Xvfb, director-scene-mcp004) at 1600×900 and
+  1280×720, dark and light, English and Italian: all views, header popovers
+  (speed, scale, sound, overflow), command search, tools panel tabs, compact
+  player across views and automatic pause when the game is hidden.
+- Not exercised in the app: Build and Run tests (they would record a snapshot in
+  the Owner's project), agent turns, sign-in, dictation and Restore.
+
+- Owner check 2026-11-27 (partial): the darker overworld colours seen in the app
+  come from the game, not the interface: director-scene-mcp004 sets
+  `OW_ENABLE_DNS TRUE` and `OW_TIMES_OF_DAY GEN_LATEST` in
+  `include/config/overworld.h`, so the expansion tints the overworld by the real
+  clock (the VRAM palettes in the inspector are tinted too); the screen canvas
+  applies no filter. The top-bar logo is now `assets/brand/logo.avif` with its
+  black background removed and a uniform dark outline redrawn (transparent PNG).

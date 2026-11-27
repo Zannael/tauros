@@ -409,6 +409,22 @@ impl ProjectSession {
         Ok(BuildAndBoot { rom_sha256: built.rom_sha256, boot_frames: booted.frame_count })
     }
 
+    /// Validates and builds the project without booting it (snapshot first, as every
+    /// build). The running emulator keeps its ROM; the new build shows up as pending.
+    pub fn build_only(&self) -> Result<domain::BuildToolResult, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let mut connector = self.connector.lock().map_err(|_| "connector lock poisoned")?;
+        domain::build(connector.as_mut()).map_err(|e| format!("{}: {}", e.kind, e.message))
+    }
+
+    /// Runs the project's headless test suite, optionally filtered by test name or file.
+    pub fn run_tests(&self, filter: Option<String>) -> Result<domain::RunTestToolResult, String> {
+        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let mut connector = self.connector.lock().map_err(|_| "connector lock poisoned")?;
+        domain::run_test(connector.as_mut(), domain::RunTestRequest { filter })
+            .map_err(|e| format!("{}: {}", e.kind, e.message))
+    }
+
     /// Reads the live emulator location and build/selection state without running builds.
     pub fn agent_context(
         &self,

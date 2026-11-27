@@ -300,9 +300,18 @@ Container build tests (pinned expansion, base build and image from the setup scr
 TAUROS_DOCKER_TESTS=1 cargo test -p tauros-connector-gen3 --test phase1_integration --test toolchain_build
 ```
 
-Run the app (Tauri 2; needs the WebKitGTK 4.1 development packages on Linux).
+Run the app (Tauri 2; needs the WebKitGTK 4.1 development packages on Linux and
+Node.js for the interface). Install the interface's pinned npm dependencies once;
+afterwards `cargo build` rebuilds the interface into `crates/app/ui/dist`
+whenever its sources change:
+
+```bash
+npm --prefix crates/app/ui ci
+```
+
 It plays a GBA ROM in a window: arrows, X = A, Z = B, Enter = Start,
-Backspace = Select, A/S = L/R. Sound starts after the first click or key press.
+Backspace = Select, A/S = L/R (remappable in Settings). Sound starts after the
+first click or key press.
 
 ```bash
 cargo run -p tauros-app -- path/to/rom.gba
@@ -315,8 +324,8 @@ cargo run -p tauros-app -- --project "$TAUROS_DATA/projects/my-hack" \
   --map MAP_PETALBURG_CITY --x 15 --y 10 --flag FLAG_BADGE01_GET
 ```
 
-With `--project`, the bar above the game offers two actions at the selected map
-and coordinates:
+With `--project`, the boot point bar of the Emulator view offers two actions at
+the selected map and coordinates:
 
 - **Preview** starts a fresh boot-to-point from the existing `pokeemerald.gba`
   and `pokeemerald.sym` build pair, without running the ROM builder. Pending
@@ -330,7 +339,7 @@ coordinates are rejected before building or reloading the emulator. Bounds do
 not prove walkability: adjust the point if it lands on a blocked tile. The launch
 flags apply to both actions. Preview still runs the game's boot sequence and can
 measure/cache struct offsets on its first boot at a source revision; it does not
-promise instantaneous switching. Errors appear below the bar.
+promise instantaneous switching. Errors appear as notifications.
 
 Replace the project path with your built project's directory. Supply `--project`,
 `--map`, `--x` and `--y` together; repeat `--flag` to set several saved flags.
@@ -348,7 +357,54 @@ before writing the layout probe under ignored `build/tauros/`.
 Boot-to-point starts a fresh game (empty name, default gender, no party); it does
 not resume a save. Coordinates are checked against map bounds, not walkability.
 Only the pinned Emerald expansion and Linux desktop have been checked; there is
-no gamepad or keyboard remapping UI yet.
+no gamepad support yet.
+
+### Desktop interface (APP-006)
+
+The interface is a Svelte application (`crates/app/ui`, built with Vite). Each
+function lives in one place:
+
+- **Top bar**: project name and health (last build and tests of this session),
+  the command search (**Ctrl+K**), the compact game player for other views, and
+  the agent panel toggle (**Ctrl+J**).
+- **Left navigation**: Project, Emulator, Map generator, History and Settings.
+  Planned views (Maps APP-001, Trainers and Scripts APP-002, Graphics GFX-002) are
+  listed disabled with a work-in-progress tooltip naming their task.
+- **View header**: the active view's actions; rarer ones are in the **⋯** menu.
+  Ctrl+K searches the same actions plus navigation.
+- **Agent panel** on the right in every view: provider and model (chosen only
+  here), sign-in for providers that need it, the conversation, and dictation
+  next to the message box. A reply that records changes links them to History.
+- **Status bar**: emulator state, frame and rewind count, running operations, last
+  build and tests, and the notification list (errors stay until dismissed).
+- **Project**: build without booting (validation, snapshot, compile) with
+  readable diagnostics, headless tests with an optional filter, and recent
+  changes. Build and tests are refused while the agent works.
+- **Emulator**: the game at the largest integer scale that fits (or a fixed 1×–4×
+  from the magnifier); pause, frame advance, rewind, speed (click cycles 1×, 2×,
+  4×, 8×, unlimited; right-click chooses; Shift+Tab toggles the last multiplier),
+  reset, screenshot, sound; ROM, saves and state files in the ⋯ menu. The tools
+  panel holds quick slots, the game state viewers, video layers and audio
+  channels, the mGBA log (warnings and errors by default) and ROM details. The
+  emulator always starts at normal speed.
+- **History**: every recorded change with filters (manual, agent, snapshots and
+  restores, outside Tauros), details and a two-click non-destructive restore.
+- **Settings**: theme (system, light, dark), interface language (English,
+  Italian), dictation engine and speech language, emulator preferences and keys.
+
+The game pauses while neither the Emulator view nor the compact player shows it,
+and resumes when it becomes visible again. Interface preferences (theme,
+language, dictation defaults, panel visibility) stay in the app's local storage;
+emulator preferences stay in `$TAUROS_DATA/emulator`.
+
+Interface checks (stdlib Node test runner; no device, provider or game):
+
+```bash
+npm --prefix crates/app/ui test
+```
+
+They cover the emulator, chat, dictation and boot point controllers against
+mocked IPC, complete Italian translations, and WCAG AA contrast of both themes.
 
 The panel on the right offers Claude, Codex with ChatGPT and Antigravity (Gemini) in the agent selector. Switching providers starts a new conversation. Claude uses the Agent SDK sidecar.
 Build it once with `npm --prefix sidecar/claude-agent-sdk ci && npm --prefix
@@ -689,7 +745,7 @@ TAUROS_DOCKER_TESTS=1 cargo test -p tauros-app --test phase2_integration -- --no
 On Linux the chat offers **Record**, **Stop & transcribe** and **Cancel**.
 Speech is transcribed by local [whisper.cpp v1.8.2](https://github.com/ggml-org/whisper.cpp/tree/v1.8.2) with the multilingual base
 model; no speech API or API key is used. Italian is selected initially; English
-and automatic language detection are available. A clip is limited to 60 seconds,
+and automatic language detection are available (Settings › Dictation). A clip is limited to 60 seconds,
 with a 180-second transcription timeout. Game sound is muted during voice input.
 Recognised text is appended to the current draft, preserving text you type while
 recording. Review and correct it before **Send**; recording never sends a turn.
@@ -721,7 +777,7 @@ Verification commands without microphone capture or cloud calls:
 
 ```bash
 cargo test -p tauros-app --test voice
-node tests/voice_ui.cjs
+npm --prefix crates/app/ui test
 # Optional real engine check on original synthetic Italian speech;
 # requires the prepared runtime/model, espeak-ng and ffmpeg:
 TAUROS_LOCAL_VOICE_TEST=1 cargo test -p tauros-app --test voice installed_whisper_transcribes_original_italian_speech_offline -- --ignored --nocapture
@@ -856,8 +912,8 @@ Contributor and agent workflow: [AGENTS.md](AGENTS.md).
 
 ### Experimental Claude dictation bridge
 
-The **Dictation** selector also offers **Claude CLI · experimental cloud**.
-Select it explicitly, then press **Record**. Microphone audio goes to Anthropic
+The dictation engine setting (Settings › Dictation) also offers **Claude CLI ·
+experimental cloud**. Select it explicitly, then press **Prepare microphone**. Microphone audio goes to Anthropic
 through the installed official Claude Code runtime and its existing claude.ai
 sign-in. Italian is fixed for this experiment. This dictation engine is independent
 of the chat provider: the returned text can be reviewed and sent to any agent.
@@ -908,7 +964,7 @@ Reproducible checks, with **no credentials, network or microphone** in the CLI:
 ```bash
 python3 scripts/claude_dictation.py --probe-draft
 TAUROS_CLAUDE_DRAFT_PROBE=1 python3 -m unittest discover -s tests -p test_claude_dictation.py -v
-node tests/voice_ui.cjs
+npm --prefix crates/app/ui test
 ```
 
 These require an environment that permits bubblewrap namespaces. A separate

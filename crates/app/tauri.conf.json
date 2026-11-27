@@ -2,11 +2,29 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Tauros",
   "identifier": "io.github.zannael.tauros",
-  "build": { "frontendDist": "ui" },
+  "build": {
+    "frontendDist": "ui/dist"
+  },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "title": "Tauros", "width": 1160, "height": 680, "resizable": true }],
-    "security": { "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:" }
+    "windows": [
+      {
+        "title": "Tauros",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
   },
-  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
 }

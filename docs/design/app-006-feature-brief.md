@@ -230,3 +230,24 @@ Planned but unimplemented functions (Owner decision 2026-11-26) are shown in the
 UI, disabled, with a "Work in progress" tooltip naming the task: Maps (APP-001),
 Trainers and Scripts (APP-002), Graphics pixel panel (GFX-002), provenance export
 (PROV-001) and similar. Building those functions is not part of APP-006.
+
+## Implementation notes (2026-11-26)
+
+Where the implementation departs from the lists above, and why:
+
+- **Sign-in stays in the agent panel.** The runtimes sign in for the selected
+  provider only (the backend refuses sign-in for another provider), so sign-in
+  sits next to provider choice; Settings has no account section.
+- **Map generator settings stay in its view** as "Run settings": they belong to
+  one map run, not to the app.
+- **Preview and Build & play stay in the Emulator view** with the boot point; the
+  Project view offers Build (without booting) and Run tests, backed by the new
+  `project_build` and `project_test` commands.
+- **Changes under agent replies** list the history entries the reply recorded and
+  link to History, where restore lives; no second undo button.
+- **Dictation engine and speech language** moved to Settings; the agent panel keeps
+  the microphone button, cancel and status.
+- The tools panel of the Emulator view starts hidden when the game would shrink
+  below 2×; the header toggle overrides it.
+- `attach` and the commands that lock the emulator during a boot run off the main
+  thread, so the window paints while the first boot runs.

@@ -116,7 +116,8 @@ fn load(app: &App, launch: PreparedLaunch) -> Result<(), String> {
 }
 
 /// Attaches the window's frame channel and starts the CLI-selected launch, if any.
-#[tauri::command]
+/// Off the main thread: the first boot can take a while and the window must paint.
+#[tauri::command(async)]
 fn attach(
     app: tauri::State<'_, App>,
     on_frame: Channel<InvokeResponseBody>,
@@ -278,7 +279,7 @@ fn emu_import_save(app: tauri::State<'_, App>, request: Request<'_>) -> Result<u
     Ok(frame)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_savestate_slots(app: tauri::State<'_, App>) -> Result<Vec<SavestateSlotStatus>, String> {
     let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
     Ok(list_quick_slots(&app.emu_data_dir, &session))
@@ -329,7 +330,7 @@ struct EmuLogDto {
     message: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_logs(app: tauri::State<'_, App>) -> Result<Vec<EmuLogDto>, String> {
     let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
     Ok(session
@@ -390,7 +391,7 @@ struct EmuLayersDto {
     audio: Vec<ChannelToggleDto>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_layers(app: tauri::State<'_, App>) -> Result<EmuLayersDto, String> {
     let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
     let v_disabled = app.video_layers_disabled.lock().unwrap();
@@ -418,7 +419,7 @@ fn emu_layers(app: tauri::State<'_, App>) -> Result<EmuLayersDto, String> {
     Ok(EmuLayersDto { video, audio })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_set_video_layer(app: tauri::State<'_, App>, id: usize, enabled: bool) -> Result<(), String> {
     {
         let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
@@ -430,7 +431,7 @@ fn emu_set_video_layer(app: tauri::State<'_, App>, id: usize, enabled: bool) -> 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_set_audio_channel(app: tauri::State<'_, App>, id: usize, enabled: bool) -> Result<(), String> {
     {
         let mut session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
@@ -468,7 +469,7 @@ fn emu_inspect_oam(app: tauri::State<'_, App>) -> Result<Vec<OamEntryDto>, Strin
     read_oam(session.emulator())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_memory_regions(app: tauri::State<'_, App>) -> Result<Vec<MemoryRegionDto>, String> {
     let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
     Ok(list_memory_regions(session.emulator()))
@@ -480,7 +481,7 @@ fn emu_read_memory(app: tauri::State<'_, App>, addr: u32, len: usize, deref: boo
     read_memory_window(session.emulator(), addr, len, deref)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn emu_search_symbols(app: tauri::State<'_, App>, query: String, limit: Option<usize>) -> Result<Vec<SymbolMatchDto>, String> {
     let session = app.emu_session.lock().map_err(|_| "emulator lock poisoned".to_owned())?;
     Ok(session
@@ -727,6 +728,26 @@ fn build_and_play(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Re
     Ok(report)
 }
 
+/// Builds the project without booting it. Refused while the agent is working.
+#[tauri::command(async)]
+fn project_build(app: tauri::State<'_, App>) -> Result<tauros_mcp::domain::BuildToolResult, String> {
+    let project = app.project.as_ref().ok_or("no game project is open")?;
+    if app.chat.busy() {
+        return Err("the agent is working; wait for it or stop it".into());
+    }
+    project.build_only()
+}
+
+/// Runs the project's headless tests. Refused while the agent is working.
+#[tauri::command(async)]
+fn project_test(app: tauri::State<'_, App>, filter: Option<String>) -> Result<tauros_mcp::domain::RunTestToolResult, String> {
+    let project = app.project.as_ref().ok_or("no game project is open")?;
+    if app.chat.busy() {
+        return Err("the agent is working; wait for it or stop it".into());
+    }
+    project.run_tests(filter.filter(|f| !f.trim().is_empty()))
+}
+
 /// Preview the last built ROM without running the ROM build.
 #[tauri::command(async)]
 fn preview_map(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<BuildAndBoot, String> {
@@ -909,7 +930,9 @@ fn main() {
         }
     };
     let emu_data_dir = emulator_data_dir();
-    let initial_config = load_config(&emu_data_dir);
+    let mut initial_config = load_config(&emu_data_dir);
+    // Launch at normal speed; the chosen fast-forward multiplier stays in `ff_speed`.
+    initial_config.prefs.start_at_normal_speed();
     let initial_speed = initial_config.prefs.speed;
     let initial_rewind = initial_config.prefs.rewind_enabled;
     let emu_config = Arc::new(RwLock::new(initial_config));
@@ -1051,6 +1074,8 @@ fn main() {
             set_typing,
             project_info,
             build_and_play,
+            project_build,
+            project_test,
             preview_map,
             mapgen_run,
             mapgen_cancel,

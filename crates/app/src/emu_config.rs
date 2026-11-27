@@ -6,7 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauros_emu::Button;
 
-pub const DEFAULT_SCALE: &str = "3x";
+/// Largest integer multiple that fits the available space.
+pub const DEFAULT_SCALE: &str = "auto";
 
 /// Canonical key bindings in `Button::ALL` order (`a, b, select, start, right, left, up, down, r, l`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +154,8 @@ pub struct EmuPrefs {
     pub muted: bool,
     pub volume: u8,
     pub speed: u8,
+    /// Multiplier used when fast-forward is switched on (2, 4, 8, or 0 for unlimited).
+    pub ff_speed: u8,
     pub pause_on_blur: bool,
     pub rewind_enabled: bool,
 }
@@ -165,6 +168,7 @@ impl Default for EmuPrefs {
             muted: false,
             volume: 100,
             speed: 1,
+            ff_speed: 4,
             pause_on_blur: true,
             rewind_enabled: true,
         }
@@ -173,13 +177,29 @@ impl Default for EmuPrefs {
 
 impl EmuPrefs {
     pub fn sanitize(&mut self) {
-        if !matches!(self.scale.as_str(), "fit" | "1x" | "2x" | "3x" | "4x") {
+        if self.scale == "fit" {
+            self.scale = DEFAULT_SCALE.into();
+        }
+        if !matches!(self.scale.as_str(), "auto" | "1x" | "2x" | "3x" | "4x") {
             self.scale = DEFAULT_SCALE.into();
         }
         self.volume = self.volume.min(100);
         if !matches!(self.speed, 0 | 1 | 2 | 4 | 8) {
             self.speed = 1;
         }
+        if !matches!(self.ff_speed, 0 | 2 | 4 | 8) {
+            self.ff_speed = 4;
+        }
+    }
+
+    /// A launch never resumes fast-forward silently: a saved multiplier other than
+    /// normal becomes the fast-forward choice and playback starts at 1x.
+    pub fn start_at_normal_speed(&mut self) {
+        if self.speed != 1 {
+            self.ff_speed = self.speed;
+            self.speed = 1;
+        }
+        self.sanitize();
     }
 }
 
@@ -281,5 +301,15 @@ mod tests {
         assert_eq!(loaded.keymap.bit_for_raw_key("J"), Some(0));
         assert_eq!(loaded.keymap.bit_for_raw_key("KeyK"), Some(1));
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn launch_starts_at_normal_speed_and_keeps_the_multiplier() {
+        let mut prefs = EmuPrefs { speed: 8, ..EmuPrefs::default() };
+        prefs.start_at_normal_speed();
+        assert_eq!((prefs.speed, prefs.ff_speed), (1, 8));
+        let mut normal = EmuPrefs { ff_speed: 2, ..EmuPrefs::default() };
+        normal.start_at_normal_speed();
+        assert_eq!((normal.speed, normal.ff_speed), (1, 2));
     }
 }

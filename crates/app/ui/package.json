@@ -1,0 +1,16 @@
+{
+  "name": "tauros-app-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tauros desktop interface (Svelte, built with Vite into dist/ for the Tauri shell).",
+  "scripts": {
+    "build": "vite build",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.2",
+    "svelte": "5.59.2",
+    "vite": "8.4.0"
+  }
+}

@@ -69,7 +69,7 @@ fn chosen_point_reaches_the_window_channel() {
         assert_eq!(report.location, want);
         let bytes = received.recv_timeout(Duration::from_secs(5)).unwrap();
         const VIDEO: usize = 240 * 160 * 4;
-        // Binary contract consumed by ui/main.js: RGBA then interleaved LE i16 audio.
+        // Binary contract consumed by ui/src/lib/game.js: RGBA then interleaved LE i16 audio.
         assert!(bytes.len() > VIDEO && bytes.len() < VIDEO + 4096, "one frame of audio, not the skipped boot's backlog");
         assert_eq!((bytes.len() - VIDEO) % 4, 0);
         assert!(bytes[..VIDEO].chunks_exact(4).all(|p| p[3] == 255));
