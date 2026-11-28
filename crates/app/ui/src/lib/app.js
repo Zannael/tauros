@@ -11,6 +11,7 @@ import { createVoice } from './voice.js';
 import { createProject } from './project.js';
 import { createHistory } from './history.js';
 import { createMapgen } from './mapgen.js';
+import { createMaps } from './maps.js';
 import { createGame } from './game.js';
 import { createProjects, pointsStore } from './projects.js';
 
@@ -18,7 +19,7 @@ import { createProjects, pointsStore } from './projects.js';
 export const VIEWS = [
   { id: 'project', label: 'Project', icon: 'home' },
   { id: 'emulator', label: 'Emulator', icon: 'gamepad' },
-  { id: 'maps', label: 'Maps', icon: 'map', wip: 'APP-001' },
+  { id: 'maps', label: 'Maps', icon: 'map' },
   { id: 'trainers', label: 'Trainers', icon: 'user', wip: 'APP-002' },
   { id: 'scripts', label: 'Scripts', icon: 'code', wip: 'APP-002' },
   { id: 'graphics', label: 'Graphics', icon: 'image', wip: 'GFX-002' },
@@ -45,6 +46,7 @@ export const chat = createChat({
     project.refresh();
     emu.refreshSlots();
     if (get(view) === 'history') history.load();
+    maps.reload();
   },
 });
 voice = createVoice({
@@ -59,6 +61,7 @@ export const project = createProject({ ipc, t: tr, notify, isAgentBusy: () => ge
 export const projects = createProjects({ ipc, prefs: uiPrefs, setPref, notify, t: tr });
 export const history = createHistory({ ipc, t: tr, notify, isAgentBusy: () => get(chat.busy) });
 export const mapgen = createMapgen({ ipc });
+export const maps = createMaps({ ipc, project, notify, t: tr });
 export const game = createGame({ ipc, emu, voiceActive: () => voice.active });
 export { ipc };
 

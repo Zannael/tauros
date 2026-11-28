@@ -3263,3 +3263,79 @@ booted; the `firered` and `ruby` branches of the rule follow `mapjson` but were 
 run. Metatile behaviours, NPC occupation and script-driven moves are not modelled.
 The integration test `phase2_integration` had a stale assertion since APP-003 (the
 first picture after a load is video only); it was corrected on the way.
+
+## Map viewer (APP-001, 2026-11-28)
+
+**Owner decision (Simone, 2026-11-28):** the former APP-001 "Map editor and viewer"
+is split into the read-only viewer linked to the emulator preview (APP-001) and
+editing (APP-009, depends on APP-001 and G3-010).
+
+**Implementation decisions (agent):** drawing lives in the Gen 3 connector
+(`connector_gen3::render`), the app only encodes the PNG and serves `map_view`
+(`crates/app/src/map_view.rs`). Tileset files are resolved from the project's C
+sources: the `gTileset_*` header in `src/data/tilesets/headers.h` names the
+symbols, whose first `INCGFX_*`/`INCBIN_*` path is read in
+`src/data/tilesets/graphics.h`, `metatiles.h` and `src/graphics.c` (the expansion
+defines the General tileset in `src/graphics.c`); built names map back to sources
+(`.4bpp*` → `.png`, `.gbapal` → `.pal`), and the Porymap folder convention is the
+fallback. The primary/secondary split comes from `include/fieldmap.h` (Emerald 512
+tiles, 512 metatiles, 6 palettes; FRLG 640/640/7). Colour 0 is transparent; the
+backdrop is colour 0 of palette 0; channels are cut to 5 bits as on the GBA. A map
+opened in the view reads only its own `map.json` (folder known from the last full
+load), because a full connector load takes about 2 s in a debug build. Choosing a
+tile sets the shared boot point (`project.setPoint`), so Preview, Build & play and
+the agent's context use it; refused maps (EMU-006) are viewable but never become
+the point. Short reads of the operation gate (map list, map view, boot point check)
+now wait up to 2 s for each other instead of failing at once; builds, boots and
+writes still make them fail.
+
+**Verified 2026-11-28 UTC (pinned expansion 3796c72 and director-scene-mcp004):**
+- `cargo test -p tauros-connector-gen3 --test render_maps`: all 785 layouts draw;
+  440 of 441 Emerald layouts resolve every tileset file and metatile, with
+  attributes for every block. Exceptions found in the data, not the renderer:
+  `LAYOUT_UNUSED_OUTDOOR_AREA` has secondary tileset `"0"` (NULL) but uses
+  secondary metatiles; four `LAYOUT_RS_SAFARI_ZONE_*` layouts marked `frlg` use
+  metatiles their tilesets do not define (2–74 blocks). They draw the backdrop
+  there and report the count. `UnusedContestRoom1`'s `map.bin` has more words than
+  its 1×1 layout; the game reads the first width × height, so does the renderer.
+  Unit tests cover layers, flips, palettes, transparency, primary/secondary
+  offsets, symbol resolution, indexed PNG and JASC decoding, enum parsing.
+- `cargo test -p tauros-app --test map_view`: Route 101 is 20×20, a 320×320 PNG,
+  `gTileset_General` + `gTileset_Petalburg`, uses `MB_TALL_GRASS`, events equal the
+  model's, and the clone's `git status` is unchanged; `PalletTown_Frlg` draws
+  cleanly and reports its `REGION_KANTO` refusal; each of the 939 maps read alone
+  equals the connector snapshot's map. Measured (debug build): map view 35 ms,
+  full connector load 1.5–2.1 s.
+- Interface: `npm --prefix crates/app/ui test` 55 passed (Maps controller: tile
+  classes, boot point and its check, refused maps, events numbered per kind, warp
+  destinations, stale loads, live marker, following, Preview and Build & play
+  calls; Italian completeness).
+- Isolated Xvfb walkthrough of the debug app on director-scene-mcp004 at
+  1440×900 and 1280×720 (Italian): Littleroot, Route 101, Petalburg and Brendan's
+  house drawn as in the game; collision overlay; tile readout; NPC selection;
+  double-clicking Brendan's door opened `MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F` at
+  its warp #1; Preview here at Littleroot (10, 10) and Petalburg (1, 13) booted and
+  showed the compact player with the live marker on the tile; with Follow on,
+  walking west from Petalburg opened `MAP_ROUTE104`. The project's `git status`
+  stayed clean. Two defects found and fixed in this walkthrough: a warp
+  double-click failed with "another project operation is running" (map load and
+  boot point check raced on the gate), and Follow kept reopening the game's map
+  every second over the user's navigation (it now reacts only to a change of the
+  game's map).
+- Observation: `Gen3Connector::open` sets the clone's push URL, writing
+  `.git/config`; two tests opening the same clone at once collide on its lock, so
+  the app test opens it once.
+
+**Not verified / limits.** No tileset animation, day/night tint (the expansion's
+DNS tints the game, not the view), triple-layer metatiles, object sprites or
+border blocks; events are markers. Layer type and metatile behaviours other than
+the name are not interpreted. Only Emerald-format projects were drawn in the app;
+FRLG layouts were drawn only by the test. Follow depends on the 1 s live poll and
+does not track a game held by the agent. The first Preview after starting Tauros
+measures the game's offsets in the toolchain container (about 20 s to over a
+minute here).
+
+**Owner acceptance 2026-11-28:** the Owner ran the native app and accepted the
+view. The one reported issue, the Events panel overflowing at the right (Open
+destination button and coordinate column cut), was fixed by constraining the
+panel's grid and list items and checked on an isolated display.

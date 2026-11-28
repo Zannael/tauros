@@ -13,6 +13,7 @@ pub mod names;
 pub mod party;
 pub mod preflight;
 pub mod project;
+pub mod render;
 pub mod scripts;
 pub mod snapshot;
 pub mod toolchain;

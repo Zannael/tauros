@@ -16,6 +16,7 @@ pub mod antigravity_login;
 pub mod voice;
 pub mod claude_dictation;
 pub mod mapgen;
+pub mod map_view;
 
 pub mod shutdown;
 pub mod projects;

@@ -97,6 +97,15 @@ export function createProject({ ipc, t = (s) => s, notify = () => {}, isAgentBus
       const saved = remembered.get(map), b = bounds.get(map);
       point.set(saved ? { map, ...saved } : { map, x: b ? b.default_x : 0, y: b ? b.default_y : 0 });
     },
+    // Sets the whole point at once (Maps view); refused maps keep the current point.
+    setPoint(map, x, y) {
+      if (!bounds.has(map) || api.refusal(map)) return false;
+      suggestion.set(null);
+      const p = get(point);
+      if (validPoint(p.map, Number(p.x), Number(p.y))) remembered.set(p.map, { x: Number(p.x), y: Number(p.y) });
+      point.set({ map, x, y });
+      return true;
+    },
     setCoordinate(axis, value) {
       suggestion.set(null);
       point.update((p) => ({ ...p, [axis]: value === '' ? '' : Number(value) }));

@@ -11,6 +11,7 @@ use std::thread::{self, JoinHandle};
 
 use tauros_agent_bridge::McpServerConfig;
 use tauros_connector_gen3::boot::{map_numbers, read_live_location, BootPlan, BootTarget, GameLayout, Symbols};
+use tauros_connector_gen3::maps::{MapGroups, MAP_GROUPS_FILE};
 use tauros_connector_gen3::preflight::{assess_boot_point, check_boot_point, map_usability, PointAssessment};
 use tauros_connector_gen3::toolchain::Toolchain;
 use tauros_connector_gen3::Gen3Connector;
@@ -199,6 +200,8 @@ pub struct ProjectSession {
     cached_layout: Arc<Mutex<Option<(String, GameLayout)>>>,
     last_build_sha256: Arc<Mutex<Option<String>>>,
     last_boot: Arc<Mutex<Option<LastBootTarget>>>,
+    /// Map id → folder under data/maps, from the last full load (Maps view).
+    map_folders: Arc<Mutex<BTreeMap<String, String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -269,6 +272,9 @@ impl AgentEmuContext {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MapPreviewInfo {
     pub id: String,
+    /// Folder name of the map (`PetalburgCity`) and its group in map_groups.json.
+    pub name: String,
+    pub group: Option<String>,
     pub width: u16,
     pub height: u16,
     /// The walkable tile nearest the centre (the centre itself when it is walkable).
@@ -292,7 +298,7 @@ pub struct PointReport {
 impl MapPreviewInfo {
     fn from_map(map: &tauros_model::Map) -> Option<Self> {
         let tauros_model::MapGeometry::Grid { width, height, .. } = map.geometry else { return None };
-        Some(Self { id: map.id.0.clone(), width, height,
+        Some(Self { id: map.id.0.clone(), name: map.name.clone(), group: None, width, height,
             default_x: (width / 2) as i16, default_y: (height / 2) as i16, bootable: true, refusal: None })
     }
     pub fn validate(&self, x: i16, y: i16) -> Result<(), String> {
@@ -342,6 +348,7 @@ impl ProjectSession {
             cached_layout,
             last_build_sha256: Arc::new(Mutex::new(None)),
             last_boot: Arc::new(Mutex::new(None)),
+            map_folders: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
@@ -394,21 +401,45 @@ impl ProjectSession {
             })
     }
 
+    /// The operation gate for a short read. Reads take it for milliseconds, so one
+    /// waits briefly for another (the Maps view loads a map while it checks a tile);
+    /// a build, boot or write still makes it fail.
+    fn read_gate(&self) -> Result<std::sync::MutexGuard<'_, ()>, String> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match self.operation_gate.try_lock() {
+                Ok(guard) => return Ok(guard),
+                Err(std::sync::TryLockError::Poisoned(_)) => return Err("operation gate poisoned".into()),
+                Err(std::sync::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                    thread::sleep(std::time::Duration::from_millis(15));
+                }
+                Err(std::sync::TryLockError::WouldBlock) => return Err("another project operation is running".into()),
+            }
+        }
+    }
+
     /// The project's map ids, sorted.
     pub fn maps(&self) -> Result<Vec<String>, String> {
-        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let _operation = self.read_gate()?;
         let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
         Ok(snapshot.maps.keys().map(|id| id.0.clone()).collect())
     }
 
     /// Map bounds used by the picker; does not build or touch the emulator.
     pub fn preview_maps(&self) -> Result<Vec<MapPreviewInfo>, String> {
-        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let _operation = self.read_gate()?;
         let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
         let usability = map_usability(&self.dir, &snapshot.maps).map_err(|e| e.0)?;
+        *self.map_folders.lock().unwrap() = snapshot.maps.values().map(|m| (m.id.0.clone(), m.name.clone())).collect();
+        let groups = fs::read_to_string(self.dir.join(MAP_GROUPS_FILE)).ok().and_then(|t| MapGroups::parse(&t).ok());
+        let group_of: BTreeMap<String, String> = groups
+            .map(|g| g.groups().into_iter().flat_map(|group| g.members(&group).into_iter().map(move |m| (m, group.clone()))).collect())
+            .unwrap_or_default();
         Ok(usability
             .into_iter()
             .map(|(id, width, height, u)| MapPreviewInfo {
+                name: snapshot.maps.get(&id).map(|m| m.name.clone()).unwrap_or_default(),
+                group: snapshot.maps.get(&id).and_then(|m| group_of.get(&m.name).cloned()),
                 id: id.0,
                 width,
                 height,
@@ -420,10 +451,24 @@ impl ProjectSession {
             .collect())
     }
 
+    /// `map` drawn for the Maps view with its blocks, events and connections.
+    /// Read-only: does not build, write or touch the emulator.
+    pub fn map_view(&self, map: &str) -> Result<crate::map_view::MapView, String> {
+        let _operation = self.read_gate()?;
+        // One map.json is read when its folder is known; the full load is the fallback.
+        let folder = self.map_folders.lock().unwrap().get(map).cloned();
+        if let Some(found) = folder.and_then(|f| crate::map_view::read_map(&self.dir, &f).ok()).filter(|m| m.id.0 == map) {
+            return crate::map_view::map_view(&self.dir, &found);
+        }
+        let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
+        let found = snapshot.maps.get(&MapId::from(map)).ok_or_else(|| format!("unknown map {map}"))?;
+        crate::map_view::map_view(&self.dir, found)
+    }
+
     /// Whether the player can start at (`x`, `y`) of `map`, and the nearest walkable
     /// tile when not. Does not build or touch the emulator.
     pub fn check_point(&self, map: &str, x: i16, y: i16) -> Result<PointReport, String> {
-        let _operation = self.operation_gate.try_lock().map_err(|_| "another project operation is running")?;
+        let _operation = self.read_gate()?;
         let snapshot = self.connector.lock().map_err(|_| "connector lock poisoned")?.load().map_err(|e| e.to_string())?;
         let assessment = assess_boot_point(&self.dir, &snapshot.maps, &MapId::from(map), x, y).map_err(|e| e.0)?;
         Ok(PointReport {
@@ -800,7 +845,7 @@ mod preview_tests {
             emulator: Arc::new(Mutex::new(emulator)), operation_gate: Arc::new(Mutex::new(())),
             cached_layout: Arc::new(Mutex::new(None)),
             last_build_sha256: Arc::new(Mutex::new(None)),
-            last_boot: Arc::new(Mutex::new(None)) };
+            last_boot: Arc::new(Mutex::new(None)), map_folders: Arc::new(Mutex::new(BTreeMap::new())) };
         let ctx_before = project.agent_context(Some("MAP_TEST_MART".into()), Some(5), Some(4), None);
         assert_eq!(ctx_before.live_status, "stale_rom");
         assert!(ctx_before.rom_stale);
@@ -830,6 +875,15 @@ mod preview_tests {
         let gate = project.operation_gate.lock().unwrap();
         assert!(project.preview_built("MAP_TEST_MART", 5, 3, &[]).unwrap_err().contains("operation"));
         drop(gate);
+        // A short read waits for another one instead of failing (Maps view, APP-001).
+        let held = project.operation_gate();
+        let holder = thread::spawn(move || {
+            let _read = held.lock().unwrap();
+            thread::sleep(std::time::Duration::from_millis(150));
+        });
+        thread::sleep(std::time::Duration::from_millis(20));
+        assert!(project.check_point("MAP_TEST_MART", 3, 3).unwrap().ok);
+        holder.join().unwrap();
         assert_eq!(fs::read(dir.join("pokeemerald.gba")).unwrap(), [1, 2, 3]);
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 3, "only the fixture files: no build output, no snapshot");
         fs::remove_dir_all(dir).unwrap();

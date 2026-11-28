@@ -829,6 +829,12 @@ fn boot_point_check(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> 
     app.project.as_ref().ok_or("no game project is open")?.check_point(&map, x, y)
 }
 
+/// A map drawn for the Maps view, with its blocks, events and connections (read-only).
+#[tauri::command(async)]
+fn map_view(app: tauri::State<'_, App>, map: String) -> Result<tauros_app::map_view::MapView, String> {
+    app.project.as_ref().ok_or("no game project is open")?.map_view(&map)
+}
+
 /// Preview the last built ROM without running the ROM build.
 #[tauri::command(async)]
 fn preview_map(app: tauri::State<'_, App>, map: String, x: i16, y: i16) -> Result<BuildAndBoot, String> {
@@ -1164,6 +1170,7 @@ fn main() {
             project_open,
             preview_map,
             boot_point_check,
+            map_view,
             mapgen_run,
             mapgen_cancel,
             mapgen_image

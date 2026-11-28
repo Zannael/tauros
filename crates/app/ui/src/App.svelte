@@ -12,6 +12,7 @@
   import EmulatorView from './views/EmulatorView.svelte';
   import HistoryView from './views/HistoryView.svelte';
   import MapgenView from './views/MapgenView.svelte';
+  import MapsView from './views/MapsView.svelte';
   import SettingsView from './views/SettingsView.svelte';
   import { VIEWS, view, miniGame, paletteOpen, agentOpen, toggleAgent, emu, start } from './lib/app.js';
   import { isTextField } from './lib/keys.js';
@@ -58,6 +59,7 @@
       <div class="content">
         {#if $view === 'project'}<ProjectView />
         {:else if $view === 'emulator'}<EmulatorView />
+        {:else if $view === 'maps'}<MapsView />
         {:else if $view === 'history'}<HistoryView />
         {:else if $view === 'mapgen'}<MapgenView />
         {:else if $view === 'settings'}<SettingsView />{/if}

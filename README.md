@@ -66,7 +66,7 @@ Available in Phase 2:
 What is missing:
 
 - Creating maps and resizing layouts from the MCP tools or the app (the model and the Gen 3 connector support both, G3-010).
-- Voice desktop acceptance (`AGT-004`), the pre-editor UX/UI cleanup (`APP-006`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), the full editor UI (`APP-001..003`, `APP-005`, `PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
+- Voice desktop acceptance (`AGT-004`), the pre-editor UX/UI cleanup (`APP-006`), API-key authentication for Claude, Codex and Gemini (`AGT-005`, `AGT-009`), graphics (`GFX-*`), map editing in the app (`APP-009`; the read-only map viewer is `APP-001`), trainer and scene forms (`APP-002`), the beta integration (`APP-005`), provenance export (`PROV-001`) and connectors for other generations (`GB-*`, `NDS-*`).
 
 Available in Phase 3 (complete) & Phase 4 (in progress):
 
@@ -393,8 +393,8 @@ function lives in one place:
 - **Top bar**: project name and health (last build and tests of this session),
   the command search (**Ctrl+K**), the compact game player for other views, and
   the agent panel toggle (**Ctrl+J**).
-- **Left navigation**: Project, Emulator, Map generator, History and Settings.
-  Planned views (Maps APP-001, Trainers and Scripts APP-002, Graphics GFX-002) are
+- **Left navigation**: Project, Emulator, Maps, Map generator, History and
+  Settings. Planned views (Trainers and Scripts APP-002, Graphics GFX-002) are
   listed disabled with a work-in-progress tooltip naming their task.
 - **View header**: the active view's actions; rarer ones are in the **⋯** menu.
   Ctrl+K searches the same actions plus navigation.
@@ -413,6 +413,21 @@ function lives in one place:
   panel holds quick slots, the game state viewers, video layers and audio
   channels, the mGBA log (warnings and errors by default) and ROM details. The
   emulator always starts at normal speed.
+- **Maps** (read-only, APP-001): the project's maps grouped as in
+  `map_groups.json`, searchable, each drawn from its layout and tilesets as the game
+  draws it (2×2 tiles on two layers, flips, 16-colour palettes; no tileset
+  animation or day/night tint). Overlays for collision (solid, deep water) and
+  elevation, a grid, and NPCs, warps, triggers and signs as markers (zoom 1×–4×).
+  Pointing at a tile reads its metatile, collision, elevation and behaviour;
+  clicking it makes it the boot point shared with the Emulator view and says
+  whether the player can start there. **Preview here** and **Build & play here**
+  start the game at that tile and show it in the compact player. The Events tab
+  lists events with their fields (warps are numbered as `destination_warp` counts
+  them); double-clicking a warp opens its destination at the target warp, and the
+  Map tab lists header fields and connections. While the game runs on the shown
+  map its player is marked; **Follow the game** opens the game's map when it
+  changes. Maps the build cannot boot (EMU-006) are shown but never become the
+  boot point. Nothing is written to the project; editing is APP-009.
 - **History**: every recorded change with filters (manual, agent, snapshots and
   restores, outside Tauros), details and a two-click non-destructive restore.
 - **Settings**: theme (system, light, dark), interface language (English,

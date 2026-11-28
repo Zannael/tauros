@@ -3705,7 +3705,9 @@ dependencies = [
 name = "tauros-app"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "gtk",
+ "png",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3724,6 +3726,7 @@ dependencies = [
 name = "tauros-connector-gen3"
 version = "0.1.0"
 dependencies = [
+ "png",
  "sha2 0.10.9",
  "tauros-emu",
  "tauros-model",

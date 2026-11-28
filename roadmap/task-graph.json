@@ -5,7 +5,7 @@
   "ready_ids": [
     "AGT-005",
     "AGT-009",
-    "APP-001",
+    "APP-009",
     "APP-002",
     "MCP-005",
     "PROV-001",
@@ -19,7 +19,7 @@
   "ready_unassigned_ids": [
     "AGT-005",
     "AGT-009",
-    "APP-001",
+    "APP-009",
     "APP-002",
     "MCP-005",
     "PROV-001",
@@ -522,7 +522,9 @@
     },
     {
       "completion": "A created map and a resized map build and open in Porymap; untouched maps stay byte-identical.",
-      "dependents": [],
+      "dependents": [
+        "APP-009"
+      ],
       "id": "G3-010",
       "incomplete_prerequisites": [],
       "note": null,
@@ -1084,25 +1086,47 @@
       "verification": "2026-11-27 UTC: Owner ran the native app and accepted it. The Owner's terminal shows `cargo run -p tauros-app` without arguments relaunching twice (`relaunched as process 1111572`, `1216926`), the second time booting director-scene-mcp004 at the remembered `MAP_LITTLEROOT_TOWN (10, 10)` (group 0, num 9), then Build & play at Littleroot, Mirage Tower 3F and Mt. Pyre Exterior. Earlier checks, recorded in master.md: 17 Rust lib tests (discovery, launch arguments, `--project` parsing), 43 interface tests, clippy, shutdown tests under `xvfb-run`, and isolated Xvfb runs of the picker, an unbuilt project, the folder chooser and the remembered point. Limits: the folder chooser and opening while an agent reply runs were not exercised in the Owner's native run; a relaunched instance keeps the old terminal's output."
     },
     {
-      "completion": "An edit made in the app opens correctly in Porymap and builds.",
+      "completion": "Tests show tileset resolution and metatile rendering (layers, flips, palettes, transparency) on fixtures and that every Emerald-layout map of a real project renders; the interface tests cover the Maps controller (map choice, overlays, boot point, live marker). On an isolated display the view shows a map with overlays, events and live position, and starts a Preview at a chosen tile; the Owner confirms the view in the native app. Nothing is written to the project. README and master.md record behaviour and limits.",
       "dependents": [
+        "APP-009",
         "APP-005"
       ],
       "id": "APP-001",
       "incomplete_prerequisites": [],
-      "note": null,
-      "owner": null,
+      "note": "Owner accepted on 2026-11-28; editing continues in APP-009.",
+      "owner": "Claude Code",
       "prerequisites": [
         "G3-003",
         "EMU-004",
         "APP-006"
       ],
       "responsible": "Agent",
-      "scope": "View and edit maps, metatiles and events through the model; saves remain Porymap-compatible. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Compatible formats).",
+      "scope": "Owner request 2026-11-28: APP-001 is split into a viewer (this task) and editing (APP-009). A Maps view in the left navigation (no longer WIP) that reads through the connector, without writing anything: a searchable list of the project's maps, grouped by map group, with the build's refusal shown; the selected map drawn as Porymap does from its layout's blocks and the primary and secondary tilesets (tile sheets, palettes, metatiles), resolved from the project's C sources; zoom; toggleable overlays for collision and elevation, events and a grid; NPCs, warps, triggers and background events as markers, with a list and the selected event's fields; the hovered tile's coordinates, metatile, collision, elevation and behaviour; connections and warp destinations open the target map. Linked to the emulator: choosing a tile sets the shared boot point (the same one the Emulator view uses, refused maps and blocked tiles explained) and Preview or Build & play start there from the Maps view; while the emulator runs on the shown map, the player's live position is marked and the view can follow the emulator's current map. Excludes painting, event editing, resizing and map creation (APP-009), tileset animation, day/night tint and object sprites (events are markers). Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Compatible formats, Targeted tests); master.md \"APP-006 UI direction\", \"Boot points: usable maps and walkable spawn (EMU-006, 2026-11-27)\".",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
       "source_line": 466,
+      "status": "Done",
+      "title": "Map viewer linked to the emulator preview.",
+      "verification": "2026-11-28 UTC: Owner ran the native app on director-scene-mcp004 and accepted the view (\"che spettacolo\", \"una roba pazzesca\"), reporting one overflow in the Events panel (Open destination button and coordinates cut at the right); fixed and checked on an isolated Xvfb display on Meteor Falls B1F 1R. Checks: `cargo test -p tauros-connector-gen3 -p tauros-app --no-fail-fast` passed (including `render_maps`: 785 layouts drawn, 440 of 441 Emerald layouts clean, the exception being incomplete data; `map_view`: Route 101, a refused FRLG map, 939 maps read alone equal to the snapshot, project unchanged); `cargo clippy -p tauros-connector-gen3 -p tauros-app --tests -- -D warnings`; `npm --prefix crates/app/ui test` 55 passed; 126 Python tests (2 skipped); privacy, whitespace and roadmap checks. Isolated Xvfb walkthrough at 1440×900 and 1280×720: maps, overlays, tile readout, events, warp double-click, Preview here with the live marker, Follow into Route 104; two defects found there were fixed. Limits: no tileset animation, day/night tint, sprites or borders; FRLG layouts drawn only by tests; details in master.md \"Map viewer (APP-001, 2026-11-28)\"."
+    },
+    {
+      "completion": "An edit made in the app opens correctly in Porymap and builds.",
+      "dependents": [
+        "APP-005"
+      ],
+      "id": "APP-009",
+      "incomplete_prerequisites": [],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "APP-001",
+        "G3-010"
+      ],
+      "responsible": "Agent",
+      "scope": "Owner request 2026-11-28 (second part of the former APP-001): edit maps in the Maps view through the model — paint metatiles, place, move and edit events, resize layouts and create maps (G3-010) — with snapshots and validation as every write; saves remain Porymap-compatible. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Compatible formats, Never destructive).",
+      "section": "Tauros roadmap / Phase 5 — Full app (beta)",
+      "source_line": 475,
       "status": "Not started",
-      "title": "Map editor and viewer.",
+      "title": "Map editor.",
       "verification": null
     },
     {
@@ -1123,7 +1147,7 @@
       "responsible": "Agent",
       "scope": "Forms for trainers, parties and Poryscript scenes through the model. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 473,
+      "source_line": 482,
       "status": "Not started",
       "title": "Trainer and scene editor.",
       "verification": null
@@ -1145,7 +1169,7 @@
       "responsible": "Agent",
       "scope": "Build-and-preview from the editor in the same window, boot to the selected map or scene. The window's emulator is the same session the agent's MCP emulator tools drive, so what the agent builds, boots and checks appears in the window (accepted 2026-11-19, see master.md \"Streaming chat panel (AGT-003)\"). Owner follow-up 2026-11-20: pass structured context for the selected preview/editor map and the actual emulator map/position to the agent, keeping selection, launch target and live location distinct and marking unavailable/stale state. Show an explicit agent-held state instead of presenting the 10 Hz frame refresh as gameplay FPS. After an agent build, provide a direct preview at the selected/current target without a manual New Game sequence; keep the target and supported flags explicit. Owner map-switch follow-up 2026-11-20: prevent stale out-of-bounds coordinates when changing maps and reject invalid targets before building; add a separate preview action using the existing built ROM/symbol pair without rebuilding the ROM. Owner expansion 2026-11-26 (prioritized ahead of APP-006 layout polish): port practical mGBA desktop testing/inspection controls into the emulation pane in two blocks — Block 1: File (Open ROM, ROM info, .sav import/export, quick savestate slots 1-9 and file save/load), Emulation (Pause/Resume, Reset, Frame Advance, Fast Forward speeds, Rewind), Audio/Video (Scale/Aspect Ratio, Mute/Volume, real FPS/state readout, PNG Screenshot), Tools (persisted GBA key remapping, emulator log); Block 2: Game state viewers (Palette, Tile/VRAM, OAM/Sprite, Memory and .sym inspector) and video/audio layer toggles. Excludes ARM/GDB debugger, Lua scripting, cheats, hardware sensors, link-cable multiplayer, IPS/archive loaders and GLSL shaders. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Layered architecture\" (layer 1).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 480,
+      "source_line": 489,
       "status": "Done",
       "title": "Emulator panel integrated with the editor.",
       "verification": "2026-11-26 UTC: Owner confirmed the completed APP-003 desktop emulator pane (Block 1 + Block 2) in the native app on Linux after fixing WebKitGTK binary IPC CSP (`connect-src 'self' ipc: http://ipc.localhost` + JSON-array `extract_binary_body` fallback) and `libmgba` CMake `USE_DEBUGGERS=OFF` / `USE_GDB_STUB=OFF` alignment with `bindgen`. Checks run: `cargo test -p tauros-emu` (all passed, including `rom_info`, `export_save`/`import_save`, `video_layers`, `audio_channels` attenuation, and Emerald ROM tests), `cargo test -p tauros-app --lib --bins` (13 lib + 3 bin tests passed: `emu_config`, `emu_files`, `emu_inspect` Palette/Tile/OAM/Memory+deref decoders, `playback` step/reset/speed/rewind/agent_held, `mcp_host::preview_tests` bounds/agent_context, `extract_binary_body`), `cargo clippy -p tauros-app --tests -- -D warnings`, `cargo build -p tauros-app`, `node --check` on `main.js`/`emu_ui.js`/`emu_inspect_ui.js`, `node tests/emu_ui.cjs`, `node tests/voice_ui.cjs`, `python3 -m unittest tests/test_roadmap.py tests/test_layers.py tests/test_privacy.py -v` (47 OK), `check_roadmap.py` and `check_private.py --all`. Limits: `codex_adapter` / `codex_lists_visible_models_and_overrides_following_turns` failed in the restricted sandbox due to `bwrap` (`Codex disconnected`, untouched); Tile/OAM/Palette/Memory UI tabs and layer toggles were verified via unit tests on GBA hardware RAM and Owner desktop trial rather than automated WebKitGTK click-through; no commit-time `TAUROS_DOCKER_TESTS=1` rerun was performed."
@@ -1167,7 +1191,7 @@
       "responsible": "Agent",
       "scope": "History view over the snapshot commits with undo/restore of agent and manual changes. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5), plan §\"Rules for the agents writing the code\" (Never destructive).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 488,
+      "source_line": 497,
       "status": "Done",
       "title": "Change history with undo.",
       "verification": "2026-11-18 UTC: added `crates/app/src/history.rs` (`list_history`, `undo_to`, `ChangeOrigin`, `HistoryEntry`, `UndoReceipt`) reading G3-001 commits and `Tauros-Provenance`/`Tauros-Snapshot`/`Tauros-Undo-Target` trailers, wired `history_list` and `history_undo` Tauri commands in `crates/app/src/main.rs`, and added the History & Undo panel in `crates/app/ui/index.html` and `crates/app/ui/main.js` showing each commit's origin/provenance and Restore button. `cargo test -p tauros-app --test history_undo -- --nocapture` passed both tests: `lists_agent_and_manual_changes_and_restores_previous_snapshot_exactly` verified listing Human, AiGenerated, External, Snapshot and Undo entries, snapshotting pending dirty work before undo, restoring modified/CRLF files and removing post-snapshot files byte-for-byte while preserving ignored build outputs, reversible undo-of-undo and no-op undo; `undo_rejects_unknown_commit_without_modifying_tree` verified clean rejection. Full `cargo test --workspace`, `cargo clippy -p tauros-app --tests -- -D warnings` and 56 Python tests all passed. Limits: the UI History panel was compiled and wired into Tauri, not visually clicked in a live window."
@@ -1177,7 +1201,7 @@
       "dependents": [],
       "id": "APP-005",
       "incomplete_prerequisites": [
-        "APP-001",
+        "APP-009",
         "APP-002",
         "MCP-005"
       ],
@@ -1185,6 +1209,7 @@
       "owner": null,
       "prerequisites": [
         "APP-001",
+        "APP-009",
         "APP-002",
         "APP-003",
         "APP-004",
@@ -1197,7 +1222,7 @@
       "responsible": "Agent",
       "scope": "One end-to-end check covering map, trainer/scene editing, chat, voice, preview and undo, including a narrated request (a sequence of story events told in the chat, per master.md \"Agent reach over the whole game (Owner direction)\") that the agent turns into a built, verified and previewed scene; README documents beta capabilities and gaps. Refs: plan §\"Layered roadmap toward the beta\" (Phase 5 beta), plan §\"Rules for the agents writing the code\" (End of phase).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 496,
+      "source_line": 505,
       "status": "Not started",
       "title": "Beta integration test and README update.",
       "verification": null
@@ -1219,7 +1244,7 @@
       "responsible": "Agent",
       "scope": "Instead of one tool per missing question, generic tools driven by the semantic model: `describe` (entity kinds, their fields, game capabilities and the game's constant vocabularies such as weather, music and movements), `query` (kind plus filter) and `get` (kind plus id) for every kind the model represents, so new model coverage reaches the agent without new tools; plus read-only search and reading of the project's source files, confined to the project directory, for what the model does not cover. This task adds read-only access; native source writes are covered separately by `AGT-008`, with the same snapshot guarantees. Gaps found while using the chat are added here only when they recur. Per master.md \"Agent reach over the whole game (Owner direction)\". Refs: plan §\"Layered architecture\" (layer 2), plan §\"Layered roadmap toward the beta\" (Phase 5).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 504,
+      "source_line": 513,
       "status": "Not started",
       "title": "Generic query surface over the model and read-only project access.",
       "verification": null
@@ -1237,7 +1262,7 @@
       "responsible": "Agent",
       "scope": "Requested by the Owner on 2026-11-20 after a Claude turn could not read a successful build result: `build` returned 413 warning diagnostics (66 KB), the Agent SDK spilled it to a file outside the project, and the confined native shell could not open it. Keep the severity of each diagnostic in the model (lost when the Gen 3 connector converts its build report), and make `build`, `run_test` and `build_failed` errors return a bounded summary: outcome, ROM hash and paths, error and warning counts, every error, at most 20 distinct warnings and the number omitted, with long messages shortened. Full logs stay out of agent results. Refs: plan §\"Layered architecture\" (layer 3), plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 511,
+      "source_line": 520,
       "status": "Done",
       "title": "Compact build and test results for agents.",
       "verification": "2026-11-20 UTC: cause confirmed from the Claude transcript (66,024-byte `build` result with 413 warnings spilled outside the project; confined `head` failed). Implemented `Diagnostic::severity` set from the Gen 3 toolchain level, `domain::compact_diagnostics`/`DiagnosticCounts`, bounded `build`, `run_test` and `build_failed` payloads and updated tool descriptions. `cargo test -p tauros-mcp --test compact_results` passed (4 tests: noisy build under 8 KB with full counts, 50 errors first on failure, small results unchanged, 400 cases under 16 KB with failures first). Real director-scene-mcp004 build through `tauros-mcp-project`: 66,024 bytes with the previous code, 4,174 bytes now (`errors 0, warnings 413, omitted 393`); project unchanged afterwards. `TAUROS_DOCKER_TESTS=1` `mcp_domain_gen3` (3) and `toolchain_build` (2, 1 ignored) passed; `cargo clippy --workspace --tests -- -D warnings`, tests of model, mcp, connector-gen3, agent-bridge and app (40 suites) and 56 Python tests passed. Limits: no new live agent turn on the bounded result; no commit."
@@ -1256,7 +1281,7 @@
       "responsible": "Agent",
       "scope": "Display the AI-Generated / AI-Assisted / Human label of every changed entity in the change history and editors, let the human promote a label when they intervene, and export a per-project provenance report suitable for a release note. Per master.md \"Provenance labels (DEC-003)\". Refs: plan §\"Risks and community notes\" (Positioning).",
       "section": "Tauros roadmap / Phase 5 — Full app (beta)",
-      "source_line": 520,
+      "source_line": 529,
       "status": "Not started",
       "title": "Show and export provenance labels in the app.",
       "verification": null
@@ -1278,7 +1303,7 @@
       "responsible": "Agent",
       "scope": "Owner request 2026-11-23: evaluate available overworld tilesets and complementary graphics already adapted to GBA/Emerald, including DS-style community work, Team Aqua, winter/snow environments and the distinction between Unbound/CFRU/DPE and reusable asset libraries. Compare content, visual coherence, target format, author credits/terms, version evidence and integration limits on the pinned expansion. Propose an agent-searchable asset catalogue and a concrete snowy-city workflow; record follow-up requirements under GFX tasks without implementing or reordering the accepted APP-006 work. Do not copy game assets into this repository or execute third-party scripts. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Rules for the agents writing the code\" (No Nintendo assets, Licenses), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Graphics asset research",
-      "source_line": 529,
+      "source_line": 538,
       "status": "Done",
       "title": "Evaluate reusable Gen 3 assets and DS-style tilesets for agent-driven environments.",
       "verification": "2026-11-23 UTC: located prior graphics requirements and read primary upstream asset READMEs, credits, author resource/update pages and Skeli's original Unbound thread. GitHub API tree/HEAD checks recorded Team Aqua 3e06f6f9fa3639da51f42ca486046ced58b1ee47 and Retro Platinum e74208ef7922bb252ac585c07e73ddae5f3ee42d; inspected winter and Gen 4 Cave file listings. Local read-only source inspection confirmed pinned expansion 3796c722, two-layer metatiles, primary/total palette/tile constants and existing snow weather functions. Master records the ranked shortlist, provenance/format uncertainties, Unbound engine-versus-art distinction, semantic catalogue proposal and snowy-city acceptance workflow. GFX-001/GFX-004 scopes updated; no UI reprioritization. Python suite passed 61 tests with one opt-in skipped; roadmap and whitespace checks passed. Limits: no graphical pack downloaded, external scripts executed, assets copied into the repository, game changes, import/build/preview or exhaustive visual-quality comparison; candidates remain unverified on the pinned engine."
@@ -1298,7 +1323,7 @@
       "responsible": "Agent",
       "scope": "Owner request 2026-11-24, planning only: analyse scale reduction, palette strategy per tileset/kit, style harmonisation across AlchemyBats/Zygoat/Justin8964, manual versus automatable steps, before/after validation and preview, and the fit with GFX-001's validator and GFX-004's catalog; present options with a recommendation each, measure rather than assume, propose follow-up tasks and one small sample experiment with objective acceptance checks. No implementation, conversion output, game change, app integration or commit; external sheets stay local. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Risks and community notes\" (Legal, Positioning).",
       "section": "Tauros roadmap / Graphics asset research",
-      "source_line": 538,
+      "source_line": 547,
       "status": "Done",
       "title": "Plan the DS-scale to GBA conversion of Gen 4-style environment art.",
       "verification": "2026-11-24 UTC: read master RES-004/GFX-005 and addenda, GFX-001/004/005 and the plan's graphics section; ran `asset_catalog.py search \"gen 4 snow town\"`. Read-only measurements with Pillow/numpy in a scratch directory on the four Gen 4 sheets: 2x2-uniform share per offset and factor (Zygoat 1.000, AlchemyBats 0.963/0.977, Justin8964 0.723), residual magnitude and band distribution, opaque colours, RGB555 exactness, alpha levels; halved-sample colours, colours per 8x8 tile, flip-aware unique tiles and greedy palette counts for nine catalog items; confirmed the catalog's `detect_upscale` false negative on Zygoat (3 fully transparent blocks); read palette/tile constants in the local 1.16.4 base `fieldmap.h`. Master section and DEC-004, GFX-006, GFX-007, GFX-008 written; GFX-001/GFX-004 scopes amended; roadmap graph regenerated and validated. Limits: catalog regions are not grid-aligned so tile/palette counts are upper bounds; no conversion, quantisation, Porytiles run (not installed), build or visual review of converted art; proportions versus Emerald remain hypotheses for GFX-006."
@@ -1320,7 +1345,7 @@
       "responsible": "Owner",
       "scope": "After reviewing the GFX-006 before/after sheet, Simone decides: (1) visual verdict on the converted sample (accept, accept with retouch, reject); (2) harmonisation target for mixed kits: single-author AlchemyBats kit for the first snow town (recommended), recolour game-derived art toward AlchemyBats, or recolour AlchemyBats toward the game-derived look; (3) whether game-derived sources (Zygoat, Justin8964) may appear in hacks he distributes or only in private local tests; (4) cast-shadow policy (drop, bake into ground variants, keep only where an Emerald equivalent exists). Options and recommendations per master.md \"Gen 4 environment art: DS-scale to GBA conversion plan (RES-005)\". Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal, Positioning).",
       "section": "Tauros roadmap / Graphics asset research",
-      "source_line": 547,
+      "source_line": 556,
       "status": "In progress",
       "title": "Owner decisions on Gen 4 environment conversion style and scope.",
       "verification": null
@@ -1346,7 +1371,7 @@
       "responsible": "Agent",
       "scope": "Pipeline source → conversion (Porypal for sprites, Porytiles for tilesets) → validator (dimensions, 16-colour palettes, 8x8 tiles, duplicate tiles, VRAM budget) before build. Porytiles cannot decompile animated tiles: report, do not attempt. RES-004 follow-up: validate the pinned engine's two-layer metatiles against packages requiring triple-layer support, primary/secondary palette sharing and per-map variants; include metatile/collision/behaviour remapping and isolated shared-tileset updates in import validation. RES-005 follow-up: for converted Gen 4 art also reject semi-transparent pixels, non-RGB555 colours and images whose size is not a multiple of 16, and report palette/tile/metatile use against the primary (6/512/512) and secondary (7/512/512) budgets so GFX-007 can run it on its output. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Layered roadmap toward the beta\" (Phase 6). Decided 2026-11-25: sprites with Porypal, animated-tile support and per-map variants/shared-tileset updates are not needed for Completion and move to `GFX-012`; here animated tiles are only reported as unsupported, and the validator is `scripts/gfx_pipeline.py` (Python, see master).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 558,
+      "source_line": 567,
       "status": "Done",
       "title": "Asset pipeline with palette and VRAM validator.",
       "verification": "2026-11-25 UTC: ran `python3 -m unittest discover -s tests -p test_gfx_pipeline.py` (28 tests: valid synthetic tileset has no finding; one fixture per class: dimensions not multiple of 8 and of 16, layer size mismatch, missing layer, >15 opaque colours in a tile (tile coordinates), indexed PLTE >16 entries, non-RGB555 pixel, semi-transparent pixel, flip-aware duplicates, triple-layer metatile (index and pixel), animation unsupported, unreadable PNG, source-stage tile/metatile/palette budget estimates, compiled triple-layer 24-byte and 4-byte-attribute packages, tile id out of range, primary using secondary palettes, palette slot out of range, secondary sharing and mismatching primary palettes, exact compiled tile/metatile budgets, CLI exit codes, repository/outside-data guard) and the full suite once (113 tests OK, 2 skipped opt-in). Ran the container pipeline on a scratch copy of the pinned base build under `$TAUROS_DATA` (`TAUROS_GFX_PROJECT`, test `ContainerPipeline`, 17 s): synthetic primary validated, `porytiles create-tileset`/`compile-tileset` 2.0.0 in `tauros-gba-toolchain:d75267a55161` with network off, compiled output validated (16 metatiles, 80 tiles, palette slot 0) and `make rom syms` produced a 33554432-byte ROM whose sha256 differs from the base and whose `.sym` lists `gTileset_GfxTest`, `gMetatiles_PorytilesManaged_GfxTest` (0x100 bytes) and the tiles/palettes symbols. A synthetic secondary paired with that primary via `gfx_pipeline.py build --role secondary --primary` also compiled and built (slot 6 palette, tile ids from 524, 33 s) and passed `validate-compiled --primary-bin`. Roadmap checks and `git status` run; no asset, ROM or home path added to the repository. Limits: the ROM was not booted or opened in Porymap and the tileset is not assigned to any map; only synthetic art was validated (no real Gen 4 or catalog sheet); source-stage palette/tile/metatile budgets are estimates (first-fit packing, no layer compositing; the compiled check is exact: 69 estimated vs 80 compiled tiles in the fixture); RGB555 acceptance admits the three common 5-to-8-bit expansions; the secondary was paired with a Porytiles-managed synthetic primary, not the vanilla General set (unverified); sprites/Porypal, animations and per-map variants are deferred to `GFX-012`."
@@ -1365,7 +1390,7 @@
       "responsible": "Agent",
       "scope": "Palette-aware pixel editing of sprites and tiles with validator feedback and build-and-preview. Refs: plan §\"Graphics assets and visual enhancements\" (step 4), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 566,
+      "source_line": 575,
       "status": "Not started",
       "title": "Pixel panel in the app.",
       "verification": null
@@ -1384,7 +1409,7 @@
       "responsible": "Agent",
       "scope": "Connect an Aseprite MCP (diivi/aseprite-mcp or pixel-mcp, chosen and recorded) so an agent sketches and the human retouches the same file, feeding the pipeline. Refs: plan §\"Young projects to take ideas from\" (Aseprite MCPs), plan §\"Layered roadmap toward the beta\" (Phase 6).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 573,
+      "source_line": 582,
       "status": "Not started",
       "title": "Aseprite MCP integration for agent sketches.",
       "verification": null
@@ -1404,7 +1429,7 @@
       "responsible": "Agent",
       "scope": "Owner request 2026-11-23: produce, outside the repository under `$TAUROS_DATA/assets/catalog/`, a dataset of reusable Gen 3 environment graphics from Team Aqua's Asset Repo / Great Tileset Exchange, CinnaYva Gen 3 Snow Tileset, Ekat's Public Gen 3 Tilesets and Alistair Gen III Johto, treating all external content as data. Deliver versioned source records (URL, revision/hash, authors, reuse terms), a JSONL catalog with stable IDs and short English descriptions/tags, per-item type, biome, style, relative path, image region, size, palette and verified/unverified compatibility, indexed previews, coherent combinable groups (ground, edges, trees, roofs, buildings, doors) and a compact local search. Distinguish single components, composite objects and complete tilesets; never invent meanings, coordinates or compatibility; do not call an asset Emerald-ready without verifying format, palette and metatile layers. First acceptance query: snowy town must return a coherent set and explicitly list missing components. Measure response sizes and sample-query quality, not token savings. Only scripts and concise setup/command/result/limit documentation enter this repository; no dataset, image, archive or index is committed. No app integration, game change, commit or push. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Rules for the agents writing the code\" (Licenses), README External sources.",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 580,
+      "source_line": 589,
       "status": "Done",
       "title": "Build the local searchable catalog of reusable environment assets (dataset only).",
       "verification": "2026-11-23 UTC: `scripts/asset_catalog.py fetch` pulled the four sources at pinned git revision/sha256 (Team Aqua 3e06f6f9; CinnaYva, Ekat, Alistair archives); `build` produced 424 items and 4 kits with previews; `check --deep` 0 errors; a fresh fetch+build in an empty data directory gave byte-identical items.jsonl, groups.jsonl and previews. `python3 -m unittest discover -s tests -p test_asset_catalog.py` 14 tests OK. `measure` ran 12 sample queries: responses 133-2852 bytes (median 1045), 8-14 ms; snowy-town queries return grp/cinnayva-snow-town with roof-only-in-composites and no-metatile-data flags, Emerald-ready no; an unmatched query returns no entry. Region previews were reviewed by eye and several boxes corrected. Limits: regions judged visually, only snow-relevant sheets/Alistair/few Ekat sheets annotated, precision predicates use catalog metadata, no token saving measured, no asset imported, built or tested in a game, no app integration, no commit."
@@ -1425,7 +1450,7 @@
       "responsible": "Agent",
       "scope": "Run only after Simone approves in chat. Convert AlchemyBats V.2 `cottage-snow-red-door` and `tree-snowy-large` (control: Zygoat `trees-snowy`, one tree) with the default recipe in master.md \"Gen 4 environment art: DS-scale to GBA conversion plan (RES-005)\": snap regions to the 32 px source grid, 2x decimation at the sheet origin with a residual report, alpha threshold, RGB555 snap, joint quantisation into 15-colour palettes, 8x8 split with flip-aware deduplication. Throwaway prototype code and all outputs stay under `$TAUROS_DATA/assets/experiments/gfx-006/`; nothing enters the repository except the master/TODO record. No game, decomp or app change. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline, steps 2-3).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 588,
+      "source_line": 597,
       "status": "Done",
       "title": "Sample DS-scale to GBA conversion experiment (one building, one tree).",
       "verification": "2026-11-24 UTC: after Owner approval in chat, ran a throwaway prototype under `$TAUROS_DATA/assets/experiments/gfx-006/` on AlchemyBats cottage-snow-red-door and tree-snowy-large plus one Zygoat snowy tree column, with source sha256 checked against the catalog. A1 pass (6x5, 5x5, 3x6 metatiles); A2 pass (0 residual blocks after masking two RMXP filler cells); A3 pass (alpha 0/255, one palette per tile, max 10 colours); A4 pass (3 palettes, 167 unique flip-aware tiles, 6 colour merges); A5 fail (mean Delta E 2.98/3.44/1.79 vs threshold 2; RGB555 rounding alone 2.92/3.46/1.75); A6 pass (door 12x12 px in one metatile); A7 pass (two runs byte-identical on 9 files); A8: contact sheets for 3 and 4 palettes shown, Simone accepted the result, the 3-palette budget with merges and the large trees. Limits: crops snapped by visual review; optional Porytiles compile not run (not installed); no build, game change or in-game preview; prototype code not in the repository."
@@ -1450,7 +1475,7 @@
       "responsible": "Agent",
       "scope": "Turn the GFX-006 recipe into a repository script (stdlib-only like scripts/asset_catalog.py unless a dependency is decided and recorded) that takes a catalog kit and a recipe file and emits, under `$TAUROS_DATA`, Porytiles-ready layered PNGs for a map-specific tileset pair within budget (primary variant: 6 palettes, 512 tiles; secondary: 7 palettes, 512 tiles, 512 metatiles; two layers), a before/after contact sheet and a machine-readable report (residual blocks per tile, colour error, palettes, unique tiles, budget use, per-item credits and source sha256, output sha256). Layer split (above/below player) and behaviours are proposed, flagged for human review, never silently final. Per the GFX-006 results: mask RMXP filler cells, report palette-reduction error against the RGB555-snapped image separately from RGB555 rounding, minimise palettes and accept colour merges (Owner 2026-11-24) while listing every merge with pixel count and Delta E, and snap catalog regions to the 32 px source grid. Fix `detect_upscale` in scripts/asset_catalog.py to treat all alpha-0 pixels as equal and record the 2x-uniform share. Outputs and recipes naming external assets stay local; only code, synthetic fixtures and concise docs enter the repository. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Rules for the agents writing the code\" (Licenses, No Nintendo assets).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 597,
+      "source_line": 606,
       "status": "Not started",
       "title": "Deterministic Gen 4 sheet-to-tileset converter with before/after report.",
       "verification": null
@@ -1472,7 +1497,7 @@
       "responsible": "Agent",
       "scope": "Following the DEC-004 target, add palette-ramp remapping and outline adjustment to the converter for mixed kits (for example `grp/gen4-mixed-snow-town`), measured before/after with the GFX-005 metrics (colour-histogram cosine, saturation, dark-outline share) on converted tiles; final pixel retouch stays human (Aseprite or the GFX-002 panel) and is labelled per DEC-003. Local outputs only. Refs: plan §\"Graphics assets and visual enhancements\" (steps 2-4), plan §\"Risks and community notes\" (Positioning).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 604,
+      "source_line": 613,
       "status": "Not started",
       "title": "Style harmonisation pass for multi-author Gen 4 kits.",
       "verification": null
@@ -1492,7 +1517,7 @@
       "responsible": "Agent",
       "scope": "Owner request 2026-11-24, explicitly ahead of the APP-006 sequencing for this view only: automate the manual ChatGPT flow of `docs/prompts/gba-map-generation/` (layout, inventory, tileset batches), which drifted and lost track of batches in chat. A stdlib-only orchestrator script keeps the run state under `$TAUROS_DATA/mapgen/runs/` and sends the verbatim image prompts of the prompt pack to the OpenAI image API (images edit with the layout and the style reference as inputs, fixed size), using the Owner's key copied unread from the local carousels project into `$TAUROS_DATA/mapgen/openai.env` (mode 600, never in the repository, logs or UI). Text and vision steps (layout plan, inventory, per-sheet check) use the official Claude CLI with structured JSON output for local personal use, as in AGT-004. Batches are planned deterministically from the inventory. Automatic retries: API errors with backoff, deterministic sheet checks (size, magenta background, asset count by segmentation) with a bounded automatic regeneration; human review per step with accept, regenerate and edit-with-correction, as in the carousels pipeline. A new app view shows steps, images, statuses and progress, cancellable, stopped on app exit. Paid API use only when the Owner starts it from the view; one low-quality smoke call allowed during implementation. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Layered architecture\" (layer 1), plan §\"Rules for the agents writing the code\".",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 611,
+      "source_line": 620,
       "status": "Done",
       "title": "Map generator view: automated layout and tileset generation with an image model.",
       "verification": "2026-11-25 UTC: the Owner ran a full map from the view: scene, Claude layout plan (64×48 metatiles), Flare layout at the exact grid size (1632×1248, 24 px cells, checks passed), Claude inventory (32 assets), 6 deterministic batches, 6 Sunburst sheets at 2560×1408 on transparent backgrounds, all automatic and Claude checks passed and all accepted; 7 image calls, 0.55 USD reported by token usage, 8 Claude CLI calls on the plan. After an app restart the view reopened the same run with its state, images and costs (screenshot on a virtual display). `python3 -m unittest discover -s tests` passed 84 tests with 1 skipped; mapgen tests use a local fake image API and a fake Claude CLI; app Rust tests passed; Clippy with warnings denied, roadmap, privacy and whitespace checks passed; a scan of the diff found no key. Paid calls during implementation: one low-quality smoke call and two approved low-quality model tests. Limits: the generated sheets are not a game tileset; extraction, map assembly and Gen 3 export were only prototyped outside the repository (see master.md, GFX-009 end-to-end prototype) and are planned in GFX-010 and GFX-011."
@@ -1512,7 +1537,7 @@
       "responsible": "Agent",
       "scope": "After generation, reproduce the accepted layout as a metatile map that is visually almost identical to it (target about 0.99:1), so the idea survives the port. Cover: (1) an inventory that lists every visual element needed to rebuild the layout, including platform sides and supports, trunks, cast shadows, ground variants and transitions, tree rows with front/middle/back variants, and the walkable/blocked role of each part; (2) reliable extraction of sheet assets with consistent scale to the inventory footprint (no visible seams, no distorted aspect); (3) parsing the layout into a per-cell semantic grid and object placements, with the cell grid recovered from the image and each placement checked against the layout; (4) composition rules for autotiles, edges, overlaps and drawing order (below/above the player); (5) a measured fidelity score between the resampled layout and the composed map, per region, with a report of the cells that differ and why. Missing assets are requested as targeted extra batches rather than approximated. Decide and record whether residual gaps are closed by layout-derived tiles within the tile budget. Prototype findings, outputs and runs stay under `$TAUROS_DATA`; only code, synthetic fixtures and docs enter the repository. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Rules for the agents writing the code\".",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 620,
+      "source_line": 629,
       "status": "Not started",
       "title": "Faithful reconstruction of a generated layout as a tile map (target ~0.99:1).",
       "verification": null
@@ -1533,7 +1558,7 @@
       "responsible": "Agent",
       "scope": "Turn a GFX-010 map into Gen 3 data and install it through the connector with a snapshot: primary/secondary tileset pair within budget (tiles, metatiles, palettes, RGB555), metatile layer types, collisions, elevations and behaviours derived from the inventory roles (bridges, stairs, doors with warps, ledges where relevant), layout and map registration, then build and boot to the map in the app. Choose and record the tileset compiler (Porytiles from the pinned toolchain or an own compiler) and run the GFX-001 validator on the result. Verify movement with emulator checks: every walkable area reachable from the start, bridges and stairs crossable in their direction only where intended, blocked cells not enterable. Projects stay openable in Porymap. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline), plan §\"Rules for the agents writing the code\" (Never destructive, Compatible formats).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 628,
+      "source_line": 637,
       "status": "Not started",
       "title": "Export a reconstructed map to the game project and verify it in the emulator.",
       "verification": null
@@ -1553,7 +1578,7 @@
       "responsible": "Agent",
       "scope": "Deferred from GFX-001 on 2026-11-25. Pin and install Porypal in the toolchain image under the FND-002 rules (it is not installed), add sprite/palette conversion and validation (indexed 16-colour sprite sheets, shared OBJ palette slots, RGB555) to `scripts/gfx_pipeline.py`, and decide whether Porytiles 2.0 animations (`porytiles_src/anim`, which `create-tileset` templates) are supported instead of reported as unsupported; add per-map tileset variants with isolated shared-tileset updates and metatile/collision/behaviour remapping from the RES-004 follow-up. Refs: plan §\"Graphics assets and visual enhancements\" (proposed pipeline).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 636,
+      "source_line": 645,
       "status": "Not started",
       "title": "Sprite conversion with Porypal and animated tilesets in the asset pipeline.",
       "verification": null
@@ -1575,7 +1600,7 @@
       "responsible": "Agent",
       "scope": "Enable/customize upgrades as catalog entries (shared tilesets with author credits and new weather effects on field_weather_effect.c; DS-style, 80x80 and animated battle sprites moved to `GFX-013` and converted Gen 4 kits to `GFX-014` by Owner decision 2026-11-25); assets are fetched to the user's machine, never committed. Owner direction 2026-11-23 and RES-004: prioritize reusable environment assets over new art, with a semantic/visual catalogue searchable by biome, style and object role; record source pin/hash, per-asset credits/terms, primary/secondary pairing, format/layer prerequisites, preview and verified/conversion-required status. Start environment acceptance with a snowy Emerald city covering roofs/trees/ground, preserving collision/events and isolating changes from shared tilesets; Team Aqua winter and converted CinnaYva/Ekat/Alistair assets are candidates, not verified imports. The entry model must already allow the kinds of GFX-013/GFX-014 (converted kits: recipe, source/output sha256, credits and conversion status; game-derived sources follow DEC-004). Isolation from shared tilesets is first attempted here by a cloned primary/secondary pair assigned only to the acceptance map (Porytiles as in GFX-001); if that needs metatile/collision/behaviour remapping or per-map variants of `GFX-012`, add that dependency and record it before continuing. Do not reorder APP-006. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 643,
+      "source_line": 652,
       "status": "Done",
       "title": "Catalog of graphical upgrades.",
       "verification": "2026-11-25 UTC: ran `python3 -m unittest discover -s tests -p test_gfx_upgrades.py` (13 synthetic tests: idempotent apply and byte-exact revert, protected shared tileset/collisions/events, rollback on protect violation and on validator error, anchor uniqueness, changed source sha256, drift refusal, reverse-order revert, conversion-required and unsafe paths, project outside the data directory, entry model, preview) and the full suite once (126 tests OK, 2 skipped). On a scratch copy of the pinned base under `$TAUROS_DATA`: applied `snow-general-palettes` (Emerald Slide palettes 02/03/05 at Team Aqua pin 3e06f6f9 plus an authored roof ramp in palette 01, cloned `gTileset_GeneralSnow` used only by LAYOUT_PETALBURG_CITY; GFX-001 validator passed) and `snow-heavy` (field_weather_effect.c, map weather); rendered before/after preview shows snowy ground, trees and roofs; `make rom syms` in the toolchain container gave ROM c8f89f59; reverting both and rebuilding gave the base ROM b6ebe0ba byte for byte; re-applying reproduced c8f89f59. The Owner opened the ROM in the app on Petalburg City and confirmed the look, walking, doors and the snowfall. Roadmap, privacy and whitespace checks passed. Limits: Emerald Slide's tile image and 24-byte triple-layer metatiles are not applied (conversion-required); only the General palettes of one city were changed, other General users, animated tiles and the optional Slateport check were not verified in game; the base copy still carries the GFX-001 `gfx_test` wiring; the secondary Petalburg set is vanilla; sprites and converted kits are GFX-013/GFX-014."
@@ -1596,7 +1621,7 @@
       "responsible": "Agent",
       "scope": "Split from GFX-004 on 2026-11-25: catalog entries of kind DS-style sprites, 80x80 sprites and animated battle sprites, applied through the GFX-012 Porypal conversion and the GFX-004 apply/revert and credit model. Assets stay under `$TAUROS_DATA`, never committed. Refs: plan §\"Graphics assets and visual enhancements\" (what already exists), plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 652,
+      "source_line": 661,
       "status": "Not started",
       "title": "Sprite upgrade entries in the graphical upgrade catalog.",
       "verification": null
@@ -1619,7 +1644,7 @@
       "responsible": "Agent",
       "scope": "Split from GFX-004 on 2026-11-25: kits converted by GFX-007 enter as catalog entries with recipe, source/output sha256, credits and conversion status, applied through the GFX-004 apply/revert flow; game-derived sources follow DEC-004. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal).",
       "section": "Tauros roadmap / Phase 6 — Graphics",
-      "source_line": 659,
+      "source_line": 668,
       "status": "Not started",
       "title": "Converted Gen 4 kit entries in the graphical upgrade catalog.",
       "verification": null
@@ -1639,7 +1664,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 668,
+      "source_line": 677,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1660,7 +1685,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 675,
+      "source_line": 684,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1679,19 +1704,19 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 682,
+      "source_line": 691,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "9e978afdd25f430eef0cdc62f30463fad09e47f11d38411f2dce5fdfd84bf949",
+  "todo_sha256": "5763b0c75bed7110b1f9f8e40acaf163eeb755c2596cab19474314334be68e63",
   "topological_layers": [
     [
       "AGT-005",
       "AGT-009",
-      "APP-001",
+      "APP-009",
       "APP-002",
       "MCP-005",
       "PROV-001",
