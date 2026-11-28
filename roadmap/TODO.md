@@ -672,6 +672,20 @@ contracts live in [docs/master.md](docs/master.md). The derived
   Scope: Split from GFX-004 on 2026-11-25: kits converted by GFX-007 enter as catalog entries with recipe, source/output sha256, credits and conversion status, applied through the GFX-004 apply/revert flow; game-derived sources follow DEC-004. Refs: plan §"Graphics assets and visual enhancements", plan §"Risks and community notes" (Legal).
   Completion: One converted kit entry is applied to the pinned project, passes the validator, builds and shows in preview with per-asset credits; DEC-004 policy on game-derived sources is respected.
 
+- [ ] **Not started** **GFX-015** Feasibility study: agent-authored overworld and sprite animation.
+  Depends on: `GFX-001`, `APP-001`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Owner request 2026-11-28. Study, with a rough working prototype, how far agents can author animation for Gen 3 deterministically, drawing pixels by vision and code rather than with a diffusion model: overworld tile animation (trees and grass in the wind, puddle ripples; frames swapped by `src/tileset_anims.c` callbacks), palette animation (water, lights), light field-effect sprites (falling leaves, rain splashes) and animated Pokémon front/back/shiny sprites within palette and size limits (an earlier Owner test had Claude redraw and animate a Gen 3 "baby Deoxys" from the Deoxys sprite alone). Measure on the pinned project: ROM cost per animation; the real budgets (BG tile and palette slots shared by primary and secondary tilesets, VBlank copy bandwidth per frame, OAM and OBJ palette slots shared with NPCs and weather, G3-007 limits); the quality, consistency and token cost of agent-made frames across Claude, Codex and Gemini; and whether animated assets are reusable across maps (e.g. every tree of Petalburg City). Prototype at least one animated tree or grass metatile and one palette animation in a map, built and observed in the emulator (VRAM viewer and screenshots). Recommend follow-up tasks: a VRAM/animation budget check before build, the pipeline format for animations (with GFX-012), and showing animations in the Maps view. Measured 2026-11-28 for context, not part of the study: a 20×20 map's blockdata is 800 bytes, all 806 layouts' `map.bin` total 1.13 MB, the director-scene-mcp004 ROM has at most 25.3 of 32 MiB used, and the project already has 37 tileset animation folders. Refs: plan §"Graphics assets and visual enhancements", plan §"Layered roadmap toward the beta" (Phase 6), plan §"Rules for the agents writing the code" (Targeted tests).
+  Completion: A written report in master.md with measured ROM and VRAM costs, the per-frame limits found, agent frame quality and cost per provider tried, and the prototype animations built and observed in the emulator (screenshots outside the repository); recommended follow-up tasks are recorded in TODO.md.
+
+- [ ] **Not started** **GFX-016** Import FireRed-format tilesets extracted from a built ROM into an Emerald project.
+  Depends on: `GFX-001`, `DEC-004`.
+  Responsible: Agent
+  Owner: unassigned
+  Scope: Owner request 2026-11-28. Tilesets already in GBA format but in the FireRed layout (primary 640 tiles, 640 metatiles, 7 palettes; 32-bit metatile attributes with FRLG behaviour ids) must become usable in an Emerald project (512/512/6; 16-bit attributes, Emerald behaviour ids). First source: the Owner's Pokémon Aesthetic Red ROM (FireRed US 1.0 base, tilesets by Ikarus adapted from Gen 4), extracted locally on 2026-11-28 under `$TAUROS_DATA/references/aesthetic-red/extracted` (61 tilesets, 309 layouts, `index.json` mapping 425 maps; previews checked against the game). Evaluate first whether building the project as FireRed (`MAP_VERSION firered`, FRLG layouts) avoids conversion; otherwise repartition primary/secondary within the Emerald budgets, remap behaviours and layer types, and report what cannot be mapped for human review. Turn the one-off extractor into a reviewed repository script only if it is kept. Outputs stay under `$TAUROS_DATA`; nothing game-derived is committed (DEC-004). Refs: plan §"Graphics assets and visual enhancements", plan §"Risks and community notes" (Legal).
+  Completion: One Aesthetic Red town tileset pair is used by a map of a local Emerald (or FireRed-built) project, passes the GFX-001 validator, builds and is observed in the emulator matching the source; unmapped behaviours are listed; credits (Ikarus, LibertyTwins) are recorded locally.
+
 ## Beyond Gen 3
 
 - [ ] **Not started** **GB-001** Gen 1-2 connector format study.
@@ -706,9 +720,9 @@ Each H2 section of the plan maps to the tasks that satisfy it.
 - plan §"Rules for the agents writing the code": `GOV-002`, `AGT-008`, `G3-001`, `G3-002`, `G3-003`, `G3-006`, `G3-009`, `G3-010`, `G3-011`, `EMU-005`, `MCP-004`, `APP-005`, `FND-001`, `DEC-001`.
 - plan §"Mature tools to integrate as they are": `FND-002`, `G3-003`, `G3-004`, `G3-005`, `GB-001`.
 - plan §"Young projects to take ideas from": `RES-001`, `DOC-001`, `VER-001`, `G3-007`, `DEC-002`, `MCP-003`, `GFX-003`.
-- plan §"Graphics assets and visual enhancements": `RES-004`, `RES-005`, `DEC-004`, `GFX-001`, `GFX-002`, `GFX-004`, `GFX-005`, `GFX-006`, `GFX-007`, `GFX-008`, `GFX-009`, `GFX-010`, `GFX-011`, `GFX-012`, `GFX-013`, `GFX-014`.
+- plan §"Graphics assets and visual enhancements": `RES-004`, `RES-005`, `DEC-004`, `GFX-001`, `GFX-002`, `GFX-004`, `GFX-005`, `GFX-006`, `GFX-007`, `GFX-008`, `GFX-009`, `GFX-010`, `GFX-011`, `GFX-012`, `GFX-013`, `GFX-014`, `GFX-015`, `GFX-016`.
 - plan §"Beyond Gen 3: Gen 1-2 and DS": `MOD-001`, `GB-001`, `GB-002`, `NDS-001`.
-- plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`, `GFX-013`, `GFX-014`.
+- plan §"Risks and community notes": `GOV-003`, `PROV-001`, `DEC-001`, `DEC-002`, `DEC-003`, `G3-001`, `GFX-004`, `GFX-013`, `GFX-014`, `GFX-016`.
 - plan §"Next steps": `GOV-001`, `FND-001`, `FND-002`, `RES-001`, `RES-002`.
 - plan §"Sources": reference list only; cited by the tasks above, no own work.
 

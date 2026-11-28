@@ -13,6 +13,7 @@
     "GFX-003",
     "GFX-010",
     "GFX-012",
+    "GFX-015",
     "GB-001",
     "NDS-001"
   ],
@@ -27,6 +28,7 @@
     "GFX-003",
     "GFX-010",
     "GFX-012",
+    "GFX-015",
     "GB-001",
     "NDS-001"
   ],
@@ -1089,7 +1091,8 @@
       "completion": "Tests show tileset resolution and metatile rendering (layers, flips, palettes, transparency) on fixtures and that every Emerald-layout map of a real project renders; the interface tests cover the Maps controller (map choice, overlays, boot point, live marker). On an isolated display the view shows a map with overlays, events and live position, and starts a Preview at a chosen tile; the Owner confirms the view in the native app. Nothing is written to the project. README and master.md record behaviour and limits.",
       "dependents": [
         "APP-009",
-        "APP-005"
+        "APP-005",
+        "GFX-015"
       ],
       "id": "APP-001",
       "incomplete_prerequisites": [],
@@ -1333,7 +1336,8 @@
       "dependents": [
         "GFX-007",
         "GFX-008",
-        "GFX-014"
+        "GFX-014",
+        "GFX-016"
       ],
       "id": "DEC-004",
       "incomplete_prerequisites": [],
@@ -1358,7 +1362,9 @@
         "GFX-007",
         "GFX-011",
         "GFX-012",
-        "GFX-004"
+        "GFX-004",
+        "GFX-015",
+        "GFX-016"
       ],
       "id": "GFX-001",
       "incomplete_prerequisites": [],
@@ -1650,6 +1656,46 @@
       "verification": null
     },
     {
+      "completion": "A written report in master.md with measured ROM and VRAM costs, the per-frame limits found, agent frame quality and cost per provider tried, and the prototype animations built and observed in the emulator (screenshots outside the repository); recommended follow-up tasks are recorded in TODO.md.",
+      "dependents": [],
+      "id": "GFX-015",
+      "incomplete_prerequisites": [],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-001",
+        "APP-001"
+      ],
+      "responsible": "Agent",
+      "scope": "Owner request 2026-11-28. Study, with a rough working prototype, how far agents can author animation for Gen 3 deterministically, drawing pixels by vision and code rather than with a diffusion model: overworld tile animation (trees and grass in the wind, puddle ripples; frames swapped by `src/tileset_anims.c` callbacks), palette animation (water, lights), light field-effect sprites (falling leaves, rain splashes) and animated Pokémon front/back/shiny sprites within palette and size limits (an earlier Owner test had Claude redraw and animate a Gen 3 \"baby Deoxys\" from the Deoxys sprite alone). Measure on the pinned project: ROM cost per animation; the real budgets (BG tile and palette slots shared by primary and secondary tilesets, VBlank copy bandwidth per frame, OAM and OBJ palette slots shared with NPCs and weather, G3-007 limits); the quality, consistency and token cost of agent-made frames across Claude, Codex and Gemini; and whether animated assets are reusable across maps (e.g. every tree of Petalburg City). Prototype at least one animated tree or grass metatile and one palette animation in a map, built and observed in the emulator (VRAM viewer and screenshots). Recommend follow-up tasks: a VRAM/animation budget check before build, the pipeline format for animations (with GFX-012), and showing animations in the Maps view. Measured 2026-11-28 for context, not part of the study: a 20×20 map's blockdata is 800 bytes, all 806 layouts' `map.bin` total 1.13 MB, the director-scene-mcp004 ROM has at most 25.3 of 32 MiB used, and the project already has 37 tileset animation folders. Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Layered roadmap toward the beta\" (Phase 6), plan §\"Rules for the agents writing the code\" (Targeted tests).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 675,
+      "status": "Not started",
+      "title": "Feasibility study: agent-authored overworld and sprite animation.",
+      "verification": null
+    },
+    {
+      "completion": "One Aesthetic Red town tileset pair is used by a map of a local Emerald (or FireRed-built) project, passes the GFX-001 validator, builds and is observed in the emulator matching the source; unmapped behaviours are listed; credits (Ikarus, LibertyTwins) are recorded locally.",
+      "dependents": [],
+      "id": "GFX-016",
+      "incomplete_prerequisites": [
+        "DEC-004"
+      ],
+      "note": null,
+      "owner": null,
+      "prerequisites": [
+        "GFX-001",
+        "DEC-004"
+      ],
+      "responsible": "Agent",
+      "scope": "Owner request 2026-11-28. Tilesets already in GBA format but in the FireRed layout (primary 640 tiles, 640 metatiles, 7 palettes; 32-bit metatile attributes with FRLG behaviour ids) must become usable in an Emerald project (512/512/6; 16-bit attributes, Emerald behaviour ids). First source: the Owner's Pokémon Aesthetic Red ROM (FireRed US 1.0 base, tilesets by Ikarus adapted from Gen 4), extracted locally on 2026-11-28 under `$TAUROS_DATA/references/aesthetic-red/extracted` (61 tilesets, 309 layouts, `index.json` mapping 425 maps; previews checked against the game). Evaluate first whether building the project as FireRed (`MAP_VERSION firered`, FRLG layouts) avoids conversion; otherwise repartition primary/secondary within the Emerald budgets, remap behaviours and layer types, and report what cannot be mapped for human review. Turn the one-off extractor into a reviewed repository script only if it is kept. Outputs stay under `$TAUROS_DATA`; nothing game-derived is committed (DEC-004). Refs: plan §\"Graphics assets and visual enhancements\", plan §\"Risks and community notes\" (Legal).",
+      "section": "Tauros roadmap / Phase 6 — Graphics",
+      "source_line": 682,
+      "status": "Not started",
+      "title": "Import FireRed-format tilesets extracted from a built ROM into an Emerald project.",
+      "verification": null
+    },
+    {
       "completion": "Written mapping report with model gaps; any needed model change is added here as a task.",
       "dependents": [
         "GB-002"
@@ -1664,7 +1710,7 @@
       "responsible": "Agent",
       "scope": "Map pokered/pokecrystal .asm macro data and Polished Map/Tilemap Studio formats onto the semantic model; mGBA covers GB/GBC. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Mature tools to integrate as they are\" (Polished Map).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 677,
+      "source_line": 691,
       "status": "Not started",
       "title": "Gen 1-2 connector format study.",
       "verification": null
@@ -1685,7 +1731,7 @@
       "responsible": "Agent",
       "scope": "Implement the connector trait for pokered/pokecrystal trainers and maps. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Rules for the agents writing the code\" (Targeted tests).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 684,
+      "source_line": 698,
       "status": "Not started",
       "title": "Gen 1-2 connector with lossless roundtrip.",
       "verification": null
@@ -1704,14 +1750,14 @@
       "responsible": "Agent",
       "scope": "Assess pokeplatinum/pokeheartgold data (per-trainer JSON, NARC), 3D maps needing a separate editor, and a melonDS implementation of the emulator trait. Built last. Refs: plan §\"Beyond Gen 3: Gen 1-2 and DS\", plan §\"Layered architecture\" (layers 4-5).",
       "section": "Tauros roadmap / Beyond Gen 3",
-      "source_line": 691,
+      "source_line": 705,
       "status": "Not started",
       "title": "DS (Gen 4) connector and melonDS feasibility study.",
       "verification": null
     }
   ],
   "todo_path": "TODO.md",
-  "todo_sha256": "5763b0c75bed7110b1f9f8e40acaf163eeb755c2596cab19474314334be68e63",
+  "todo_sha256": "79b94ab4ee17dc97f4d93d1a8aeae4f483e822cab9a2da4fb20ea44e3851ed3e",
   "topological_layers": [
     [
       "AGT-005",
@@ -1725,6 +1771,7 @@
       "GFX-003",
       "GFX-010",
       "GFX-012",
+      "GFX-015",
       "GB-001",
       "NDS-001"
     ],
@@ -1733,6 +1780,7 @@
       "GFX-007",
       "GFX-011",
       "GFX-013",
+      "GFX-016",
       "GB-002"
     ],
     [
